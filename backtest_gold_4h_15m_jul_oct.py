@@ -23,13 +23,14 @@ def get_session_name(dt_utc: datetime) -> str:
 def run_gold_backtest(
     path_15m: str = "trading-agent/data_cache/PAXG_15m.pkl",
     path_4h: str = "trading-agent/data_cache/PAXG_4h.pkl",
-    start_date: str = "2026-07-01",
-    end_date: str = "2026-10-01 23:59:59",
+    start_date: str = "2026-08-01",
+    end_date: str = "2026-10-15 23:59:59",
     starting_balance: float = 10000.0,
     risk_percent: float = 1.0,
 ):
     print("=" * 70)
     print("  RUNNING GOLD SMC STRATEGY & CANONICAL COORDINATE ENGINE")
+    print("  PERIOD: 1 AUGUST 2026 - 15 OCTOBER 2026")
     print("  SEPARATION OF CONCERNS: EXACT CANDLE WICKS + CANONICAL INDICES")
     print("=" * 70)
 
@@ -786,9 +787,9 @@ def run_gold_backtest(
     max_dd = round(max_dd, 2)
 
     gold_summary = {
-        "name": "Gold (XAU/USD) [1 Jul - 1 Oct 2026 · 4H Trend + 15M SMC]",
+        "name": "Gold (XAU/USD) [1 Aug - 15 Oct 2026 · 4H Trend + 15M SMC]",
         "symbol": "XAUUSD",
-        "period": "1 July 2026 - 1 October 2026",
+        "period": "1 August 2026 - 15 October 2026",
         "total_trades": len(jul_oct_trades),
         "wins": n_wins,
         "losses": n_losses,
