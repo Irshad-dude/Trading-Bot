@@ -52,14 +52,31 @@ export interface BacktestTradeItem {
 }
 
 export interface TradeCandleData {
-  entry_idx: number;
-  exit_idx: number;
-  fvg_idx?: number;
-  bos_idx?: number;
+  entry_idx?: number;
+  exit_idx?: number;
+  local_entry_idx?: number;
+  local_exit_idx?: number;
+  local_sh_idx?: number;
+  local_idm_idx?: number;
+  local_sweep_idx?: number;
+  local_bos_idx?: number;
+  local_c1_idx?: number;
+  local_c2_idx?: number;
+  local_c3_idx?: number;
+  sh_price?: number;
+  idm_price?: number;
+  sweep_price?: number;
+  bos_price?: number;
   bos_level?: number;
   idm_level?: number;
   fvg_top?: number;
   fvg_bottom?: number;
+  entry_price?: number;
+  stop_loss?: number;
+  take_profit?: number;
+  exit_price?: number;
+  direction?: string;
+  result?: string;
   candles: [string, number, number, number, number][]; // [time, open, high, low, close]
 }
 
@@ -248,6 +265,28 @@ export default function TradeChartVisualizer({
   const slTop = Math.min(entryY, slY);
   const slH = Math.abs(entryY - slY);
 
+  // ── Canonical Structural Anchor Points (Separation of Concerns: Strategy Engine -> Visualizer) ──
+  const localShIdx = candleData?.local_sh_idx ?? Math.max(0, entryIdx - 14);
+  const shPrice = candleData?.sh_price ?? candleData?.bos_level ?? trade.bos_level ?? 0;
+
+  const localIdmIdx = candleData?.local_idm_idx ?? Math.max(0, entryIdx - 10);
+  const idmPrice = candleData?.idm_price ?? candleData?.idm_level ?? trade.idm_level ?? 0;
+
+  const localSweepIdx = candleData?.local_sweep_idx ?? Math.max(0, entryIdx - 8);
+  const sweepPrice = candleData?.sweep_price ?? idmPrice;
+
+  const localBosIdx = candleData?.local_bos_idx ?? Math.max(0, entryIdx - 5);
+  const bosPrice = candleData?.bos_price ?? shPrice;
+
+  const localC1Idx = candleData?.local_c1_idx ?? Math.max(0, entryIdx - 3);
+  const localEntryIdx = candleData?.local_entry_idx ?? entryIdx;
+  const localExitIdx = candleData?.local_exit_idx ?? exitIdx;
+
+  const hasBos = shPrice > 0;
+  const hasIdm = idmPrice > 0;
+  const bosY = hasBos ? getY(shPrice) : 0;
+  const idmY = hasIdm ? getY(idmPrice) : 0;
+
   // EVG / FVG Boundary Zone Calculations
   const fvgTopVal = candleData?.fvg_top ?? trade.fvg_top;
   const fvgBottomVal = candleData?.fvg_bottom ?? trade.fvg_bottom;
@@ -259,23 +298,6 @@ export default function TradeChartVisualizer({
   const fvgTopY = hasFvg ? getY(fvgTopPrice) : 0;
   const fvgBottomY = hasFvg ? getY(fvgBottomPrice) : 0;
   const fvgH = hasFvg ? Math.max(3, fvgBottomY - fvgTopY) : 0;
-
-  const fvgStartIdx = Math.max(0, candleData?.fvg_idx ?? Math.max(0, entryIdx - 2));
-  const fvgStartX = getX(fvgStartIdx) - candleBodyWidth / 2;
-  const fvgEndX = getX(entryIdx) + candleBodyWidth / 2;
-  const fvgWidth = Math.max(candleSpacing * 1.5, fvgEndX - fvgStartX);
-
-  // SMC Structural Levels (BOS & IDM)
-  const bosLevelVal = candleData?.bos_level ?? trade.bos_level;
-  const idmLevelVal = candleData?.idm_level ?? trade.idm_level;
-  const hasBos = bosLevelVal !== undefined && bosLevelVal > 0;
-  const hasIdm = idmLevelVal !== undefined && idmLevelVal > 0;
-
-  const bosY = hasBos ? getY(bosLevelVal) : 0;
-  const idmY = hasIdm ? getY(idmLevelVal) : 0;
-
-  const bosIdx = candleData?.bos_idx ?? Math.max(0, entryIdx - 1);
-  const bosX = getX(bosIdx);
 
   // Price ticks on right axis
   const priceTicks = useMemo(() => {
@@ -447,11 +469,11 @@ export default function TradeChartVisualizer({
         </span>
         <span className="text-slate-500">→</span>
         <span className="px-2 py-0.5 rounded bg-purple-950 text-purple-300 border border-purple-700 font-bold">
-          ③ 1. Break IDM {hasIdm ? `($${idmLevelVal?.toLocaleString()})` : ''}
+          ③ 1. Break IDM {hasIdm ? `($${idmPrice?.toLocaleString()})` : ''}
         </span>
         <span className="text-slate-500">→</span>
         <span className="px-2 py-0.5 rounded bg-sky-950 text-sky-300 border border-sky-700 font-bold">
-          ④ 2. Break {isLong ? 'Higher High (BOS)' : 'Lower Low (BOS)'} {hasBos ? `($${bosLevelVal?.toLocaleString()})` : ''}
+          ④ 2. Break {isLong ? 'Higher High (BOS)' : 'Lower Low (BOS)'} {hasBos ? `($${shPrice?.toLocaleString()})` : ''}
         </span>
         <span className="text-slate-500">→</span>
         <span className="px-2 py-0.5 rounded bg-amber-950 text-amber-300 border border-amber-700 font-bold">
@@ -473,10 +495,10 @@ export default function TradeChartVisualizer({
           <div className="flex flex-wrap items-center gap-2">
             <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500 mr-1">Drawn on Chart:</span>
             <span className="px-2 py-0.5 rounded bg-purple-100 text-purple-900 border border-purple-300 font-bold text-[10px] flex items-center gap-1 shadow-2xs">
-              🟣 IDM Line (${idmLevelVal?.toFixed(1)})
+              🟣 IDM Line (${idmPrice?.toFixed(1)})
             </span>
             <span className="px-2 py-0.5 rounded bg-sky-100 text-sky-900 border border-sky-300 font-bold text-[10px] flex items-center gap-1 shadow-2xs">
-              🔵 BOS Break Line (${bosLevelVal?.toFixed(1)})
+              🔵 BOS Break Line (${shPrice?.toFixed(1)})
             </span>
             <span className="px-2 py-0.5 rounded bg-amber-100 text-amber-900 border border-amber-300 font-bold text-[10px] flex items-center gap-1 shadow-2xs">
               📦 FVG Gap Box (${fvgBottomPrice.toFixed(1)} – ${fvgTopPrice.toFixed(1)})
@@ -588,286 +610,150 @@ export default function TradeChartVisualizer({
 
           {/* ── Sliding Chart Elements Area (Clipped to prevent spilling over price axis) ── */}
           <g clipPath="url(#chartAreaClip)">
-            {showDrawings && (
+            {showDrawings && candleData && (
               <>
-            {/* ── SMC TradingView-Style Market Structure Zigzag Path ── */}
-            {hasBos && hasIdm && candleData && (
-              <g className="smc-structure-path" opacity={0.85}>
-                {/* Visualizing the exact TradingView SMC zig-zag wave:
-                    1. Peak HH (BOS level)
-                    2. Pullback low (IDM)
-                    3. Lower high bounce (fails to break HH)
-                    4. IDM Sweep low (breaks below IDM)
-                    5. BOS Breakout rally (closes beyond HH)
-                    6. Push to swing high
-                    7. Retracement into FVG box (Entry touch)
-                */}
-                <polyline
-                  points={`
-                    ${Math.max(paddingLeft, bosX - candleSpacing * 7)},${bosY}
-                    ${Math.max(paddingLeft + 10, bosX - candleSpacing * 4)},${idmY}
-                    ${Math.max(paddingLeft + 20, bosX - candleSpacing * 2.5)},${isLong ? idmY - (idmY - bosY) * 0.45 : idmY + (bosY - idmY) * 0.45}
-                    ${Math.max(paddingLeft + 30, bosX - candleSpacing * 1.5)},${isLong ? idmY + 12 : idmY - 12}
-                    ${bosX},${bosY}
-                    ${Math.max(bosX + 15, entryX - candleSpacing * 1.5)},${isLong ? Math.min(bosY, entryY) - 18 : Math.max(bosY, entryY) + 18}
-                    ${entryX},${entryY}
-                  `}
-                  fill="none"
-                  stroke="#38bdf8"
-                  strokeWidth={2.5}
-                  strokeDasharray="5 3"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                />
-                {/* Structural Pivot Dots */}
-                <circle cx={Math.max(paddingLeft, bosX - candleSpacing * 7)} cy={bosY} r={4} fill="#0284c7" stroke="#ffffff" strokeWidth={1.5} />
-                <circle cx={Math.max(paddingLeft + 10, bosX - candleSpacing * 4)} cy={idmY} r={4} fill="#9333ea" stroke="#ffffff" strokeWidth={1.5} />
-                <circle cx={Math.max(paddingLeft + 30, bosX - candleSpacing * 1.5)} cy={isLong ? idmY + 12 : idmY - 12} r={4.5} fill="#a855f7" stroke="#ffffff" strokeWidth={1.5} />
-                <circle cx={bosX} cy={bosY} r={5} fill="#0284c7" stroke="#ffffff" strokeWidth={2} />
-              </g>
-            )}
-
-            {/* ── Inducement (IDM) Structural Line ── */}
-            {hasIdm && (
-              <g className="idm-structural-line">
-                {/* Glowing Background Line */}
-                <line
-                  x1={paddingLeft}
-                  y1={idmY}
-                  x2={svgWidth - paddingRight}
-                  y2={idmY}
-                  stroke="#9333ea"
-                  strokeWidth={4}
-                  opacity={0.18}
-                />
-                {/* Sharp Dashed Line */}
-                <line
-                  x1={paddingLeft}
-                  y1={idmY}
-                  x2={svgWidth - paddingRight}
-                  y2={idmY}
-                  stroke="#9333ea"
-                  strokeWidth={2.2}
-                  strokeDasharray="6 3"
-                />
-                {/* IDM Pill Badge directly on line */}
-                <g transform={`translate(${paddingLeft + 6}, ${idmY - 9})`}>
-                  <rect width={56} height={18} rx={3} fill="#6b21a8" stroke="#d8b4fe" strokeWidth={1} />
-                  <text x={28} y={13} textAnchor="middle" fill="#ffffff" fontSize="9" fontFamily="monospace" fontWeight="bold">
-                    IDM
-                  </text>
-                </g>
-                {/* Infographic Callout Badge: 1. Break IDM (Inducement Break) */}
-                <g transform={`translate(${Math.max(paddingLeft + 65, getX(Math.max(0, bosIdx - 2)) - 95)}, ${idmY > 60 ? idmY + 10 : idmY - 26})`}>
-                  <rect width={190} height={22} rx={5} fill="#581c87" stroke="#e9d5ff" strokeWidth={1.2} filter="drop-shadow(0 2px 5px rgba(0,0,0,0.25))" />
-                  <text x={95} y={15} textAnchor="middle" fill="#ffffff" fontSize="9" fontFamily="monospace" fontWeight="bold">
-                    1. Break IDM (Inducement Break)
-                  </text>
-                  {/* Pointer Arrow pointing to sweep wick */}
-                  <path
-                    d={idmY > 60 ? "M95 0 L90 -6 L100 -6 Z" : "M95 22 L90 28 L100 28 Z"}
-                    fill="#581c87"
-                  />
-                </g>
-              </g>
-            )}
-
-            {/* ── Break of Structure (BOS) Anchor Break Line ── */}
-            {hasBos && (
-              <g className="bos-structural-line">
-                {/* Peak Label: Higher High (1st HH) */}
-                <g transform={`translate(${Math.max(paddingLeft + 8, bosX - candleSpacing * 7)}, ${bosY - 14 > paddingY ? bosY - 14 : bosY + 16})`}>
-                  <text x={0} y={0} fill="#0284c7" fontSize="9.5" fontFamily="monospace" fontWeight="bold">
-                    {isLong ? 'Higher High (1st HH)' : 'Lower Low (1st LL)'}
-                  </text>
-                </g>
-
-                {/* Glowing Background Line */}
-                <line
-                  x1={paddingLeft}
-                  y1={bosY}
-                  x2={svgWidth - paddingRight}
-                  y2={bosY}
-                  stroke="#0284c7"
-                  strokeWidth={5}
-                  opacity={0.18}
-                />
-                {/* Solid Sharp BOS Line */}
-                <line
-                  x1={paddingLeft}
-                  y1={bosY}
-                  x2={svgWidth - paddingRight}
-                  y2={bosY}
-                  stroke="#0284c7"
-                  strokeWidth={2.5}
-                />
-                {/* BOS Pill Badge on Line */}
-                <g transform={`translate(${Math.max(paddingLeft + 120, bosX - candleSpacing * 4)}, ${bosY - 9})`}>
-                  <rect width={48} height={18} rx={3} fill="#0369a1" stroke="#7dd3fc" strokeWidth={1} />
-                  <text x={24} y={13} textAnchor="middle" fill="#ffffff" fontSize="9" fontFamily="monospace" fontWeight="bold">
-                    BOS
-                  </text>
-                </g>
-
-                {/* Vertical Laser Beam at Breakout Candle */}
-                {candleData && (
-                  <g>
-                    <line
-                      x1={bosX}
-                      y1={paddingY}
-                      x2={bosX}
-                      y2={chartHeight - paddingY}
-                      stroke="#0284c7"
-                      strokeWidth={1.5}
-                      strokeDasharray="4 3"
-                      opacity={0.75}
+                {/* ── 1. SMC Real-Wick Zigzag (Snaps directly to exact candle wicks) ── */}
+                {hasBos && hasIdm && (
+                  <g className="smc-real-zigzag" opacity={0.88}>
+                    <polyline
+                      points={`
+                        ${getX(localShIdx)},${getY(shPrice)}
+                        ${getX(localIdmIdx)},${getY(idmPrice)}
+                        ${getX(localSweepIdx)},${getY(sweepPrice)}
+                        ${getX(localBosIdx)},${getY(bosPrice)}
+                        ${getX(localEntryIdx)},${getY(trade.entry_price)}
+                        ${getX(localExitIdx)},${getY(isWin ? trade.take_profit : trade.stop_loss)}
+                      `}
+                      fill="none"
+                      stroke="#38bdf8"
+                      strokeWidth={2}
+                      strokeDasharray="4 2"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
                     />
-                    {/* Glowing Breakout Diamond at BOS Intersection */}
-                    <circle cx={bosX} cy={bosY} r={6} fill="#0284c7" stroke="#ffffff" strokeWidth={2} />
-                    <circle cx={bosX} cy={bosY} r={11} fill="none" stroke="#38bdf8" strokeWidth={1.5} opacity={0.6} />
+                    {/* Small vertex dots strictly anchored to real candle coordinates */}
+                    <circle cx={getX(localShIdx)} cy={getY(shPrice)} r={3.5} fill="#0284c7" stroke="#ffffff" strokeWidth={1} />
+                    <circle cx={getX(localIdmIdx)} cy={getY(idmPrice)} r={3.5} fill="#9333ea" stroke="#ffffff" strokeWidth={1} />
+                    <circle cx={getX(localSweepIdx)} cy={getY(sweepPrice)} r={3.5} fill="#a855f7" stroke="#ffffff" strokeWidth={1} />
+                    <circle cx={getX(localBosIdx)} cy={getY(bosPrice)} r={3.5} fill="#0284c7" stroke="#ffffff" strokeWidth={1} />
+                    <circle cx={getX(localEntryIdx)} cy={getY(trade.entry_price)} r={3.5} fill="#16a34a" stroke="#ffffff" strokeWidth={1} />
+                  </g>
+                )}
 
-                    {/* Infographic Callout Badge: 2. Break Higher High (BOS) */}
-                    <g transform={`translate(${bosX - 90}, ${bosY - 32 > paddingY ? bosY - 32 : bosY + 12})`}>
-                      <rect width={180} height={22} rx={5} fill="#0284c7" stroke="#bae6fd" strokeWidth={1.2} filter="drop-shadow(0 2px 5px rgba(0,0,0,0.25))" />
-                      <text x={90} y={15} textAnchor="middle" fill="#ffffff" fontSize="9" fontFamily="monospace" fontWeight="bold">
-                        2. {isLong ? 'Break Higher High (BOS)' : 'Break Lower Low (BOS)'}
+                {/* ── 2. Peak Tag: 1st Higher High / Lower Low ── */}
+                {hasBos && (
+                  <g transform={`translate(${getX(localShIdx)}, ${getY(shPrice) + (isLong ? -14 : 16)})`}>
+                    <rect x={-36} y={-9} width={72} height={18} rx={4} fill="#0f172a" stroke="#ffffff" strokeWidth={1} filter="drop-shadow(0 1px 3px rgba(0,0,0,0.2))" />
+                    <text x={0} y={3.5} textAnchor="middle" fill="#ffffff" fontSize="9" fontFamily="monospace" fontWeight="bold">
+                      {isLong ? '1st HH' : '1st LL'}
+                    </text>
+                  </g>
+                )}
+
+                {/* ── 3. BOS Segment (Begins at 1st HH, ends at BOS Breakout Candle) ── */}
+                {hasBos && (
+                  <g className="bos-clean-segment">
+                    <line
+                      x1={getX(localShIdx)}
+                      y1={getY(shPrice)}
+                      x2={getX(localBosIdx)}
+                      y2={getY(shPrice)}
+                      stroke="#0284c7"
+                      strokeWidth={2}
+                    />
+                    <g transform={`translate(${(getX(localShIdx) + getX(localBosIdx)) / 2}, ${getY(shPrice) + (isLong ? -12 : 14)})`}>
+                      <rect x={-46} y={-9} width={92} height={18} rx={3} fill="#0284c7" stroke="#bae6fd" strokeWidth={0.8} />
+                      <text x={0} y={3.5} textAnchor="middle" fill="#ffffff" fontSize="8.5" fontFamily="monospace" fontWeight="bold">
+                        BOS ${shPrice.toFixed(1)}
                       </text>
-                      <path
-                        d={bosY - 32 > paddingY ? "M90 22 L85 28 L95 28 Z" : "M90 0 L85 -6 L95 -6 Z"}
-                        fill="#0284c7"
-                      />
                     </g>
                   </g>
                 )}
-              </g>
-            )}
 
-            {/* ── Fair Value Gap (EVG/FVG) Boundary Box (Rendered Behind Candles) ── */}
-            {hasFvg && (
-              <g className="fvg-boundary-zone">
-                {/* Shaded EVG Boundary Box spanning from displacement candles to mitigation entry */}
-                <rect
-                  x={fvgStartX}
-                  y={fvgTopY}
-                  width={fvgWidth}
-                  height={fvgH}
-                  fill="url(#fvgGradientLight)"
-                  stroke="#38bdf8"
-                  strokeWidth={1.8}
-                  rx={3}
-                />
-                <rect
-                  x={fvgStartX}
-                  y={fvgTopY}
-                  width={fvgWidth}
-                  height={fvgH}
-                  fill="url(#fvgDiagonal)"
-                  rx={3}
-                />
-                {/* Center FVG label inside the box */}
-                <text
-                  x={fvgStartX + fvgWidth / 2}
-                  y={fvgTopY + fvgH / 2 + 4}
-                  textAnchor="middle"
-                  fill="#0369a1"
-                  fontSize="10"
-                  fontFamily="monospace"
-                  fontWeight="bold"
-                  opacity={0.8}
-                >
-                  FVG
-                </text>
+                {/* ── 4. IDM Segment (Begins at Pullback, ends at Sweep Candle) ── */}
+                {hasIdm && (
+                  <g className="idm-clean-segment">
+                    <line
+                      x1={getX(localIdmIdx)}
+                      y1={getY(idmPrice)}
+                      x2={getX(localSweepIdx)}
+                      y2={getY(idmPrice)}
+                      stroke="#9333ea"
+                      strokeWidth={2}
+                      strokeDasharray="4 3"
+                    />
+                    <g transform={`translate(${(getX(localIdmIdx) + getX(localSweepIdx)) / 2}, ${getY(idmPrice) + (isLong ? 15 : -11)})`}>
+                      <rect x={-46} y={-9} width={92} height={18} rx={3} fill="#9333ea" stroke="#e9d5ff" strokeWidth={0.8} />
+                      <text x={0} y={3.5} textAnchor="middle" fill="#ffffff" fontSize="8.5" fontFamily="monospace" fontWeight="bold">
+                        IDM ${idmPrice.toFixed(1)}
+                      </text>
+                    </g>
+                  </g>
+                )}
 
-                {/* Right Bracket: } FVG (Gap) */}
-                <g transform={`translate(${Math.max(fvgEndX, entryX) + 6}, ${fvgTopY + fvgH / 2 - 8})`}>
-                  <rect width={88} height={18} rx={3} fill="#0369a1" stroke="#7dd3fc" strokeWidth={0.8} />
-                  <text x={44} y={12.5} textAnchor="middle" fill="#ffffff" fontSize="8.5" fontFamily="monospace" fontWeight="bold">
-                    {"} FVG (Gap)"}
-                  </text>
+                {/* ── 5. FVG Imbalance Gap Box (Starts at Candle 1, extends to Entry touch) ── */}
+                {hasFvg && (
+                  <g className="fvg-clean-box">
+                    <rect
+                      x={Math.min(getX(localC1Idx), getX(localEntryIdx))}
+                      y={fvgTopY}
+                      width={Math.max(16, Math.abs(getX(localEntryIdx) - getX(localC1Idx)))}
+                      height={fvgH}
+                      fill="#f59e0b"
+                      opacity={0.16}
+                      stroke="#d97706"
+                      strokeWidth={1.2}
+                      strokeDasharray="3 2"
+                      rx={2}
+                    />
+                    <text
+                      x={Math.min(getX(localC1Idx), getX(localEntryIdx)) + 6}
+                      y={fvgTopY + fvgH / 2 + 3.5}
+                      fill="#b45309"
+                      fontSize="8.5"
+                      fontFamily="monospace"
+                      fontWeight="bold"
+                    >
+                      FVG
+                    </text>
+                  </g>
+                )}
+
+                {/* ── 6. Stop Loss Segment (Anchored strictly to Candle 1 Low / High) ── */}
+                <g className="sl-clean-segment">
+                  <line
+                    x1={getX(localC1Idx)}
+                    y1={slY}
+                    x2={getX(localExitIdx)}
+                    y2={slY}
+                    stroke="#ef4444"
+                    strokeWidth={2}
+                    strokeDasharray="4 2"
+                  />
+                  <g transform={`translate(${getX(localC1Idx)}, ${slY + (isLong ? 14 : -6)})`}>
+                    <text fill="#ef4444" fontSize="8.5" fontFamily="monospace" fontWeight="bold">
+                      SL ${trade.stop_loss.toFixed(1)} (C1 {isLong ? 'Low' : 'High'})
+                    </text>
+                  </g>
                 </g>
 
-                {/* Upper FVG Boundary Line */}
-                <line
-                  x1={fvgStartX}
-                  y1={fvgTopY}
-                  x2={Math.max(fvgEndX + 30, entryX + 20)}
-                  y2={fvgTopY}
-                  stroke="#0284c7"
-                  strokeWidth={1.8}
-                  strokeDasharray="4 2"
-                />
-                {/* Lower FVG Boundary Line */}
-                <line
-                  x1={fvgStartX}
-                  y1={fvgBottomY}
-                  x2={Math.max(fvgEndX + 30, entryX + 20)}
-                  y2={fvgBottomY}
-                  stroke="#0284c7"
-                  strokeWidth={1.8}
-                  strokeDasharray="4 2"
-                />
-              </g>
-            )}
-
-            {/* ── Shaded SMC Execution Zone (1:2 R:R Target & Risk) ── */}
-            {candleData && (
-              <g>
-                {/* Take Profit Target Zone (Green) */}
-                <rect
-                  x={entryX}
-                  y={targetTop}
-                  width={boxWidth}
-                  height={Math.max(2, targetH)}
-                  fill="url(#tpGradientLight)"
-                  stroke="#10b981"
-                  strokeWidth={1}
-                  strokeDasharray="3 3"
-                  rx={2}
-                />
-                {/* Stop Loss Risk Zone (Red) */}
-                <rect
-                  x={entryX}
-                  y={slTop}
-                  width={boxWidth}
-                  height={Math.max(2, slH)}
-                  fill="url(#slGradientLight)"
-                  stroke="#ef4444"
-                  strokeWidth={1}
-                  strokeDasharray="3 3"
-                  rx={2}
-                />
-              </g>
-            )}
-
-            {/* Stop Loss Horizontal Guide Line */}
-            <line
-              x1={entryX}
-              y1={slY}
-              x2={svgWidth - paddingRight}
-              y2={slY}
-              stroke="#e11d48"
-              strokeWidth={2.2}
-              strokeDasharray="5 3"
-            />
-            {/* Entry Price Horizontal Guide Line */}
-            <line
-              x1={entryX}
-              y1={entryY}
-              x2={svgWidth - paddingRight}
-              y2={entryY}
-              stroke="#0284c7"
-              strokeWidth={2.5}
-            />
-            {/* Take Profit Horizontal Guide Line */}
-            <line
-              x1={entryX}
-              y1={tpY}
-              x2={svgWidth - paddingRight}
-              y2={tpY}
-              stroke="#16a34a"
-              strokeWidth={2.2}
-              strokeDasharray="5 3"
-            />
+                {/* ── 7. Take Profit Segment (Begins at Entry, extends to Exit) ── */}
+                <g className="tp-clean-segment">
+                  <line
+                    x1={getX(localEntryIdx)}
+                    y1={tpY}
+                    x2={getX(localExitIdx)}
+                    y2={tpY}
+                    stroke="#10b981"
+                    strokeWidth={2}
+                    strokeDasharray="4 2"
+                  />
+                  <g transform={`translate(${getX(localEntryIdx)}, ${tpY + (isLong ? -6 : 14)})`}>
+                    <text fill="#10b981" fontSize="8.5" fontFamily="monospace" fontWeight="bold">
+                      TP ${trade.take_profit.toFixed(1)} (1:2)
+                    </text>
+                  </g>
+                </g>
               </>
             )}
 
@@ -947,74 +833,46 @@ export default function TradeChartVisualizer({
               );
             })}
 
-            {/* ── High-Contrast Entry Beacon & Marker ── */}
+            {/* ── Entry Marker (Clean TradingView Arrow & Tag) ── */}
             {showDrawings && candleData && (
-              <g transform={`translate(${entryX}, ${entryY})`}>
-                {/* Pulsing Concentric Beacon Rings */}
-                <circle r={14} fill="#0284c7" opacity={0.2} />
-                <circle r={8} fill="#0284c7" opacity={0.5} />
-                <circle r={4} fill="#ffffff" stroke="#0369a1" strokeWidth={2} />
-
-                {/* Entry Arrow */}
+              <g transform={`translate(${getX(localEntryIdx)}, ${entryY})`}>
+                <circle r={4} fill="#16a34a" stroke="#ffffff" strokeWidth={1.5} />
                 <path
-                  d={isLong ? "M0 12 L0 6 M-4 9 L0 5 L4 9" : "M0 -12 L0 -6 M-4 -9 L0 -5 L4 -9"}
+                  d={isLong ? "M0 10 L0 5 M-3 7 L0 4 L3 7" : "M0 -10 L0 -5 M-3 -7 L0 -4 L3 -7"}
                   fill="none"
-                  stroke="#0284c7"
-                  strokeWidth={2.5}
+                  stroke="#16a34a"
+                  strokeWidth={2}
                   strokeLinecap="round"
                 />
-
-                {/* Prominent Infographic Entry Callout Badge: Entry (Buy) / Entry (Sell) */}
-                <g transform={`translate(-85, ${isLong ? 16 : -38})`}>
-                  <rect
-                    width={170}
-                    height={22}
-                    rx={6}
-                    fill="#15803d"
-                    stroke="#ffffff"
-                    strokeWidth={1.5}
-                    filter="drop-shadow(0 3px 6px rgba(0,0,0,0.25))"
-                  />
-                  <text
-                    x={85}
-                    y={15}
-                    textAnchor="middle"
-                    fill="#ffffff"
-                    fontSize="9.5"
-                    fontFamily="monospace"
-                    fontWeight="bold"
-                  >
-                    ↗ Entry ({isLong ? 'Buy' : 'Sell'}) ${trade.entry_price.toLocaleString()}
+                <g transform={`translate(-45, ${isLong ? 14 : -24})`}>
+                  <rect width={90} height={18} rx={3} fill="#16a34a" stroke="#86efac" strokeWidth={0.8} />
+                  <text x={45} y={12.5} textAnchor="middle" fill="#ffffff" fontSize="8.5" fontFamily="monospace" fontWeight="bold">
+                    ↗ Entry ${trade.entry_price.toFixed(1)}
                   </text>
-                  {/* Pointer arrow to candle */}
-                  <path
-                    d={isLong ? "M85 0 L80 -6 L90 -6 Z" : "M85 22 L80 28 L90 28 Z"}
-                    fill="#15803d"
-                  />
                 </g>
               </g>
             )}
 
             {/* ── Exit Marker (Result & Flag) ── */}
             {showDrawings && candleData && (
-              <g transform={`translate(${exitX}, ${isWin ? tpY : slY})`}>
-                <circle r={6} fill={isWin ? '#10b981' : '#f43f5e'} stroke="#ffffff" strokeWidth={2} />
-                <g transform="translate(10, -14)">
+              <g transform={`translate(${getX(localExitIdx)}, ${isWin ? tpY : slY})`}>
+                <circle r={5} fill={isWin ? '#10b981' : '#f43f5e'} stroke="#ffffff" strokeWidth={1.5} />
+                <g transform="translate(8, -10)">
                   <rect
-                    width={92}
-                    height={24}
-                    rx={5}
+                    width={80}
+                    height={20}
+                    rx={4}
                     fill={isWin ? '#15803d' : '#be123c'}
                     stroke="#ffffff"
-                    strokeWidth={1.2}
-                    filter="drop-shadow(0 2px 4px rgba(0,0,0,0.15))"
+                    strokeWidth={1}
+                    filter="drop-shadow(0 1px 3px rgba(0,0,0,0.15))"
                   />
                   <text
-                    x={46}
-                    y={16}
+                    x={40}
+                    y={13.5}
                     textAnchor="middle"
                     fill="#ffffff"
-                    fontSize="10"
+                    fontSize="9"
                     fontFamily="monospace"
                     fontWeight="bold"
                   >
@@ -1061,7 +919,7 @@ export default function TradeChartVisualizer({
                   <g transform={`translate(${svgWidth - paddingRight + 4}, ${bosY - 10})`}>
                     <rect width={100} height={20} rx={4} fill="#0369a1" stroke="#7dd3fc" strokeWidth={1} filter="drop-shadow(0 1px 2px rgba(0,0,0,0.1))" />
                     <text x={8} y={14} fill="#ffffff" fontSize="9" fontFamily="monospace" fontWeight="bold">
-                      BOS ${bosLevelVal?.toFixed(1)}
+                      BOS ${shPrice.toFixed(1)}
                     </text>
                   </g>
                 )}
@@ -1099,7 +957,7 @@ export default function TradeChartVisualizer({
                   <g transform={`translate(${svgWidth - paddingRight + 4}, ${idmY - 10})`}>
                     <rect width={100} height={20} rx={4} fill="#6b21a8" stroke="#d8b4fe" strokeWidth={1} filter="drop-shadow(0 1px 2px rgba(0,0,0,0.1))" />
                     <text x={8} y={14} fill="#ffffff" fontSize="9" fontFamily="monospace" fontWeight="bold">
-                      IDM ${idmLevelVal?.toFixed(1)}
+                      IDM ${idmPrice.toFixed(1)}
                     </text>
                   </g>
                 )}
