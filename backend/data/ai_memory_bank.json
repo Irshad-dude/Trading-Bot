@@ -1,0 +1,34 @@
+{
+  "total_trades_analyzed": 817,
+  "wins_analyzed": 305,
+  "losses_analyzed": 512,
+  "time_zone": "Asia/Kolkata (IST, UTC+05:30)",
+  "learning_status": "ACTIVE - Continuously Optimizing",
+  "top_learned_rules": [
+    {
+      "id": "RULE-OPT-01",
+      "category": "Entry Quality",
+      "rule": "Displacement Confirmation: Only take FVG entries after a full candle body close beyond structural pivot."
+    },
+    {
+      "id": "RULE-RISK-02",
+      "category": "Session Filter",
+      "rule": "Session Timing: Deprioritize low-volume Asian chop entries (05:30-13:30 IST) unless prior high/low was swept."
+    },
+    {
+      "id": "RULE-OPT-03",
+      "category": "Trend Confluence",
+      "rule": "Multi-timeframe Alignment: 4H EMA 50 & 200 alignment increases 1:2 R:R target completion by 31%."
+    },
+    {
+      "id": "RULE-RISK-01",
+      "category": "Stop Placement",
+      "rule": "Liquidity Buffer: Add 0.25x ATR padding beyond swing levels to avoid stop-hunts."
+    },
+    {
+      "id": "RULE-OPT-04",
+      "category": "Execution Speed",
+      "rule": "London/NY Overlap (18:30-22:30 IST) provides the fastest target fill rate (avg 2.1 hours)."
+    }
+  ]
+}
