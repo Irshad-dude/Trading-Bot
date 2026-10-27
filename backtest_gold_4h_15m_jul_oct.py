@@ -294,12 +294,28 @@ def run_gold_backtest(
                                     sweep_price = float(b_row['low'])
 
                         if idm_swept and not broke_sh_early:
-                            for j in range(max(2, i - 2), min(len(df_15m), i + 2)):
-                                c1, c2, c3 = df_15m.iloc[j - 2], df_15m.iloc[j - 1], df_15m.iloc[j]
-                                if float(c3['low']) > float(c1['high']) and float(c2['close']) > float(c2['open']):
+                            # ── BULLISH FVG: C2 = BOS candle (i) or next 1-3 candles after BOS ──
+                            # C1 = candle before C2, C3 = candle after C2
+                            # FVG gap = C3.low - C1.high (must be meaningful, not a "line")
+                            MIN_FVG_GAP = 0.30  # Minimum gap to filter out line-thin FVGs
+                            for c2_pos in range(i, min(len(df_15m) - 1, i + 4)):
+                                c1_pos = c2_pos - 1
+                                c3_pos = c2_pos + 1
+                                if c1_pos < 0 or c3_pos >= len(df_15m):
+                                    continue
+                                c1 = df_15m.iloc[c1_pos]
+                                c2 = df_15m.iloc[c2_pos]
+                                c3 = df_15m.iloc[c3_pos]
+
+                                fvg_gap = float(c3['low']) - float(c1['high'])
+                                if fvg_gap <= MIN_FVG_GAP:
+                                    continue  # Skip line-thin FVGs
+
+                                # C2 must be impulsive bullish candle (close > open, body >= 30% of range)
+                                if float(c2['close']) > float(c2['open']):
                                     c2_range = float(c2['high']) - float(c2['low'])
                                     c2_body = abs(float(c2['close']) - float(c2['open']))
-                                    if c2_range > 0 and (c2_body / c2_range) >= 0.25:
+                                    if c2_range > 0 and (c2_body / c2_range) >= 0.30:
                                         pending_fvg = {
                                             'direction': 'LONG',
                                             'sh_idx': int(sh_idx),
@@ -312,10 +328,10 @@ def run_gold_backtest(
                                             'bos_price': round(float(c_close), 2),
                                             'bos_level': round(float(sh_p), 2),
                                             'idm_level': round(float(idm_p), 2),
-                                            'c1_idx': j - 2,
-                                            'c2_idx': j - 1,
-                                            'c3_idx': j,
-                                            'fvg_candle_idx': j - 1,
+                                            'c1_idx': c1_pos,
+                                            'c2_idx': c2_pos,
+                                            'c3_idx': c3_pos,
+                                            'fvg_candle_idx': c2_pos,
                                             'fvg_top': float(c3['low']),
                                             'fvg_bottom': float(c1['high']),
                                             'c1_low': float(c1['low']),
@@ -352,12 +368,28 @@ def run_gold_backtest(
                                     sweep_price = float(b_row['high'])
 
                         if idm_swept and not broke_sl_early:
-                            for j in range(max(2, i - 2), min(len(df_15m), i + 2)):
-                                c1, c2, c3 = df_15m.iloc[j - 2], df_15m.iloc[j - 1], df_15m.iloc[j]
-                                if float(c1['low']) > float(c3['high']) and float(c2['close']) < float(c2['open']):
+                            # ── BEARISH FVG: C2 = BOS candle (i) or next 1-3 candles after BOS ──
+                            # C1 = candle before C2, C3 = candle after C2
+                            # FVG gap = C1.low - C3.high (must be meaningful, not a "line")
+                            MIN_FVG_GAP = 0.30  # Minimum gap to filter out line-thin FVGs
+                            for c2_pos in range(i, min(len(df_15m) - 1, i + 4)):
+                                c1_pos = c2_pos - 1
+                                c3_pos = c2_pos + 1
+                                if c1_pos < 0 or c3_pos >= len(df_15m):
+                                    continue
+                                c1 = df_15m.iloc[c1_pos]
+                                c2 = df_15m.iloc[c2_pos]
+                                c3 = df_15m.iloc[c3_pos]
+
+                                fvg_gap = float(c1['low']) - float(c3['high'])
+                                if fvg_gap <= MIN_FVG_GAP:
+                                    continue  # Skip line-thin FVGs
+
+                                # C2 must be impulsive bearish candle (close < open, body >= 30% of range)
+                                if float(c2['close']) < float(c2['open']):
                                     c2_range = float(c2['high']) - float(c2['low'])
                                     c2_body = abs(float(c2['close']) - float(c2['open']))
-                                    if c2_range > 0 and (c2_body / c2_range) >= 0.25:
+                                    if c2_range > 0 and (c2_body / c2_range) >= 0.30:
                                         pending_fvg = {
                                             'direction': 'SHORT',
                                             'sh_idx': int(sl_idx),
@@ -370,10 +402,10 @@ def run_gold_backtest(
                                             'bos_price': round(float(c_close), 2),
                                             'bos_level': round(float(sl_p), 2),
                                             'idm_level': round(float(idm_p), 2),
-                                            'c1_idx': j - 2,
-                                            'c2_idx': j - 1,
-                                            'c3_idx': j,
-                                            'fvg_candle_idx': j - 1,
+                                            'c1_idx': c1_pos,
+                                            'c2_idx': c2_pos,
+                                            'c3_idx': c3_pos,
+                                            'fvg_candle_idx': c2_pos,
                                             'fvg_top': float(c1['low']),
                                             'fvg_bottom': float(c3['high']),
                                             'c1_high': float(c1['high']),
@@ -515,24 +547,43 @@ def run_gold_backtest(
     print(f"Verified {verified_count} canonical trade windows built!")
 
     # ── 8. MERGE INTO MAIN APP DATA ──
+    n_wins = int((jul_oct_trades['result'] == 'WIN').sum())
+    n_losses = int((jul_oct_trades['result'] == 'LOSS').sum())
+    total_gross_profit = sum(d for d in pnl_dollars_clean if d > 0)
+    total_gross_loss = abs(sum(d for d in pnl_dollars_clean if d < 0))
+    profit_factor = round(total_gross_profit / max(0.01, total_gross_loss), 2)
+
+    # Max drawdown from equity curve
+    peak = starting_balance
+    max_dd = 0.0
+    running = starting_balance
+    for d in pnl_dollars_clean:
+        running += d
+        if running > peak:
+            peak = running
+        dd = (peak - running) / peak * 100.0
+        if dd > max_dd:
+            max_dd = dd
+    max_dd = round(max_dd, 2)
+
     gold_summary = {
         "name": "Gold (XAU/USD) [1 Jul - 1 Oct 2026 · 4H Trend + 15M SMC]",
         "symbol": "XAUUSD",
         "period": "1 July 2026 - 1 October 2026",
         "total_trades": len(jul_oct_trades),
-        "wins": int((jul_oct_trades['result'] == 'WIN').sum()),
-        "losses": int((jul_oct_trades['result'] == 'LOSS').sum()),
-        "win_rate": round((jul_oct_trades['result'] == 'WIN').sum() / len(jul_oct_trades) * 100.0, 2),
-        "profit_factor": 1.52,
+        "wins": n_wins,
+        "losses": n_losses,
+        "win_rate": round(n_wins / max(1, len(jul_oct_trades)) * 100.0, 2),
+        "profit_factor": profit_factor,
         "net_pnl_dollars": round(bal - starting_balance, 2),
         "net_pnl_pct": round((bal - starting_balance) / starting_balance * 100.0, 2),
         "starting_balance": starting_balance,
         "ending_balance": round(bal, 2),
         "rr_ratio": "1:2 (Rule #8 First Candle Extreme SL)",
-        "max_drawdown_pct": 4.99,
+        "max_drawdown_pct": max_dd,
         "trend_timeframe": "4-Hour (4H)",
         "execution_timeframe": "15-Minute (15M)",
-        "strategy_model": "Irshad SMC: 4H Trend -> 15M IDM Sweep -> 15M BOS -> 3-Candle FVG Mitigation",
+        "strategy_model": "Irshad SMC: 4H Trend -> 15M IDM Sweep -> 15M BOS -> 3-Candle FVG Mitigation (Accuracy Mode)",
     }
 
     # Monthly stats
@@ -600,8 +651,27 @@ def run_gold_backtest(
     with open("trading-agent/gold_backtest_jul_oct_2026.json", "w") as f:
         json.dump(gold_payload, f, indent=2, default=json_default)
 
-    print("\nSUCCESS: All 112 Gold trades now have CANONICAL structural coordinates!")
-    print(f"Sample Trade 1: {output_gold_trades[0]['entry_time_ist']} | sh_idx={output_gold_trades[0]['sh_idx']}, idm_idx={output_gold_trades[0]['idm_idx']}, sweep_idx={output_gold_trades[0]['sweep_idx']}, bos_idx={output_gold_trades[0]['bos_idx']}")
+    print("\n" + "=" * 70)
+    print("  ACCURACY MODE BACKTEST RESULTS")
+    print("=" * 70)
+    print(f"  Total Trades:     {gold_summary['total_trades']}")
+    print(f"  Wins / Losses:    {gold_summary['wins']}W / {gold_summary['losses']}L")
+    print(f"  Win Rate:         {gold_summary['win_rate']}%")
+    print(f"  Net Return:       +{gold_summary['net_pnl_pct']}% (+${gold_summary['net_pnl_dollars']:,.2f})")
+    print(f"  Profit Factor:    {gold_summary['profit_factor']}")
+    print(f"  Max Drawdown:     {gold_summary['max_drawdown_pct']}%")
+    print(f"  Ending Balance:   ${gold_summary['ending_balance']:,.2f}")
+    print("  FVG Rules Applied:")
+    print("    ✓ C2 = BOS candle (or next 1-3 candles after BOS)")
+    print("    ✓ Minimum FVG gap > 0.30 (no line-thin gaps)")
+    print("    ✓ C2 body >= 30% of range (impulsive candle)")
+    if len(output_gold_trades) > 0:
+        t1 = output_gold_trades[0]
+        print(f"\n  Sample Trade 1: {t1['entry_time_ist']}")
+        print(f"    sh_idx={t1['sh_idx']}, idm_idx={t1['idm_idx']}, bos_idx={t1['bos_idx']}, c2_idx={t1['c2_idx']}")
+        fvg_gap = abs(t1['fvg_top'] - t1['fvg_bottom'])
+        print(f"    FVG: ${t1['fvg_bottom']:.2f} – ${t1['fvg_top']:.2f} (gap: {fvg_gap:.2f})")
+    print("=" * 70)
 
 if __name__ == "__main__":
     run_gold_backtest()
