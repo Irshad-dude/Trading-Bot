@@ -194,74 +194,293 @@ def run_gold_backtest(
                 active_pos = None
 
         # ── Step B: Check Pending FVG Mitigation (Entry Trigger) ──
+        # RULE: After FVG is created (Candles C1, C2, C3 complete),
+        # WAIT for price to retrace and touch the FVG gap box!
+        # Trade is only executed when price touches the gap on a subsequent candle (i > c3_idx).
         if active_pos is None and pending_fvg is not None:
-            if (i - pending_fvg['bos_idx']) > 24:
-                pending_fvg = None
-            else:
-                f = pending_fvg
+            f = pending_fvg
+            if (i - f['bos_idx']) > 48:
+                pending_fvg = None  # Invalidate stale FVG if no retrace within 48 candles (12 hours)
+            elif i > f['c3_idx']:
+                # The FVG box is fully created. Now waiting for retrace touch!
                 if f['direction'] == 'LONG' and trend == 'BULLISH':
-                    if c_low <= f['fvg_top'] and c_high >= f['fvg_bottom']:
-                        entry_p = min(f['fvg_top'], max(c_open, f['fvg_bottom']))
+                    # If market dropped below SL before touching FVG, invalidate
+                    if c_low <= f['c1_low'] and c_open <= f['fvg_bottom']:
+                        pending_fvg = None
+                    # Price retraces DOWN to touch the FVG gap:
+                    elif c_low <= f['fvg_top'] and c_high >= f['fvg_bottom']:
+                        entry_p = min(f['fvg_top'], c_open)
                         sl = f['c1_low']
                         risk_d = entry_p - sl
                         if risk_d > 0.05:
-                            active_pos = {
-                                'direction': 'LONG',
-                                'entry_time': ts,
-                                'entry_price': entry_p,
-                                'stop_loss': sl,
-                                'take_profit': round(entry_p + 2.0 * risk_d, 2),
-                                'risk_distance': risk_d,
-                                'trend_4h': trend,
-                                'sh_idx': f['sh_idx'],
-                                'sh_price': f['sh_price'],
-                                'idm_idx': f['idm_idx'],
-                                'idm_price': f['idm_price'],
-                                'sweep_idx': f['sweep_idx'],
-                                'sweep_price': f['sweep_price'],
-                                'bos_idx': f['bos_idx'],
-                                'bos_price': f['bos_price'],
-                                'bos_level': f['bos_level'],
-                                'idm_level': f['idm_level'],
-                                'c1_idx': f['c1_idx'],
-                                'c2_idx': f['c2_idx'],
-                                'c3_idx': f['c3_idx'],
-                                'fvg_top': f['fvg_top'],
-                                'fvg_bottom': f['fvg_bottom'],
-                                'entry_idx': i,
-                            }
+                            tp = round(entry_p + 2.0 * risk_d, 2)
+                            # Check same-candle SL breach
+                            if c_low <= sl:
+                                # Hit SL on touch candle
+                                risk_amt = balance * (risk_percent / 100.0)
+                                balance -= risk_amt
+                                entry_dt = pd.to_datetime(ts)
+                                entry_dt_utc = entry_dt.to_pydatetime() if hasattr(entry_dt, 'to_pydatetime') else entry_dt
+                                all_trades.append({
+                                    "trade_num": len(all_trades) + 1,
+                                    "symbol": "XAUUSD",
+                                    "asset_name": "Gold (XAU/USD)",
+                                    "timeframe": "15m",
+                                    "macro_timeframe": "4h",
+                                    "4h_trend": trend,
+                                    "direction": "LONG",
+                                    "entry_time": str(ts),
+                                    "entry_price": round(entry_p, 2),
+                                    "exit_time": str(ts),
+                                    "exit_price": round(sl, 2),
+                                    "stop_loss": round(sl, 2),
+                                    "take_profit": round(tp, 2),
+                                    "risk_distance": round(risk_d, 2),
+                                    "rr_ratio": "1:2",
+                                    "result": "LOSS",
+                                    "pnl_percent": -risk_percent,
+                                    "pnl_dollar": -round(risk_amt, 2),
+                                    "running_balance": round(balance, 2),
+                                    "session_name": get_session_name(entry_dt_utc),
+                                    "entry_time_ist": entry_dt_utc.astimezone(IST).strftime("%Y-%m-%d %H:%M IST"),
+                                    "exit_time_ist": entry_dt_utc.astimezone(IST).strftime("%Y-%m-%d %H:%M IST"),
+                                    "duration_hours": 0.25,
+                                    "sh_idx": f['sh_idx'],
+                                    "sh_price": f['sh_price'],
+                                    "idm_idx": f['idm_idx'],
+                                    "idm_price": f['idm_price'],
+                                    "sweep_idx": f['sweep_idx'],
+                                    "sweep_price": f['sweep_price'],
+                                    "bos_idx": f['bos_idx'],
+                                    "bos_price": f['bos_price'],
+                                    "bos_level": f['bos_level'],
+                                    "idm_level": f['idm_level'],
+                                    "c1_idx": f['c1_idx'],
+                                    "c2_idx": f['c2_idx'],
+                                    "c3_idx": f['c3_idx'],
+                                    "fvg_top": round(f['fvg_top'], 2),
+                                    "fvg_bottom": round(f['fvg_bottom'], 2),
+                                    "entry_idx": i,
+                                    "exit_idx": i,
+                                    "sl_idx": f['c1_idx'],
+                                    "sl_price": round(sl, 2),
+                                    "tp_price": round(tp, 2),
+                                })
+                            elif c_high >= tp:
+                                # Hit TP on touch candle
+                                risk_amt = balance * (risk_percent / 100.0)
+                                balance += (risk_amt * 2.0)
+                                entry_dt = pd.to_datetime(ts)
+                                entry_dt_utc = entry_dt.to_pydatetime() if hasattr(entry_dt, 'to_pydatetime') else entry_dt
+                                all_trades.append({
+                                    "trade_num": len(all_trades) + 1,
+                                    "symbol": "XAUUSD",
+                                    "asset_name": "Gold (XAU/USD)",
+                                    "timeframe": "15m",
+                                    "macro_timeframe": "4h",
+                                    "4h_trend": trend,
+                                    "direction": "LONG",
+                                    "entry_time": str(ts),
+                                    "entry_price": round(entry_p, 2),
+                                    "exit_time": str(ts),
+                                    "exit_price": round(tp, 2),
+                                    "stop_loss": round(sl, 2),
+                                    "take_profit": round(tp, 2),
+                                    "risk_distance": round(risk_d, 2),
+                                    "rr_ratio": "1:2",
+                                    "result": "WIN",
+                                    "pnl_percent": 2.0 * risk_percent,
+                                    "pnl_dollar": round(risk_amt * 2.0, 2),
+                                    "running_balance": round(balance, 2),
+                                    "session_name": get_session_name(entry_dt_utc),
+                                    "entry_time_ist": entry_dt_utc.astimezone(IST).strftime("%Y-%m-%d %H:%M IST"),
+                                    "exit_time_ist": entry_dt_utc.astimezone(IST).strftime("%Y-%m-%d %H:%M IST"),
+                                    "duration_hours": 0.25,
+                                    "sh_idx": f['sh_idx'],
+                                    "sh_price": f['sh_price'],
+                                    "idm_idx": f['idm_idx'],
+                                    "idm_price": f['idm_price'],
+                                    "sweep_idx": f['sweep_idx'],
+                                    "sweep_price": f['sweep_price'],
+                                    "bos_idx": f['bos_idx'],
+                                    "bos_price": f['bos_price'],
+                                    "bos_level": f['bos_level'],
+                                    "idm_level": f['idm_level'],
+                                    "c1_idx": f['c1_idx'],
+                                    "c2_idx": f['c2_idx'],
+                                    "c3_idx": f['c3_idx'],
+                                    "fvg_top": round(f['fvg_top'], 2),
+                                    "fvg_bottom": round(f['fvg_bottom'], 2),
+                                    "entry_idx": i,
+                                    "exit_idx": i,
+                                    "sl_idx": f['c1_idx'],
+                                    "sl_price": round(sl, 2),
+                                    "tp_price": round(tp, 2),
+                                })
+                            else:
+                                active_pos = {
+                                    'direction': 'LONG',
+                                    'entry_time': ts,
+                                    'entry_price': entry_p,
+                                    'stop_loss': sl,
+                                    'take_profit': tp,
+                                    'risk_distance': risk_d,
+                                    'trend_4h': trend,
+                                    'sh_idx': f['sh_idx'],
+                                    'sh_price': f['sh_price'],
+                                    'idm_idx': f['idm_idx'],
+                                    'idm_price': f['idm_price'],
+                                    'sweep_idx': f['sweep_idx'],
+                                    'sweep_price': f['sweep_price'],
+                                    'bos_idx': f['bos_idx'],
+                                    'bos_price': f['bos_price'],
+                                    'bos_level': f['bos_level'],
+                                    'idm_level': f['idm_level'],
+                                    'c1_idx': f['c1_idx'],
+                                    'c2_idx': f['c2_idx'],
+                                    'c3_idx': f['c3_idx'],
+                                    'fvg_top': f['fvg_top'],
+                                    'fvg_bottom': f['fvg_bottom'],
+                                    'entry_idx': i,
+                                }
                             pending_fvg = None
+
                 elif f['direction'] == 'SHORT' and trend == 'BEARISH':
-                    if c_high >= f['fvg_bottom'] and c_low <= f['fvg_top']:
-                        entry_p = max(f['fvg_bottom'], min(c_open, f['fvg_top']))
+                    if c_high >= f['c1_high'] and c_open >= f['fvg_bottom']:
+                        pending_fvg = None
+                    # Price retraces UP to touch the FVG gap:
+                    elif c_high >= f['fvg_bottom'] and c_low <= f['fvg_top']:
+                        entry_p = max(f['fvg_bottom'], c_open)
                         sl = f['c1_high']
                         risk_d = sl - entry_p
                         if risk_d > 0.05:
-                            active_pos = {
-                                'direction': 'SHORT',
-                                'entry_time': ts,
-                                'entry_price': entry_p,
-                                'stop_loss': sl,
-                                'take_profit': round(entry_p - 2.0 * risk_d, 2),
-                                'risk_distance': risk_d,
-                                'trend_4h': trend,
-                                'sh_idx': f['sh_idx'],
-                                'sh_price': f['sh_price'],
-                                'idm_idx': f['idm_idx'],
-                                'idm_price': f['idm_price'],
-                                'sweep_idx': f['sweep_idx'],
-                                'sweep_price': f['sweep_price'],
-                                'bos_idx': f['bos_idx'],
-                                'bos_price': f['bos_price'],
-                                'bos_level': f['bos_level'],
-                                'idm_level': f['idm_level'],
-                                'c1_idx': f['c1_idx'],
-                                'c2_idx': f['c2_idx'],
-                                'c3_idx': f['c3_idx'],
-                                'fvg_top': f['fvg_top'],
-                                'fvg_bottom': f['fvg_bottom'],
-                                'entry_idx': i,
-                            }
+                            tp = round(entry_p - 2.0 * risk_d, 2)
+                            if c_high >= sl:
+                                risk_amt = balance * (risk_percent / 100.0)
+                                balance -= risk_amt
+                                entry_dt = pd.to_datetime(ts)
+                                entry_dt_utc = entry_dt.to_pydatetime() if hasattr(entry_dt, 'to_pydatetime') else entry_dt
+                                all_trades.append({
+                                    "trade_num": len(all_trades) + 1,
+                                    "symbol": "XAUUSD",
+                                    "asset_name": "Gold (XAU/USD)",
+                                    "timeframe": "15m",
+                                    "macro_timeframe": "4h",
+                                    "4h_trend": trend,
+                                    "direction": "SHORT",
+                                    "entry_time": str(ts),
+                                    "entry_price": round(entry_p, 2),
+                                    "exit_time": str(ts),
+                                    "exit_price": round(sl, 2),
+                                    "stop_loss": round(sl, 2),
+                                    "take_profit": round(tp, 2),
+                                    "risk_distance": round(risk_d, 2),
+                                    "rr_ratio": "1:2",
+                                    "result": "LOSS",
+                                    "pnl_percent": -risk_percent,
+                                    "pnl_dollar": -round(risk_amt, 2),
+                                    "running_balance": round(balance, 2),
+                                    "session_name": get_session_name(entry_dt_utc),
+                                    "entry_time_ist": entry_dt_utc.astimezone(IST).strftime("%Y-%m-%d %H:%M IST"),
+                                    "exit_time_ist": entry_dt_utc.astimezone(IST).strftime("%Y-%m-%d %H:%M IST"),
+                                    "duration_hours": 0.25,
+                                    "sh_idx": f['sh_idx'],
+                                    "sh_price": f['sh_price'],
+                                    "idm_idx": f['idm_idx'],
+                                    "idm_price": f['idm_price'],
+                                    "sweep_idx": f['sweep_idx'],
+                                    "sweep_price": f['sweep_price'],
+                                    "bos_idx": f['bos_idx'],
+                                    "bos_price": f['bos_price'],
+                                    "bos_level": f['bos_level'],
+                                    "idm_level": f['idm_level'],
+                                    "c1_idx": f['c1_idx'],
+                                    "c2_idx": f['c2_idx'],
+                                    "c3_idx": f['c3_idx'],
+                                    "fvg_top": round(f['fvg_top'], 2),
+                                    "fvg_bottom": round(f['fvg_bottom'], 2),
+                                    "entry_idx": i,
+                                    "exit_idx": i,
+                                    "sl_idx": f['c1_idx'],
+                                    "sl_price": round(sl, 2),
+                                    "tp_price": round(tp, 2),
+                                })
+                            elif c_low <= tp:
+                                risk_amt = balance * (risk_percent / 100.0)
+                                balance += (risk_amt * 2.0)
+                                entry_dt = pd.to_datetime(ts)
+                                entry_dt_utc = entry_dt.to_pydatetime() if hasattr(entry_dt, 'to_pydatetime') else entry_dt
+                                all_trades.append({
+                                    "trade_num": len(all_trades) + 1,
+                                    "symbol": "XAUUSD",
+                                    "asset_name": "Gold (XAU/USD)",
+                                    "timeframe": "15m",
+                                    "macro_timeframe": "4h",
+                                    "4h_trend": trend,
+                                    "direction": "SHORT",
+                                    "entry_time": str(ts),
+                                    "entry_price": round(entry_p, 2),
+                                    "exit_time": str(ts),
+                                    "exit_price": round(tp, 2),
+                                    "stop_loss": round(sl, 2),
+                                    "take_profit": round(tp, 2),
+                                    "risk_distance": round(risk_d, 2),
+                                    "rr_ratio": "1:2",
+                                    "result": "WIN",
+                                    "pnl_percent": 2.0 * risk_percent,
+                                    "pnl_dollar": round(risk_amt * 2.0, 2),
+                                    "running_balance": round(balance, 2),
+                                    "session_name": get_session_name(entry_dt_utc),
+                                    "entry_time_ist": entry_dt_utc.astimezone(IST).strftime("%Y-%m-%d %H:%M IST"),
+                                    "exit_time_ist": entry_dt_utc.astimezone(IST).strftime("%Y-%m-%d %H:%M IST"),
+                                    "duration_hours": 0.25,
+                                    "sh_idx": f['sh_idx'],
+                                    "sh_price": f['sh_price'],
+                                    "idm_idx": f['idm_idx'],
+                                    "idm_price": f['idm_price'],
+                                    "sweep_idx": f['sweep_idx'],
+                                    "sweep_price": f['sweep_price'],
+                                    "bos_idx": f['bos_idx'],
+                                    "bos_price": f['bos_price'],
+                                    "bos_level": f['bos_level'],
+                                    "idm_level": f['idm_level'],
+                                    "c1_idx": f['c1_idx'],
+                                    "c2_idx": f['c2_idx'],
+                                    "c3_idx": f['c3_idx'],
+                                    "fvg_top": round(f['fvg_top'], 2),
+                                    "fvg_bottom": round(f['fvg_bottom'], 2),
+                                    "entry_idx": i,
+                                    "exit_idx": i,
+                                    "sl_idx": f['c1_idx'],
+                                    "sl_price": round(sl, 2),
+                                    "tp_price": round(tp, 2),
+                                })
+                            else:
+                                active_pos = {
+                                    'direction': 'SHORT',
+                                    'entry_time': ts,
+                                    'entry_price': entry_p,
+                                    'stop_loss': sl,
+                                    'take_profit': tp,
+                                    'risk_distance': risk_d,
+                                    'trend_4h': trend,
+                                    'sh_idx': f['sh_idx'],
+                                    'sh_price': f['sh_price'],
+                                    'idm_idx': f['idm_idx'],
+                                    'idm_price': f['idm_price'],
+                                    'sweep_idx': f['sweep_idx'],
+                                    'sweep_price': f['sweep_price'],
+                                    'bos_idx': f['bos_idx'],
+                                    'bos_price': f['bos_price'],
+                                    'bos_level': f['bos_level'],
+                                    'idm_level': f['idm_level'],
+                                    'c1_idx': f['c1_idx'],
+                                    'c2_idx': f['c2_idx'],
+                                    'c3_idx': f['c3_idx'],
+                                    'fvg_top': f['fvg_top'],
+                                    'fvg_bottom': f['fvg_bottom'],
+                                    'entry_idx': i,
+                                }
                             pending_fvg = None
 
         # ── Step C: Detect 15M BOS & FVG Setup ──
