@@ -279,6 +279,8 @@ export default function TradeChartVisualizer({
   const bosPrice = candleData?.bos_price ?? shPrice;
 
   const localC1Idx = candleData?.local_c1_idx ?? Math.max(0, entryIdx - 3);
+  const localC2Idx = candleData?.local_c2_idx ?? (candleData?.local_bos_idx ?? Math.max(0, entryIdx - 2));
+  const localC3Idx = candleData?.local_c3_idx ?? Math.max(0, entryIdx - 1);
   const localEntryIdx = candleData?.local_entry_idx ?? entryIdx;
   const localExitIdx = candleData?.local_exit_idx ?? exitIdx;
 
@@ -287,7 +289,7 @@ export default function TradeChartVisualizer({
   const bosY = hasBos ? getY(shPrice) : 0;
   const idmY = hasIdm ? getY(idmPrice) : 0;
 
-  // EVG / FVG Boundary Zone Calculations
+  // FVG (Fair Value Gap) Boundary Zone Calculations
   const fvgTopVal = candleData?.fvg_top ?? trade.fvg_top;
   const fvgBottomVal = candleData?.fvg_bottom ?? trade.fvg_bottom;
   const hasFvg = fvgTopVal !== undefined && fvgBottomVal !== undefined && fvgTopVal > 0 && fvgBottomVal > 0;
@@ -295,9 +297,25 @@ export default function TradeChartVisualizer({
   const fvgTopPrice = hasFvg ? Math.max(fvgTopVal, fvgBottomVal) : 0;
   const fvgBottomPrice = hasFvg ? Math.min(fvgTopVal, fvgBottomVal) : 0;
 
-  const fvgTopY = hasFvg ? getY(fvgTopPrice) : 0;
-  const fvgBottomY = hasFvg ? getY(fvgBottomPrice) : 0;
-  const fvgH = hasFvg ? Math.max(3, fvgBottomY - fvgTopY) : 0;
+  const rawFvgTopY = hasFvg ? getY(fvgTopPrice) : 0;
+  const rawFvgBottomY = hasFvg ? getY(fvgBottomPrice) : 0;
+  const rawFvgH = Math.abs(rawFvgBottomY - rawFvgTopY);
+
+  // Anti-Line Guarantee: Maintain minimum 14px visual height so the FVG box is always clearly a box
+  const minFvgVisualH = 14;
+  const isThinFvg = rawFvgH < minFvgVisualH;
+  const fvgCenterY = (rawFvgTopY + rawFvgBottomY) / 2;
+  const fvgTopY = isThinFvg ? fvgCenterY - minFvgVisualH / 2 : rawFvgTopY;
+  const fvgH = isThinFvg ? minFvgVisualH : rawFvgH;
+  const fvgBottomY = isThinFvg ? fvgCenterY + minFvgVisualH / 2 : rawFvgBottomY;
+  const displayFvgTopY = fvgTopY;
+  const displayFvgH = fvgH;
+  const displayFvgBottomY = fvgBottomY;
+
+  // FVG Box Horizontal Boundaries (from C1 wick across wait candles to Entry touch)
+  const fvgBoxX1 = Math.min(getX(localC1Idx), getX(localEntryIdx)) - candleBodyWidth / 2;
+  const fvgBoxX2 = Math.max(getX(localC1Idx), getX(localEntryIdx)) + candleBodyWidth / 2;
+  const fvgBoxW = Math.max(candleSpacing * 2, fvgBoxX2 - fvgBoxX1);
 
   // Price ticks on right axis
   const priceTicks = useMemo(() => {
@@ -308,6 +326,116 @@ export default function TradeChartVisualizer({
     }
     return ticks;
   }, [minPrice, priceRange]);
+
+  // Right price axis non-overlapping badges (Clean layout with collision avoidance)
+  const rightAxisBadges = useMemo(() => {
+    if (!showDrawings) return [];
+    interface AxisBadge {
+      id: string;
+      label: string;
+      price: number;
+      rawY: number;
+      bg: string;
+      border: string;
+      text: string;
+    }
+
+    const list: AxisBadge[] = [
+      {
+        id: 'tp',
+        label: 'TP',
+        price: trade.take_profit,
+        rawY: tpY,
+        bg: '#15803d',
+        border: '#86efac',
+        text: '#ffffff',
+      },
+      ...(hasBos ? [{
+        id: 'bos',
+        label: 'BOS',
+        price: shPrice,
+        rawY: bosY,
+        bg: '#0369a1',
+        border: '#7dd3fc',
+        text: '#ffffff',
+      }] : []),
+      ...(hasFvg ? [{
+        id: 'fvg_top',
+        label: 'FVG TOP',
+        price: fvgTopPrice,
+        rawY: rawFvgTopY,
+        bg: '#d97706',
+        border: '#fde68a',
+        text: '#ffffff',
+      }] : []),
+      {
+        id: 'entry',
+        label: 'ENTRY',
+        price: trade.entry_price,
+        rawY: entryY,
+        bg: '#16a34a',
+        border: '#ffffff',
+        text: '#ffffff',
+      },
+      ...(hasFvg ? [{
+        id: 'fvg_bot',
+        label: 'FVG BOT',
+        price: fvgBottomPrice,
+        rawY: rawFvgBottomY,
+        bg: '#d97706',
+        border: '#fde68a',
+        text: '#ffffff',
+      }] : []),
+      ...(hasIdm ? [{
+        id: 'idm',
+        label: 'IDM',
+        price: idmPrice,
+        rawY: idmY,
+        bg: '#6b21a8',
+        border: '#d8b4fe',
+        text: '#ffffff',
+      }] : []),
+      {
+        id: 'sl',
+        label: 'SL',
+        price: trade.stop_loss,
+        rawY: slY,
+        bg: '#be123c',
+        border: '#fda4af',
+        text: '#ffffff',
+      },
+    ];
+
+    // Sort by rawY ascending (top to bottom on screen)
+    list.sort((a, b) => a.rawY - b.rawY);
+
+    const minGap = 20;
+    const positions = list.map(b => b.rawY);
+
+    // Forward relaxation pass to prevent overlaps
+    for (let i = 1; i < positions.length; i++) {
+      if (positions[i] < positions[i - 1] + minGap) {
+        positions[i] = positions[i - 1] + minGap;
+      }
+    }
+
+    // Upward clamp pass if bottom badge overflows chart area
+    const maxAllowedY = chartHeight - paddingY - 12;
+    if (positions.length > 0 && positions[positions.length - 1] > maxAllowedY) {
+      positions[positions.length - 1] = maxAllowedY;
+      for (let i = positions.length - 2; i >= 0; i--) {
+        if (positions[i] > positions[i + 1] - minGap) {
+          positions[i] = positions[i + 1] - minGap;
+        }
+      }
+    }
+
+    return list.map((b, idx) => ({
+      ...b,
+      adjustedY: positions[idx],
+      isShifted: Math.abs(positions[idx] - b.rawY) > 3,
+    }));
+  }, [showDrawings, trade, tpY, hasBos, shPrice, bosY, hasFvg, fvgTopPrice, rawFvgTopY, entryY, fvgBottomPrice, rawFvgBottomY, hasIdm, idmPrice, idmY, slY, chartHeight, paddingY]);
 
   const activeCandle = hoverIdx !== null && candles[hoverIdx] ? candles[hoverIdx] : null;
 
@@ -431,7 +559,7 @@ export default function TradeChartVisualizer({
           <span className="text-slate-800 font-semibold">{trade.setup_reason}</span>
           {hasFvg && (
             <span className="px-2 py-0.5 rounded bg-amber-50 text-amber-800 border border-amber-300 font-bold text-[10px] ml-1 shadow-2xs">
-              ⚡ EVG GAP: ${fvgBottomPrice.toFixed(2)} – ${fvgTopPrice.toFixed(2)} (15M Touch)
+              ⚡ FVG GAP: ${fvgBottomPrice.toFixed(2)} – ${fvgTopPrice.toFixed(2)} (15M Touch)
             </span>
           )}
           <span className="px-2 py-0.5 rounded bg-indigo-50 text-indigo-700 border border-indigo-200 font-bold text-[10px] shadow-2xs">
@@ -691,35 +819,115 @@ export default function TradeChartVisualizer({
                   </g>
                 )}
 
-                {/* ── 5. FVG Imbalance Gap Box (Starts at Candle 1, extends to Entry touch) ── */}
+                {/* ── 5. FVG Imbalance Gap Box (Starts at Candle 1, extends across wait candles to Entry touch) ── */}
                 {hasFvg && (
                   <g className="fvg-clean-box">
+                    {/* Soft amber highlight box with guaranteed min visual height */}
                     <rect
-                      x={Math.min(getX(localC1Idx), getX(localEntryIdx))}
-                      y={fvgTopY}
-                      width={Math.max(16, Math.abs(getX(localEntryIdx) - getX(localC1Idx)))}
-                      height={fvgH}
-                      fill="#f59e0b"
-                      opacity={0.16}
+                      x={fvgBoxX1}
+                      y={displayFvgTopY}
+                      width={fvgBoxW}
+                      height={displayFvgH}
+                      fill="url(#fvgGradientLight)"
                       stroke="#d97706"
                       strokeWidth={1.2}
-                      strokeDasharray="3 2"
-                      rx={2}
+                      strokeDasharray="4 2"
+                      rx={3}
                     />
-                    <text
-                      x={Math.min(getX(localC1Idx), getX(localEntryIdx)) + 6}
-                      y={fvgTopY + fvgH / 2 + 3.5}
-                      fill="#b45309"
-                      fontSize="8.5"
-                      fontFamily="monospace"
-                      fontWeight="bold"
-                    >
-                      FVG
-                    </text>
+                    {/* Exact Canonical FVG Top Wick Boundary */}
+                    <line
+                      x1={fvgBoxX1}
+                      y1={rawFvgTopY}
+                      x2={fvgBoxX2}
+                      y2={rawFvgTopY}
+                      stroke="#d97706"
+                      strokeWidth={1.5}
+                      strokeDasharray="2 2"
+                    />
+                    {/* Exact Canonical FVG Bottom Wick Boundary */}
+                    <line
+                      x1={fvgBoxX1}
+                      y1={rawFvgBottomY}
+                      x2={fvgBoxX2}
+                      y2={rawFvgBottomY}
+                      stroke="#d97706"
+                      strokeWidth={1.5}
+                      strokeDasharray="2 2"
+                    />
+                    {/* High-Contrast Pill Tag for FVG Gap */}
+                    <g transform={`translate(${fvgBoxX1 + 6}, ${displayFvgTopY + 3})`}>
+                      <rect x={0} y={0} width={Math.min(130, fvgBoxW - 12)} height={16} rx={3} fill="#d97706" fillOpacity={0.92} />
+                      <text
+                        x={6}
+                        y={11.5}
+                        fill="#ffffff"
+                        fontSize="8"
+                        fontFamily="monospace"
+                        fontWeight="bold"
+                      >
+                        📦 FVG ${fvgBottomPrice.toFixed(1)}–${fvgTopPrice.toFixed(1)}
+                      </text>
+                    </g>
                   </g>
                 )}
 
-                {/* ── 6. Stop Loss Segment (Anchored strictly to Candle 1 Low / High) ── */}
+                {/* ── Retrace Waiting Zone between C3 and Entry (Mitigation Wait) ── */}
+                {hasFvg && localEntryIdx > localC3Idx && (
+                  <g className="smc-retrace-wait-zone" opacity={0.9}>
+                    <line
+                      x1={getX(localC3Idx) + candleBodyWidth / 2}
+                      y1={(rawFvgTopY + rawFvgBottomY) / 2}
+                      x2={getX(localEntryIdx) - candleBodyWidth / 2}
+                      y2={(rawFvgTopY + rawFvgBottomY) / 2}
+                      stroke="#d97706"
+                      strokeWidth={1.4}
+                      strokeDasharray="3 3"
+                    />
+                    {localEntryIdx - localC3Idx >= 2 && (
+                      <g transform={`translate(${(getX(localC3Idx) + getX(localEntryIdx)) / 2}, ${(rawFvgTopY + rawFvgBottomY) / 2})`}>
+                        <rect x={-52} y={-8} width={104} height={16} rx={3} fill="#fffbeb" stroke="#fde68a" strokeWidth={0.8} filter="drop-shadow(0 1px 2px rgba(0,0,0,0.08))" />
+                        <text x={0} y={3.5} textAnchor="middle" fill="#92400e" fontSize="7.5" fontFamily="monospace" fontWeight="bold">
+                          ⏳ Wait Retrace ({localEntryIdx - localC3Idx}c)
+                        </text>
+                      </g>
+                    )}
+                  </g>
+                )}
+
+                {/* ── 6. Numbered Candles: ① C1 (Base/SL), ② C2 (BOS Break), ③ C3 (FVG Formed) ── */}
+                <g className="smc-candle-number-markers">
+                  {/* ① Candle 1: Base candle before breakout & Rule #8 SL Anchor */}
+                  {candles[localC1Idx] && (
+                    <g transform={`translate(${getX(localC1Idx)}, ${isLong ? getY(candles[localC1Idx][3]) + 15 : getY(candles[localC1Idx][2]) - 13})`}>
+                      <rect x={-34} y={-8} width={68} height={16} rx={3} fill="#0f172a" stroke="#94a3b8" strokeWidth={0.8} />
+                      <text x={0} y={3.5} textAnchor="middle" fill="#ffffff" fontSize="8" fontFamily="monospace" fontWeight="bold">
+                        ① C1 (Base)
+                      </text>
+                    </g>
+                  )}
+
+                  {/* ② Candle 2: Impulsive BOS Breakout Candle */}
+                  {candles[localC2Idx] && (
+                    <g transform={`translate(${getX(localC2Idx)}, ${isLong ? getY(candles[localC2Idx][2]) - 13 : getY(candles[localC2Idx][3]) + 15})`}>
+                      <rect x={-36} y={-8} width={72} height={16} rx={3} fill="#0284c7" stroke="#7dd3fc" strokeWidth={0.8} />
+                      <text x={0} y={3.5} textAnchor="middle" fill="#ffffff" fontSize="8" fontFamily="monospace" fontWeight="bold">
+                        ② C2 (BOS)
+                      </text>
+                    </g>
+                  )}
+
+                  {/* ③ Candle 3: FVG Completion Candle */}
+                  {candles[localC3Idx] && (
+                    <g transform={`translate(${getX(localC3Idx)}, ${isLong ? getY(candles[localC3Idx][2]) - 13 : getY(candles[localC3Idx][3]) + 15})`}>
+                      <rect x={-36} y={-8} width={72} height={16} rx={3} fill="#d97706" stroke="#fde68a" strokeWidth={0.8} />
+                      <text x={0} y={3.5} textAnchor="middle" fill="#ffffff" fontSize="8" fontFamily="monospace" fontWeight="bold">
+                        ③ C3 (FVG)
+                      </text>
+                    </g>
+                  )}
+                </g>
+
+                {/* ── 7. Stop Loss Segment (Anchored strictly to Candle 1 Low / High - Rule #8) ── */}
                 <g className="sl-clean-segment">
                   <line
                     x1={getX(localC1Idx)}
@@ -737,7 +945,7 @@ export default function TradeChartVisualizer({
                   </g>
                 </g>
 
-                {/* ── 7. Take Profit Segment (Begins at Entry, extends to Exit) ── */}
+                {/* ── 8. Take Profit Segment (Begins at Entry, extends to Exit - Rule #9) ── */}
                 <g className="tp-clean-segment">
                   <line
                     x1={getX(localEntryIdx)}
@@ -904,73 +1112,40 @@ export default function TradeChartVisualizer({
               strokeWidth={1}
             />
 
-            {showDrawings && (
-              <>
-                {/* Take Profit Badge: TP (Next Resistance / Swing High) */}
-                <g transform={`translate(${svgWidth - paddingRight + 4}, ${tpY - 10})`}>
-                  <rect width={100} height={20} rx={4} fill="#15803d" stroke="#86efac" strokeWidth={1} filter="drop-shadow(0 1px 2px rgba(0,0,0,0.1))" />
-                  <text x={8} y={14} fill="#ffffff" fontSize="9" fontFamily="monospace" fontWeight="bold">
-                    TP ${trade.take_profit.toLocaleString()}
-                  </text>
-                </g>
-
-                {/* BOS Price Badge */}
-                {hasBos && (
-                  <g transform={`translate(${svgWidth - paddingRight + 4}, ${bosY - 10})`}>
-                    <rect width={100} height={20} rx={4} fill="#0369a1" stroke="#7dd3fc" strokeWidth={1} filter="drop-shadow(0 1px 2px rgba(0,0,0,0.1))" />
-                    <text x={8} y={14} fill="#ffffff" fontSize="9" fontFamily="monospace" fontWeight="bold">
-                      BOS ${shPrice.toFixed(1)}
-                    </text>
-                  </g>
+            {showDrawings && rightAxisBadges.map(badge => (
+              <g key={badge.id} transform={`translate(${svgWidth - paddingRight + 4}, ${badge.adjustedY - 9})`}>
+                {badge.isShifted && (
+                  <line
+                    x1={-4}
+                    y1={badge.rawY - badge.adjustedY + 9}
+                    x2={0}
+                    y2={9}
+                    stroke={badge.bg}
+                    strokeWidth={1}
+                    strokeDasharray="2 2"
+                  />
                 )}
-
-                {/* EVG / FVG Top Price Badge */}
-                {hasFvg && (
-                  <g transform={`translate(${svgWidth - paddingRight + 4}, ${fvgTopY - 9})`}>
-                    <rect width={100} height={18} rx={3} fill="#0284c7" stroke="#7dd3fc" strokeWidth={0.8} />
-                    <text x={8} y={13} fill="#ffffff" fontSize="8.5" fontFamily="monospace" fontWeight="bold">
-                      FVG TOP ${fvgTopPrice.toFixed(1)}
-                    </text>
-                  </g>
-                )}
-
-                {/* Entry Price Badge */}
-                <g transform={`translate(${svgWidth - paddingRight + 4}, ${entryY - 10})`}>
-                  <rect width={100} height={20} rx={4} fill="#16a34a" stroke="#ffffff" strokeWidth={1.2} filter="drop-shadow(0 2px 4px rgba(0,0,0,0.15))" />
-                  <text x={8} y={14} fill="#ffffff" fontSize="9" fontFamily="monospace" fontWeight="bold">
-                    ENTRY ${trade.entry_price.toLocaleString()}
-                  </text>
-                </g>
-
-                {/* EVG / FVG Bottom Price Badge */}
-                {hasFvg && (
-                  <g transform={`translate(${svgWidth - paddingRight + 4}, ${fvgBottomY - 9})`}>
-                    <rect width={100} height={18} rx={3} fill="#0284c7" stroke="#7dd3fc" strokeWidth={0.8} />
-                    <text x={8} y={13} fill="#ffffff" fontSize="8.5" fontFamily="monospace" fontWeight="bold">
-                      FVG BOT ${fvgBottomPrice.toFixed(1)}
-                    </text>
-                  </g>
-                )}
-
-                {/* IDM Price Badge */}
-                {hasIdm && (
-                  <g transform={`translate(${svgWidth - paddingRight + 4}, ${idmY - 10})`}>
-                    <rect width={100} height={20} rx={4} fill="#6b21a8" stroke="#d8b4fe" strokeWidth={1} filter="drop-shadow(0 1px 2px rgba(0,0,0,0.1))" />
-                    <text x={8} y={14} fill="#ffffff" fontSize="9" fontFamily="monospace" fontWeight="bold">
-                      IDM ${idmPrice.toFixed(1)}
-                    </text>
-                  </g>
-                )}
-
-                {/* Stop Loss Badge: SL (Below FVG) */}
-                <g transform={`translate(${svgWidth - paddingRight + 4}, ${slY - 10})`}>
-                  <rect width={100} height={20} rx={4} fill="#be123c" stroke="#fda4af" strokeWidth={1} filter="drop-shadow(0 1px 2px rgba(0,0,0,0.1))" />
-                  <text x={8} y={14} fill="#ffffff" fontSize="9" fontFamily="monospace" fontWeight="bold">
-                    SL ${trade.stop_loss.toLocaleString()}
-                  </text>
-                </g>
-              </>
-            )}
+                <rect
+                  width={102}
+                  height={18}
+                  rx={3}
+                  fill={badge.bg}
+                  stroke={badge.border}
+                  strokeWidth={0.8}
+                  filter="drop-shadow(0 1px 2px rgba(0,0,0,0.12))"
+                />
+                <text
+                  x={6}
+                  y={12.5}
+                  fill={badge.text}
+                  fontSize="8.5"
+                  fontFamily="monospace"
+                  fontWeight="bold"
+                >
+                  {badge.label} ${badge.price.toLocaleString(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 1 })}
+                </text>
+              </g>
+            ))}
           </g>
 
           {/* Hover Crosshair Vertical Line */}

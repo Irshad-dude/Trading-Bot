@@ -87,6 +87,8 @@ interface MonthlyStat {
 
 interface AssetSummary {
   name: string;
+  symbol?: string;
+  period?: string;
   total_trades: number;
   wins: number;
   losses: number;
@@ -675,7 +677,7 @@ export default function Dashboard() {
               </div>
 
               {/* Highlight Banner when Gold is active */}
-              {btAssetFilter === 'XAUUSD' && (
+              {btAssetFilter === 'XAUUSD' && backtestData?.gold_summary && (
                 <div className="bg-gradient-to-r from-amber-500/10 via-amber-500/5 to-transparent border border-amber-300/80 rounded-xl p-4 flex flex-col md:flex-row md:items-center justify-between gap-3 text-xs font-mono shadow-2xs">
                   <div className="flex items-center gap-3 text-amber-950 font-bold">
                     <span className="text-2xl">🥇</span>
@@ -683,27 +685,61 @@ export default function Dashboard() {
                       <div className="flex items-center gap-2">
                         <span className="text-sm tracking-tight text-amber-950 font-bold">GOLD (XAU/USD) SMC BACKTEST</span>
                         <span className="px-2 py-0.5 rounded-full bg-amber-200 text-amber-900 border border-amber-300 text-[10px] font-bold">
-                          1 JULY – 1 OCTOBER 2026
+                          {backtestData.gold_summary.period || '1 AUG – 15 OCT 2026'}
                         </span>
                         <span className="px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-300 text-[10px] font-bold">
-                          +40.10% NET RETURN
+                          +{backtestData.gold_summary.net_pnl_pct.toFixed(2)}% NET RETURN
                         </span>
                       </div>
                       <span className="text-[11px] text-amber-800 font-medium">
-                        Higher Timeframe: <strong>4-Hour Trend Bias Only</strong> · Execution: <strong>15-Minute SMC Strategy (IDM Sweep → BOS → FVG)</strong>
+                        Higher Timeframe: <strong>4-Hour Trend Bias</strong> · Execution: <strong>15-Minute SMC (IDM Sweep → BOS → 3-Candle FVG → Retrace Touch)</strong>
                       </span>
                     </div>
                   </div>
                   <div className="flex flex-wrap items-center gap-3 text-[11px] text-amber-950 font-semibold bg-white/80 px-3.5 py-2 rounded-lg border border-amber-200 shadow-2xs">
-                    <span>⚡ 112 Trades</span>
+                    <span>⚡ {backtestData.gold_summary.total_trades} Trades</span>
                     <span>•</span>
-                    <span className="text-emerald-700 font-bold">43.75% WR (+10.4% vs 33.3% BE)</span>
+                    <span className="text-emerald-700 font-bold">{backtestData.gold_summary.win_rate}% WR ({backtestData.gold_summary.wins}W / {backtestData.gold_summary.losses}L)</span>
                     <span>•</span>
-                    <span className="text-emerald-700 font-bold">+$4,009.60 Net PnL</span>
+                    <span className="text-emerald-700 font-bold">+${backtestData.gold_summary.net_pnl_dollars.toFixed(2)} Net PnL</span>
                     <span>•</span>
-                    <span>PF: 1.52</span>
+                    <span>PF: {backtestData.gold_summary.profit_factor}</span>
                     <span>•</span>
-                    <span>SL: 1st Candle Extreme</span>
+                    <span>Rule #8 C1 SL & 1:2 TP</span>
+                  </div>
+                </div>
+              )}
+
+              {/* Highlight Banner when BTC is active */}
+              {btAssetFilter === 'BTCUSDT' && backtestData?.btc_summary && (
+                <div className="bg-gradient-to-r from-sky-500/10 via-amber-500/5 to-transparent border border-sky-300/80 rounded-xl p-4 flex flex-col md:flex-row md:items-center justify-between gap-3 text-xs font-mono shadow-2xs">
+                  <div className="flex items-center gap-3 text-sky-950 font-bold">
+                    <span className="text-2xl">₿</span>
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm tracking-tight text-sky-950 font-bold">BITCOIN (BTC/USDT) SMC BACKTEST</span>
+                        <span className="px-2 py-0.5 rounded-full bg-sky-200 text-sky-900 border border-sky-300 text-[10px] font-bold">
+                          {backtestData.btc_summary.period || '1 AUG – 15 OCT 2026'}
+                        </span>
+                        <span className="px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-300 text-[10px] font-bold">
+                          +{backtestData.btc_summary.net_pnl_pct.toFixed(2)}% NET RETURN
+                        </span>
+                      </div>
+                      <span className="text-[11px] text-sky-800 font-medium">
+                        Higher Timeframe: <strong>4-Hour Trend Bias</strong> · Execution: <strong>15-Minute SMC (IDM Sweep → BOS → 3-Candle FVG → Retrace Touch)</strong>
+                      </span>
+                    </div>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-3 text-sky-950 font-semibold bg-white/80 px-3.5 py-2 rounded-lg border border-sky-200 shadow-2xs">
+                    <span>⚡ {backtestData.btc_summary.total_trades} Trades</span>
+                    <span>•</span>
+                    <span className="text-emerald-700 font-bold">{backtestData.btc_summary.win_rate}% WR ({backtestData.btc_summary.wins}W / {backtestData.btc_summary.losses}L)</span>
+                    <span>•</span>
+                    <span className="text-emerald-700 font-bold">+${backtestData.btc_summary.net_pnl_dollars.toFixed(2)} Net PnL</span>
+                    <span>•</span>
+                    <span>PF: {backtestData.btc_summary.profit_factor}</span>
+                    <span>•</span>
+                    <span>Rule #8 C1 SL & 1:2 TP</span>
                   </div>
                 </div>
               )}
@@ -740,9 +776,7 @@ export default function Dashboard() {
                   <span className="text-xs text-slate-500 font-mono">
                     {btAssetFilter === 'ALL'
                       ? `Gold: ${backtestData?.gold_summary?.total_trades ?? 0} · BTC: ${backtestData?.btc_summary?.total_trades ?? 0} · ETH: ${backtestData?.eth_summary?.total_trades ?? 0}`
-                      : btAssetFilter === 'XAUUSD'
-                      ? '1 July – 1 October 2026 (4H Trend + 15M SMC)'
-                      : 'Jan 1 – Oct 1, 2026 (9 Months)'}
+                      : (activeSummary?.period || '1 Aug – 15 Oct 2026 (4H Trend + 15M SMC)')}
                   </span>
                 </div>
 
