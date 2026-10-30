@@ -32,8 +32,10 @@ export interface BacktestTradeItem {
   pnl_dollar: number;
   running_balance: number;
   setup_reason: string;
+  trade_type?: string;
   bos_level?: number;
   idm_level?: number;
+  choch_price?: number;
   fvg_top?: number;
   fvg_bottom?: number;
   timeframe?: string;
@@ -60,6 +62,7 @@ export interface TradeCandleData {
   local_idm_idx?: number;
   local_sweep_idx?: number;
   local_bos_idx?: number;
+  local_choch_idx?: number;
   local_c1_idx?: number;
   local_c2_idx?: number;
   local_c3_idx?: number;
@@ -69,6 +72,8 @@ export interface TradeCandleData {
   bos_price?: number;
   bos_level?: number;
   idm_level?: number;
+  choch_price?: number;
+  trade_type?: string;
   fvg_top?: number;
   fvg_bottom?: number;
   entry_price?: number;
@@ -278,6 +283,12 @@ export default function TradeChartVisualizer({
   const localBosIdx = candleData?.local_bos_idx ?? Math.max(0, entryIdx - 5);
   const bosPrice = candleData?.bos_price ?? shPrice;
 
+  const localChochIdx = candleData?.local_choch_idx ?? localShIdx;
+  const chochPrice = candleData?.choch_price ?? trade.choch_price ?? 0;
+  const hasChoch = chochPrice > 0;
+  const chochY = hasChoch ? getY(chochPrice) : 0;
+  const isReversal = trade.trade_type === 'REVERSAL_CHOCH' || candleData?.trade_type === 'REVERSAL_CHOCH';
+
   const localC1Idx = candleData?.local_c1_idx ?? Math.max(0, entryIdx - 3);
   const localC2Idx = candleData?.local_c2_idx ?? (candleData?.local_bos_idx ?? Math.max(0, entryIdx - 2));
   const localC3Idx = candleData?.local_c3_idx ?? Math.max(0, entryIdx - 1);
@@ -395,6 +406,15 @@ export default function TradeChartVisualizer({
         border: '#d8b4fe',
         text: '#ffffff',
       }] : []),
+      ...(hasChoch ? [{
+        id: 'choch',
+        label: 'CHOCH',
+        price: chochPrice,
+        rawY: chochY,
+        bg: '#ea580c',
+        border: '#ffedd5',
+        text: '#ffffff',
+      }] : []),
       {
         id: 'sl',
         label: 'SL',
@@ -435,7 +455,7 @@ export default function TradeChartVisualizer({
       adjustedY: positions[idx],
       isShifted: Math.abs(positions[idx] - b.rawY) > 3,
     }));
-  }, [showDrawings, trade, tpY, hasBos, shPrice, bosY, hasFvg, fvgTopPrice, rawFvgTopY, entryY, fvgBottomPrice, rawFvgBottomY, hasIdm, idmPrice, idmY, slY, chartHeight, paddingY]);
+  }, [showDrawings, trade, tpY, hasBos, shPrice, bosY, hasChoch, chochPrice, chochY, hasFvg, fvgTopPrice, rawFvgTopY, entryY, fvgBottomPrice, rawFvgBottomY, hasIdm, idmPrice, idmY, slY, chartHeight, paddingY]);
 
   const activeCandle = hoverIdx !== null && candles[hoverIdx] ? candles[hoverIdx] : null;
 
@@ -481,6 +501,19 @@ export default function TradeChartVisualizer({
           <span className={`font-mono text-xs font-bold tabular-nums px-2 py-0.5 rounded ${trade.pnl_percent >= 0 ? 'bg-emerald-50 text-emerald-700' : 'bg-rose-50 text-rose-700'}`}>
             {trade.pnl_percent >= 0 ? `+${trade.pnl_percent.toFixed(1)}%` : `${trade.pnl_percent.toFixed(1)}%`} ({trade.pnl_dollar >= 0 ? `+$${trade.pnl_dollar.toFixed(0)}` : `-$${Math.abs(trade.pnl_dollar).toFixed(0)}`})
           </span>
+
+          {/* Chain-of-CHoCH Setup Type Badge */}
+          {(trade.trade_type || candleData?.trade_type) && (
+            <span
+              className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider border flex items-center gap-1 font-mono ${
+                (trade.trade_type || candleData?.trade_type) === 'REVERSAL_CHOCH'
+                  ? 'bg-amber-100 text-amber-900 border-amber-300'
+                  : 'bg-sky-100 text-sky-900 border-sky-300'
+              }`}
+            >
+              <span>{(trade.trade_type || candleData?.trade_type) === 'REVERSAL_CHOCH' ? '🔄 REVERSAL (CHoCH Break)' : '⚡ CONTINUATION (BOS Break)'}</span>
+            </span>
+          )}
 
           {/* 4H Trend Direction Badge */}
           {(trade['4h_trend'] || trade.four_h_trend) && (
@@ -588,33 +621,63 @@ export default function TradeChartVisualizer({
       {/* ── SMC 7-Step Structural Pipeline Flow Bar (Matching Exact Infographic) ── */}
       <div className="px-5 py-2.5 bg-gradient-to-r from-slate-900 via-slate-800 to-slate-900 border-b border-slate-700 flex flex-wrap items-center gap-2 text-[11px] font-mono text-white">
         <span className="text-slate-400 font-bold uppercase tracking-wider text-[10px]">Trade Flow:</span>
-        <span className="px-2 py-0.5 rounded bg-emerald-950 text-emerald-300 border border-emerald-700 font-semibold">
-          ① {isLong ? 'Higher High (1st HH)' : 'Lower Low (1st LL)'}
-        </span>
-        <span className="text-slate-500">→</span>
-        <span className="px-2 py-0.5 rounded bg-slate-800 text-slate-300 border border-slate-600 font-semibold">
-          ② Pullback (Under {isLong ? 'HH' : 'LL'})
-        </span>
-        <span className="text-slate-500">→</span>
-        <span className="px-2 py-0.5 rounded bg-purple-950 text-purple-300 border border-purple-700 font-bold">
-          ③ 1. Break IDM {hasIdm ? `($${idmPrice?.toLocaleString()})` : ''}
-        </span>
-        <span className="text-slate-500">→</span>
-        <span className="px-2 py-0.5 rounded bg-sky-950 text-sky-300 border border-sky-700 font-bold">
-          ④ 2. Break {isLong ? 'Higher High (BOS)' : 'Lower Low (BOS)'} {hasBos ? `($${shPrice?.toLocaleString()})` : ''}
-        </span>
-        <span className="text-slate-500">→</span>
-        <span className="px-2 py-0.5 rounded bg-amber-950 text-amber-300 border border-amber-700 font-bold">
-          ⑤ FVG Gap Box {hasFvg ? `($${fvgBottomPrice.toFixed(1)}–$${fvgTopPrice.toFixed(1)})` : ''}
-        </span>
-        <span className="text-slate-500">→</span>
-        <span className="px-2 py-0.5 rounded bg-emerald-900 text-emerald-200 border border-emerald-500 font-extrabold shadow-sm">
-          ⑥ Entry ({isLong ? 'Buy' : 'Sell'} @ ${trade.entry_price.toLocaleString()})
-        </span>
-        <span className="text-slate-500">→</span>
-        <span className="px-2 py-0.5 rounded bg-slate-800 text-slate-300 border border-slate-600 font-semibold">
-          ⑦ SL & TP (1:2 R:R)
-        </span>
+        {isReversal ? (
+          <>
+            <span className="px-2 py-0.5 rounded bg-emerald-950 text-emerald-300 border border-emerald-700 font-semibold">
+              ① Prior {isLong ? 'Lower Low (LL)' : 'Higher High (HH)'}
+            </span>
+            <span className="text-slate-500">→</span>
+            <span className="px-2 py-0.5 rounded bg-purple-950 text-purple-300 border border-purple-700 font-bold">
+              ② IDM Sweep
+            </span>
+            <span className="text-slate-500">→</span>
+            <span className="px-2 py-0.5 rounded bg-sky-950 text-sky-300 border border-sky-700 font-bold">
+              ③ BOS Confirmed
+            </span>
+            <span className="text-slate-500">→</span>
+            <span className="px-2 py-0.5 rounded bg-orange-950 text-orange-300 border border-orange-700 font-extrabold shadow-sm">
+              ④ CHoCH Body Break {hasChoch ? `($${chochPrice?.toFixed(1)})` : ''}
+            </span>
+            <span className="text-slate-500">→</span>
+            <span className="px-2 py-0.5 rounded bg-amber-950 text-amber-300 border border-amber-700 font-bold">
+              ⑤ 3-Candle FVG Gap Box
+            </span>
+            <span className="text-slate-500">→</span>
+            <span className="px-2 py-0.5 rounded bg-emerald-900 text-emerald-200 border border-emerald-500 font-extrabold shadow-sm">
+              ⑥ Retrace Entry ({isLong ? 'Buy' : 'Sell'} @ ${trade.entry_price.toLocaleString()})
+            </span>
+            <span className="text-slate-500">→</span>
+            <span className="px-2 py-0.5 rounded bg-slate-800 text-slate-300 border border-slate-600 font-semibold">
+              ⑦ Rule #8 C1 SL & 1:2 TP
+            </span>
+          </>
+        ) : (
+          <>
+            <span className="px-2 py-0.5 rounded bg-emerald-950 text-emerald-300 border border-emerald-700 font-semibold">
+              ① {isLong ? 'Higher High (HH)' : 'Lower Low (LL)'}
+            </span>
+            <span className="text-slate-500">→</span>
+            <span className="px-2 py-0.5 rounded bg-purple-950 text-purple-300 border border-purple-700 font-bold">
+              ② IDM Sweep {hasIdm ? `($${idmPrice?.toLocaleString()})` : ''}
+            </span>
+            <span className="text-slate-500">→</span>
+            <span className="px-2 py-0.5 rounded bg-sky-950 text-sky-300 border border-sky-700 font-bold">
+              ③ BOS Break {hasBos ? `($${shPrice?.toLocaleString()})` : ''}
+            </span>
+            <span className="text-slate-500">→</span>
+            <span className="px-2 py-0.5 rounded bg-amber-950 text-amber-300 border border-amber-700 font-bold">
+              ④ 3-Candle FVG Gap Box
+            </span>
+            <span className="text-slate-500">→</span>
+            <span className="px-2 py-0.5 rounded bg-emerald-900 text-emerald-200 border border-emerald-500 font-extrabold shadow-sm">
+              ⑤ Retrace Entry ({isLong ? 'Buy' : 'Sell'} @ ${trade.entry_price.toLocaleString()})
+            </span>
+            <span className="text-slate-500">→</span>
+            <span className="px-2 py-0.5 rounded bg-slate-800 text-slate-300 border border-slate-600 font-semibold">
+              ⑥ Rule #8 C1 SL & 1:2 TP
+            </span>
+          </>
+        )}
       </div>
 
       {/* ── Drawn Structure Elements Legend ── */}
@@ -622,6 +685,11 @@ export default function TradeChartVisualizer({
         {showDrawings ? (
           <div className="flex flex-wrap items-center gap-2">
             <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500 mr-1">Drawn on Chart:</span>
+            {hasChoch && (
+              <span className="px-2 py-0.5 rounded bg-orange-100 text-orange-900 border border-orange-300 font-bold text-[10px] flex items-center gap-1 shadow-2xs">
+                🟠 CHoCH Line (${chochPrice?.toFixed(1)})
+              </span>
+            )}
             <span className="px-2 py-0.5 rounded bg-purple-100 text-purple-900 border border-purple-300 font-bold text-[10px] flex items-center gap-1 shadow-2xs">
               🟣 IDM Line (${idmPrice?.toFixed(1)})
             </span>
@@ -814,6 +882,27 @@ export default function TradeChartVisualizer({
                       <rect x={-46} y={-9} width={92} height={18} rx={3} fill="#9333ea" stroke="#e9d5ff" strokeWidth={0.8} />
                       <text x={0} y={3.5} textAnchor="middle" fill="#ffffff" fontSize="8.5" fontFamily="monospace" fontWeight="bold">
                         IDM ${idmPrice.toFixed(1)}
+                      </text>
+                    </g>
+                  </g>
+                )}
+
+                {/* ── 4B. CHoCH Segment (Change of Character Level) ── */}
+                {hasChoch && (
+                  <g className="choch-clean-segment">
+                    <line
+                      x1={getX(localChochIdx)}
+                      y1={chochY}
+                      x2={getX(localBosIdx)}
+                      y2={chochY}
+                      stroke="#ea580c"
+                      strokeWidth={2}
+                      strokeDasharray="4 3"
+                    />
+                    <g transform={`translate(${(getX(localChochIdx) + getX(localBosIdx)) / 2}, ${chochY + (isLong ? 15 : -11)})`}>
+                      <rect x={-52} y={-9} width={104} height={18} rx={3} fill="#ea580c" stroke="#ffedd5" strokeWidth={0.8} />
+                      <text x={0} y={3.5} textAnchor="middle" fill="#ffffff" fontSize="8.5" fontFamily="monospace" fontWeight="bold">
+                        CHoCH ${chochPrice.toFixed(1)}
                       </text>
                     </g>
                   </g>

@@ -65,6 +65,14 @@ interface BacktestTrade {
   pnl_dollar: number;
   running_balance: number;
   setup_reason: string;
+  trade_type?: string;
+  bos_level?: number;
+  idm_level?: number;
+  choch_price?: number;
+  fvg_top?: number;
+  fvg_bottom?: number;
+  '4h_trend'?: string;
+  four_h_trend?: string;
   entry_time_ist?: string;
   exit_time_ist?: string;
   session_name?: string;
@@ -1254,13 +1262,23 @@ export default function Dashboard() {
                             ${t.running_balance.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
                           </td>
                           <td className="px-4 py-3 whitespace-nowrap">
-                            <span className={`px-2 py-0.5 rounded text-[10px] font-mono border ${
-                              t.result === 'WIN' 
-                                ? 'bg-emerald-50 text-emerald-800 border-emerald-200' 
-                                : 'bg-rose-50 text-rose-800 border-rose-200'
-                            }`}>
-                              {t.pattern_type || (t.result === 'WIN' ? 'Displacement Surge' : 'Liquidity Sweep')}
-                            </span>
+                            {t.trade_type ? (
+                              <span className={`px-2 py-0.5 rounded text-[10px] font-mono font-bold border inline-flex items-center gap-1 ${
+                                t.trade_type === 'REVERSAL_CHOCH'
+                                  ? 'bg-amber-50 text-amber-900 border-amber-300'
+                                  : 'bg-sky-50 text-sky-900 border-sky-300'
+                              }`}>
+                                {t.trade_type === 'REVERSAL_CHOCH' ? '🔄 CHoCH Rev' : '⚡ BOS Cont'}
+                              </span>
+                            ) : (
+                              <span className={`px-2 py-0.5 rounded text-[10px] font-mono border ${
+                                t.result === 'WIN' 
+                                  ? 'bg-emerald-50 text-emerald-800 border-emerald-200' 
+                                  : 'bg-rose-50 text-rose-800 border-rose-200'
+                              }`}>
+                                {t.pattern_type || (t.result === 'WIN' ? 'Displacement Surge' : 'Liquidity Sweep')}
+                              </span>
+                            )}
                           </td>
                           <td className="px-4 py-3 whitespace-nowrap">
                             <Badge label={t.result} color={t.result === 'WIN' ? 'green' : 'red'} />
