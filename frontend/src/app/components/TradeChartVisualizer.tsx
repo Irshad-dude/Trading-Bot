@@ -690,15 +690,21 @@ export default function TradeChartVisualizer({
                 🟠 CHoCH Line (${chochPrice?.toFixed(1)})
               </span>
             )}
+            {hasIdm && (
             <span className="px-2 py-0.5 rounded bg-purple-100 text-purple-900 border border-purple-300 font-bold text-[10px] flex items-center gap-1 shadow-2xs">
               🟣 IDM Line (${idmPrice?.toFixed(1)})
             </span>
+            )}
+            {hasBos && (
             <span className="px-2 py-0.5 rounded bg-sky-100 text-sky-900 border border-sky-300 font-bold text-[10px] flex items-center gap-1 shadow-2xs">
               🔵 BOS Break Line (${shPrice?.toFixed(1)})
             </span>
+            )}
+            {hasFvg && (
             <span className="px-2 py-0.5 rounded bg-amber-100 text-amber-900 border border-amber-300 font-bold text-[10px] flex items-center gap-1 shadow-2xs">
               📦 FVG Gap Box (${fvgBottomPrice.toFixed(1)} – ${fvgTopPrice.toFixed(1)})
             </span>
+            )}
             <span className="px-2 py-0.5 rounded bg-emerald-100 text-emerald-900 border border-emerald-300 font-bold text-[10px] flex items-center gap-1 shadow-2xs">
               📍 15M Entry Touch (${trade.entry_price.toLocaleString()})
             </span>

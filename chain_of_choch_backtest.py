@@ -25,7 +25,6 @@ def run_chain_of_choch(
     path_15m: str = "trading-agent/data_cache/PAXG_15m.pkl",
     start_date: str = "2026-08-01",
     end_date: str = "2026-10-15 23:59:59",
-    min_fvg: float = 0.30,
     starting_balance: float = 10000.0,
     risk_percent: float = 1.0,
 ) -> Tuple[Dict[str, Any], List[Dict[str, Any]], Dict[str, Any]]:
@@ -207,8 +206,8 @@ def run_chain_of_choch(
             f = pending_fvg
             if i > f['c3_idx']:
                 if f['direction'] == 'LONG':
-                    # Invalidation: breached C1 low before touch
-                    if c_low <= f['c1_low'] and c_open <= f['fvg_bottom']:
+                    # Invalidation: C1 extreme (SL) breached before FVG touch
+                    if c_low <= f['c1_low']:
                         pending_fvg = None
                     elif c_low <= f['fvg_top'] and c_high >= f['fvg_bottom']:
                         entry_p = min(f['fvg_top'], c_open)
@@ -246,7 +245,8 @@ def run_chain_of_choch(
                             pending_fvg = None
 
                 elif f['direction'] == 'SHORT':
-                    if c_high >= f['c1_high'] and c_open >= f['fvg_bottom']:
+                    # Invalidation: C1 extreme (SL) breached before FVG touch
+                    if c_high >= f['c1_high']:
                         pending_fvg = None
                     elif c_high >= f['fvg_bottom'] and c_low <= f['fvg_top']:
                         entry_p = max(f['fvg_bottom'], c_open)
@@ -300,33 +300,30 @@ def run_chain_of_choch(
                     c2 = df.iloc[i]
                     c3 = df.iloc[c3_idx]
                     gap = float(c1['low']) - float(c3['high'])
-                    if gap >= min_fvg:
-                        c2_range = float(c2['high']) - float(c2['low'])
-                        c2_body = abs(float(c2['close']) - float(c2['open']))
-                        if c2_range > 0 and (c2_body / c2_range) >= 0.30:
-                            if active_pos is None and pending_fvg is None:
-                                pending_fvg = {
-                                    'type': 'REVERSAL_CHOCH',
-                                    'direction': 'SHORT',
-                                    'sh_idx': choch_data['idx'],
-                                    'sh_price': choch_data['price'],
-                                    'idm_idx': c1_idx,
-                                    'idm_price': float(c1['high']),
-                                    'bos_idx': i,
-                                    'bos_price': c_close,
-                                    'bos_level': choch_data['price'],
-                                    'idm_level': float(c1['high']),
-                                    'choch_idx': choch_data['idx'],
-                                    'choch_price': choch_data['price'],
-                                    'c1_idx': c1_idx,
-                                    'c2_idx': i,
-                                    'c3_idx': c3_idx,
-                                    'c1_high': float(c1['high']),
-                                    'c1_low': float(c1['low']),
-                                    'fvg_top': float(c1['low']),
-                                    'fvg_bottom': float(c3['high']),
-                                    'gap_size': gap,
-                                }
+                    if gap > 0:  # PDF: "any non-zero FVG qualifies"
+                        if active_pos is None and pending_fvg is None:
+                            pending_fvg = {
+                                'type': 'REVERSAL_CHOCH',
+                                'direction': 'SHORT',
+                                'sh_idx': choch_data['idx'],
+                                'sh_price': choch_data['price'],
+                                'idm_idx': c1_idx,
+                                'idm_price': float(c1['high']),
+                                'bos_idx': i,
+                                'bos_price': c_close,
+                                'bos_level': choch_data['price'],
+                                'idm_level': float(c1['high']),
+                                'choch_idx': choch_data['idx'],
+                                'choch_price': choch_data['price'],
+                                'c1_idx': c1_idx,
+                                'c2_idx': i,
+                                'c3_idx': c3_idx,
+                                'c1_high': float(c1['high']),
+                                'c1_low': float(c1['low']),
+                                'fvg_top': float(c1['low']),
+                                'fvg_bottom': float(c3['high']),
+                                'gap_size': gap,
+                            }
 
             elif trend == 'BEARISH' and c_close > current_choch['price']:
                 # Bullish CHoCH Breakout!
@@ -341,33 +338,30 @@ def run_chain_of_choch(
                     c2 = df.iloc[i]
                     c3 = df.iloc[c3_idx]
                     gap = float(c3['low']) - float(c1['high'])
-                    if gap >= min_fvg:
-                        c2_range = float(c2['high']) - float(c2['low'])
-                        c2_body = abs(float(c2['close']) - float(c2['open']))
-                        if c2_range > 0 and (c2_body / c2_range) >= 0.30:
-                            if active_pos is None and pending_fvg is None:
-                                pending_fvg = {
-                                    'type': 'REVERSAL_CHOCH',
-                                    'direction': 'LONG',
-                                    'sh_idx': choch_data['idx'],
-                                    'sh_price': choch_data['price'],
-                                    'idm_idx': c1_idx,
-                                    'idm_price': float(c1['low']),
-                                    'bos_idx': i,
-                                    'bos_price': c_close,
-                                    'bos_level': choch_data['price'],
-                                    'idm_level': float(c1['low']),
-                                    'choch_idx': choch_data['idx'],
-                                    'choch_price': choch_data['price'],
-                                    'c1_idx': c1_idx,
-                                    'c2_idx': i,
-                                    'c3_idx': c3_idx,
-                                    'c1_high': float(c1['high']),
-                                    'c1_low': float(c1['low']),
-                                    'fvg_top': float(c3['low']),
-                                    'fvg_bottom': float(c1['high']),
-                                    'gap_size': gap,
-                                }
+                    if gap > 0:  # PDF: "any non-zero FVG qualifies"
+                        if active_pos is None and pending_fvg is None:
+                            pending_fvg = {
+                                'type': 'REVERSAL_CHOCH',
+                                'direction': 'LONG',
+                                'sh_idx': choch_data['idx'],
+                                'sh_price': choch_data['price'],
+                                'idm_idx': c1_idx,
+                                'idm_price': float(c1['low']),
+                                'bos_idx': i,
+                                'bos_price': c_close,
+                                'bos_level': choch_data['price'],
+                                'idm_level': float(c1['low']),
+                                'choch_idx': choch_data['idx'],
+                                'choch_price': choch_data['price'],
+                                'c1_idx': c1_idx,
+                                'c2_idx': i,
+                                'c3_idx': c3_idx,
+                                'c1_high': float(c1['high']),
+                                'c1_low': float(c1['low']),
+                                'fvg_top': float(c3['low']),
+                                'fvg_bottom': float(c1['high']),
+                                'gap_size': gap,
+                            }
 
         # ── Step D: Trend Continuation (BOS) & CHoCH Computation ──
         if trend == 'BULLISH':
@@ -415,35 +409,32 @@ def run_chain_of_choch(
                             c2 = df.iloc[i]
                             c3 = df.iloc[c3_idx]
                             gap = float(c3['low']) - float(c1['high'])
-                            if gap >= min_fvg:
-                                c2_range = float(c2['high']) - float(c2['low'])
-                                c2_body = abs(float(c2['close']) - float(c2['open']))
-                                if c2_range > 0 and (c2_body / c2_range) >= 0.30:
-                                    if active_pos is None and pending_fvg is None:
-                                        pending_fvg = {
-                                            'type': 'CONTINUATION_BOS',
-                                            'direction': 'LONG',
-                                            'sh_idx': int(sh_idx),
-                                            'sh_price': round(float(sh_p), 2),
-                                            'idm_idx': int(idm_idx),
-                                            'idm_price': round(float(idm_p), 2),
-                                            'sweep_idx': int(sweep_idx) if sweep_idx else int(idm_idx),
-                                            'sweep_price': round(float(sweep_price), 2) if sweep_price else round(float(idm_p), 2),
-                                            'bos_idx': i,
-                                            'bos_price': round(float(c_close), 2),
-                                            'bos_level': round(float(sh_p), 2),
-                                            'idm_level': round(float(idm_p), 2),
-                                            'choch_idx': int(min_idx),
-                                            'choch_price': round(float(min_low), 2),
-                                            'c1_idx': c1_idx,
-                                            'c2_idx': i,
-                                            'c3_idx': c3_idx,
-                                            'c1_high': float(c1['high']),
-                                            'c1_low': float(c1['low']),
-                                            'fvg_top': float(c3['low']),
-                                            'fvg_bottom': float(c1['high']),
-                                            'gap_size': gap,
-                                        }
+                            if gap > 0:  # PDF: "any non-zero FVG qualifies"
+                                if active_pos is None and pending_fvg is None:
+                                    pending_fvg = {
+                                        'type': 'CONTINUATION_BOS',
+                                        'direction': 'LONG',
+                                        'sh_idx': int(sh_idx),
+                                        'sh_price': round(float(sh_p), 2),
+                                        'idm_idx': int(idm_idx),
+                                        'idm_price': round(float(idm_p), 2),
+                                        'sweep_idx': int(sweep_idx) if sweep_idx else int(idm_idx),
+                                        'sweep_price': round(float(sweep_price), 2) if sweep_price else round(float(idm_p), 2),
+                                        'bos_idx': i,
+                                        'bos_price': round(float(c_close), 2),
+                                        'bos_level': round(float(sh_p), 2),
+                                        'idm_level': round(float(idm_p), 2),
+                                        'choch_idx': int(min_idx),
+                                        'choch_price': round(float(min_low), 2),
+                                        'c1_idx': c1_idx,
+                                        'c2_idx': i,
+                                        'c3_idx': c3_idx,
+                                        'c1_high': float(c1['high']),
+                                        'c1_low': float(c1['low']),
+                                        'fvg_top': float(c3['low']),
+                                        'fvg_bottom': float(c1['high']),
+                                        'gap_size': gap,
+                                    }
                         break
 
         elif trend == 'BEARISH':
@@ -490,35 +481,32 @@ def run_chain_of_choch(
                             c2 = df.iloc[i]
                             c3 = df.iloc[c3_idx]
                             gap = float(c1['low']) - float(c3['high'])
-                            if gap >= min_fvg:
-                                c2_range = float(c2['high']) - float(c2['low'])
-                                c2_body = abs(float(c2['close']) - float(c2['open']))
-                                if c2_range > 0 and (c2_body / c2_range) >= 0.30:
-                                    if active_pos is None and pending_fvg is None:
-                                        pending_fvg = {
-                                            'type': 'CONTINUATION_BOS',
-                                            'direction': 'SHORT',
-                                            'sh_idx': int(sl_idx),
-                                            'sh_price': round(float(sl_p), 2),
-                                            'idm_idx': int(idm_idx),
-                                            'idm_price': round(float(idm_p), 2),
-                                            'sweep_idx': int(sweep_idx) if sweep_idx else int(idm_idx),
-                                            'sweep_price': round(float(sweep_price), 2) if sweep_price else round(float(idm_p), 2),
-                                            'bos_idx': i,
-                                            'bos_price': round(float(c_close), 2),
-                                            'bos_level': round(float(sl_p), 2),
-                                            'idm_level': round(float(idm_p), 2),
-                                            'choch_idx': int(max_idx),
-                                            'choch_price': round(float(max_high), 2),
-                                            'c1_idx': c1_idx,
-                                            'c2_idx': i,
-                                            'c3_idx': c3_idx,
-                                            'c1_high': float(c1['high']),
-                                            'c1_low': float(c1['low']),
-                                            'fvg_top': float(c1['low']),
-                                            'fvg_bottom': float(c3['high']),
-                                            'gap_size': gap,
-                                        }
+                            if gap > 0:  # PDF: "any non-zero FVG qualifies"
+                                if active_pos is None and pending_fvg is None:
+                                    pending_fvg = {
+                                        'type': 'CONTINUATION_BOS',
+                                        'direction': 'SHORT',
+                                        'sh_idx': int(sl_idx),
+                                        'sh_price': round(float(sl_p), 2),
+                                        'idm_idx': int(idm_idx),
+                                        'idm_price': round(float(idm_p), 2),
+                                        'sweep_idx': int(sweep_idx) if sweep_idx else int(idm_idx),
+                                        'sweep_price': round(float(sweep_price), 2) if sweep_price else round(float(idm_p), 2),
+                                        'bos_idx': i,
+                                        'bos_price': round(float(c_close), 2),
+                                        'bos_level': round(float(sl_p), 2),
+                                        'idm_level': round(float(idm_p), 2),
+                                        'choch_idx': int(max_idx),
+                                        'choch_price': round(float(max_high), 2),
+                                        'c1_idx': c1_idx,
+                                        'c2_idx': i,
+                                        'c3_idx': c3_idx,
+                                        'c1_high': float(c1['high']),
+                                        'c1_low': float(c1['low']),
+                                        'fvg_top': float(c1['low']),
+                                        'fvg_bottom': float(c3['high']),
+                                        'gap_size': gap,
+                                    }
                         break
 
     # 4. Summary & Performance Metrics
@@ -606,7 +594,6 @@ def export_all():
         path_15m="trading-agent/data_cache/PAXG_15m.pkl",
         start_date="2026-08-01",
         end_date="2026-10-15 23:59:59",
-        min_fvg=0.30
     )
 
     # 2. Run BTC
@@ -615,7 +602,6 @@ def export_all():
         path_15m="trading-agent/data_cache/BTC_15m.pkl",
         start_date="2026-08-01",
         end_date="2026-10-15 23:59:59",
-        min_fvg=10.0
     )
 
     frontend_results_path = "trading-agent/frontend/public/backtest_results_2026.json"
