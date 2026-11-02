@@ -990,38 +990,6 @@ export default function TradeChartVisualizer({
                   </g>
                 )}
 
-                {/* ── 6. Numbered Candles: ① C1 (Base/SL), ② C2 (BOS Break), ③ C3 (FVG Formed) ── */}
-                <g className="smc-candle-number-markers">
-                  {/* ① Candle 1: Base candle before breakout & Rule #8 SL Anchor */}
-                  {candles[localC1Idx] && (
-                    <g transform={`translate(${getX(localC1Idx)}, ${isLong ? getY(candles[localC1Idx][3]) + 15 : getY(candles[localC1Idx][2]) - 13})`}>
-                      <rect x={-34} y={-8} width={68} height={16} rx={3} fill="#0f172a" stroke="#94a3b8" strokeWidth={0.8} />
-                      <text x={0} y={3.5} textAnchor="middle" fill="#ffffff" fontSize="8" fontFamily="monospace" fontWeight="bold">
-                        ① C1 (Base)
-                      </text>
-                    </g>
-                  )}
-
-                  {/* ② Candle 2: Impulsive BOS Breakout Candle */}
-                  {candles[localC2Idx] && (
-                    <g transform={`translate(${getX(localC2Idx)}, ${isLong ? getY(candles[localC2Idx][2]) - 13 : getY(candles[localC2Idx][3]) + 15})`}>
-                      <rect x={-36} y={-8} width={72} height={16} rx={3} fill="#0284c7" stroke="#7dd3fc" strokeWidth={0.8} />
-                      <text x={0} y={3.5} textAnchor="middle" fill="#ffffff" fontSize="8" fontFamily="monospace" fontWeight="bold">
-                        ② C2 (BOS)
-                      </text>
-                    </g>
-                  )}
-
-                  {/* ③ Candle 3: FVG Completion Candle */}
-                  {candles[localC3Idx] && (
-                    <g transform={`translate(${getX(localC3Idx)}, ${isLong ? getY(candles[localC3Idx][2]) - 13 : getY(candles[localC3Idx][3]) + 15})`}>
-                      <rect x={-36} y={-8} width={72} height={16} rx={3} fill="#d97706" stroke="#fde68a" strokeWidth={0.8} />
-                      <text x={0} y={3.5} textAnchor="middle" fill="#ffffff" fontSize="8" fontFamily="monospace" fontWeight="bold">
-                        ③ C3 (FVG)
-                      </text>
-                    </g>
-                  )}
-                </g>
 
                 {/* ── 7. Stop Loss Segment (Anchored strictly to Candle 1 Low / High - Rule #8) ── */}
                 <g className="sl-clean-segment">
