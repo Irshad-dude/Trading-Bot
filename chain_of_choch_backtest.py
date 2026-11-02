@@ -149,6 +149,7 @@ def run_chain_of_choch(
                     "idm_level": pos['idm_level'],
                     "choch_idx": pos.get('choch_idx', pos['sh_idx']),
                     "choch_price": pos.get('choch_price', pos['bos_level']),
+                    "choch_break_idx": pos.get('choch_break_idx', pos['c2_idx']),
                     "c1_idx": pos['c1_idx'],
                     "c2_idx": pos['c2_idx'],
                     "c3_idx": pos['c3_idx'],
@@ -160,7 +161,7 @@ def run_chain_of_choch(
                 trades.append(trade_record)
 
                 # Canonical Chart Window Slicing
-                w_start = max(0, min(pos['sh_idx'], pos['idm_idx'], pos['bos_idx'], pos.get('choch_idx', pos['sh_idx']), pos['c1_idx']) - 12)
+                w_start = max(0, min(pos['sh_idx'], pos['idm_idx'], pos['bos_idx'], pos.get('choch_idx', pos['sh_idx']), pos.get('choch_break_idx', pos['c2_idx']), pos['c1_idx']) - 12)
                 w_end = min(len(df), i + 12)
                 window_df = df.iloc[w_start:w_end]
                 candles_list = [
@@ -176,6 +177,7 @@ def run_chain_of_choch(
                     "local_sweep_idx": pos.get('sweep_idx', pos['idm_idx']) - w_start,
                     "local_bos_idx": pos['bos_idx'] - w_start,
                     "local_choch_idx": (pos.get('choch_idx', pos['sh_idx']) - w_start) if pos.get('choch_idx') else (pos['sh_idx'] - w_start),
+                    "local_choch_break_idx": (pos.get('choch_break_idx', pos['c2_idx']) - w_start),
                     "local_c1_idx": pos['c1_idx'] - w_start,
                     "local_c2_idx": pos['c2_idx'] - w_start,
                     "local_c3_idx": pos['c3_idx'] - w_start,
@@ -285,7 +287,7 @@ def run_chain_of_choch(
 
         # ── Step C: CHoCH Break (Trend Reversal) Detection ──
         # Rule 3: Body Close beyond active CHoCH level flips trend!
-        # Candle i is C2 (the breakout candle)
+        # First Break of Structure confirmed -> Then Change of Character Break -> Then FVG Gap!
         if current_choch is not None:
             if trend == 'BULLISH' and c_close < current_choch['price']:
                 # Bearish CHoCH Breakout!
@@ -305,16 +307,20 @@ def run_chain_of_choch(
                             pending_fvg = {
                                 'type': 'REVERSAL_CHOCH',
                                 'direction': 'SHORT',
-                                'sh_idx': choch_data['idx'],
-                                'sh_price': choch_data['price'],
-                                'idm_idx': c1_idx,
-                                'idm_price': float(c1['high']),
-                                'bos_idx': i,
-                                'bos_price': c_close,
-                                'bos_level': choch_data['price'],
-                                'idm_level': float(c1['high']),
+                                'sh_idx': choch_data.get('sh_idx', choch_data['idx']),
+                                'sh_price': choch_data.get('sh_price', choch_data['price']),
+                                'idm_idx': choch_data.get('idm_idx', c1_idx),
+                                'idm_price': choch_data.get('idm_price', float(c1['high'])),
+                                'sweep_idx': choch_data.get('sweep_idx', choch_data.get('idm_idx', c1_idx)),
+                                'sweep_price': choch_data.get('sweep_price', choch_data.get('idm_price', float(c1['high']))),
+                                'bos_idx': choch_data.get('bos_idx', i),
+                                'bos_price': choch_data.get('bos_price', c_close),
+                                'bos_level': choch_data.get('bos_level', choch_data.get('sh_price', choch_data['price'])),
+                                'idm_level': choch_data.get('idm_level', choch_data.get('idm_price', float(c1['high']))),
                                 'choch_idx': choch_data['idx'],
                                 'choch_price': choch_data['price'],
+                                'choch_break_idx': i,
+                                'choch_break_price': c_close,
                                 'c1_idx': c1_idx,
                                 'c2_idx': i,
                                 'c3_idx': c3_idx,
@@ -343,16 +349,20 @@ def run_chain_of_choch(
                             pending_fvg = {
                                 'type': 'REVERSAL_CHOCH',
                                 'direction': 'LONG',
-                                'sh_idx': choch_data['idx'],
-                                'sh_price': choch_data['price'],
-                                'idm_idx': c1_idx,
-                                'idm_price': float(c1['low']),
-                                'bos_idx': i,
-                                'bos_price': c_close,
-                                'bos_level': choch_data['price'],
-                                'idm_level': float(c1['low']),
+                                'sh_idx': choch_data.get('sh_idx', choch_data['idx']),
+                                'sh_price': choch_data.get('sh_price', choch_data['price']),
+                                'idm_idx': choch_data.get('idm_idx', c1_idx),
+                                'idm_price': choch_data.get('idm_price', float(c1['low'])),
+                                'sweep_idx': choch_data.get('sweep_idx', choch_data.get('idm_idx', c1_idx)),
+                                'sweep_price': choch_data.get('sweep_price', choch_data.get('idm_price', float(c1['low']))),
+                                'bos_idx': choch_data.get('bos_idx', i),
+                                'bos_price': choch_data.get('bos_price', c_close),
+                                'bos_level': choch_data.get('bos_level', choch_data.get('sh_price', choch_data['price'])),
+                                'idm_level': choch_data.get('idm_level', choch_data.get('idm_price', float(c1['low']))),
                                 'choch_idx': choch_data['idx'],
                                 'choch_price': choch_data['price'],
+                                'choch_break_idx': i,
+                                'choch_break_price': c_close,
                                 'c1_idx': c1_idx,
                                 'c2_idx': i,
                                 'c3_idx': c3_idx,
@@ -398,7 +408,17 @@ def run_chain_of_choch(
                             'price': float(min_low),
                             'idx': int(min_idx),
                             'created_at': i,
-                            'type': 'BEARISH_CHOCH'
+                            'type': 'BEARISH_CHOCH',
+                            'sh_idx': int(sh_idx),
+                            'sh_price': round(float(sh_p), 2),
+                            'idm_idx': int(idm_idx),
+                            'idm_price': round(float(idm_p), 2),
+                            'sweep_idx': int(sweep_idx) if sweep_idx else int(idm_idx),
+                            'sweep_price': round(float(sweep_price), 2) if sweep_price else round(float(idm_p), 2),
+                            'bos_idx': i,
+                            'bos_price': round(float(c_close), 2),
+                            'bos_level': round(float(sh_p), 2),
+                            'idm_level': round(float(idm_p), 2),
                         }
 
                         # Continuation FVG setup: C2 is candle i
@@ -470,7 +490,17 @@ def run_chain_of_choch(
                             'price': float(max_high),
                             'idx': int(max_idx),
                             'created_at': i,
-                            'type': 'BULLISH_CHOCH'
+                            'type': 'BULLISH_CHOCH',
+                            'sh_idx': int(sl_idx),
+                            'sh_price': round(float(sl_p), 2),
+                            'idm_idx': int(idm_idx),
+                            'idm_price': round(float(idm_p), 2),
+                            'sweep_idx': int(sweep_idx) if sweep_idx else int(idm_idx),
+                            'sweep_price': round(float(sweep_price), 2) if sweep_price else round(float(idm_p), 2),
+                            'bos_idx': i,
+                            'bos_price': round(float(c_close), 2),
+                            'bos_level': round(float(sl_p), 2),
+                            'idm_level': round(float(idm_p), 2),
                         }
 
                         # Continuation FVG setup: C2 is candle i

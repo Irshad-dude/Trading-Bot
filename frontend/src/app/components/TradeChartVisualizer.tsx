@@ -63,6 +63,7 @@ export interface TradeCandleData {
   local_sweep_idx?: number;
   local_bos_idx?: number;
   local_choch_idx?: number;
+  local_choch_break_idx?: number;
   local_c1_idx?: number;
   local_c2_idx?: number;
   local_c3_idx?: number;
@@ -288,10 +289,10 @@ export default function TradeChartVisualizer({
   const hasChoch = chochPrice > 0;
   const chochY = hasChoch ? getY(chochPrice) : 0;
   const isReversal = trade.trade_type === 'REVERSAL_CHOCH' || candleData?.trade_type === 'REVERSAL_CHOCH';
-
   const localC1Idx = candleData?.local_c1_idx ?? Math.max(0, entryIdx - 3);
   const localC2Idx = candleData?.local_c2_idx ?? (candleData?.local_bos_idx ?? Math.max(0, entryIdx - 2));
   const localC3Idx = candleData?.local_c3_idx ?? Math.max(0, entryIdx - 1);
+  const localChochBreakIdx = candleData?.local_choch_break_idx ?? localC2Idx;
   const localEntryIdx = candleData?.local_entry_idx ?? entryIdx;
   const localExitIdx = candleData?.local_exit_idx ?? exitIdx;
 
@@ -899,13 +900,13 @@ export default function TradeChartVisualizer({
                     <line
                       x1={getX(localChochIdx)}
                       y1={chochY}
-                      x2={getX(localBosIdx)}
+                      x2={getX(isReversal ? localChochBreakIdx : localBosIdx)}
                       y2={chochY}
                       stroke="#ea580c"
                       strokeWidth={2}
                       strokeDasharray="4 3"
                     />
-                    <g transform={`translate(${(getX(localChochIdx) + getX(localBosIdx)) / 2}, ${chochY + (isLong ? 15 : -11)})`}>
+                    <g transform={`translate(${(getX(localChochIdx) + getX(isReversal ? localChochBreakIdx : localBosIdx)) / 2}, ${chochY + (isLong ? 15 : -11)})`}>
                       <rect x={-52} y={-9} width={104} height={18} rx={3} fill="#ea580c" stroke="#ffedd5" strokeWidth={0.8} />
                       <text x={0} y={3.5} textAnchor="middle" fill="#ffffff" fontSize="8.5" fontFamily="monospace" fontWeight="bold">
                         CHoCH ${chochPrice.toFixed(1)}
