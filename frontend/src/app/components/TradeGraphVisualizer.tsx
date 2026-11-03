@@ -125,6 +125,21 @@ export default function TradeGraphVisualizer({
     scale: 0.95
   });
 
+  // ── Physics Simulation Tuning & Playback Control ──
+  const [isPaused, setIsPaused] = useState<boolean>(false);
+  const [simSpeed, setSimSpeed] = useState<number>(0.35); // Calm 0.35x by default
+  const alphaRef = useRef<number>(1.0);
+  const isPausedRef = useRef<boolean>(false);
+  const simSpeedRef = useRef<number>(0.35);
+
+  useEffect(() => {
+    isPausedRef.current = isPaused;
+  }, [isPaused]);
+
+  useEffect(() => {
+    simSpeedRef.current = simSpeed;
+  }, [simSpeed]);
+
   // Dragging state
   const isDraggingCanvas = useRef<boolean>(false);
   const dragStartPos = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
@@ -132,7 +147,7 @@ export default function TradeGraphVisualizer({
   const animFrameId = useRef<number | null>(null);
   const pulseOffset = useRef<number>(0);
 
-  // 1. Fetch Knowledge Graph JSON
+  // 1. Fetch Knowledge Graph JSON & Cluster-Aware Layout Initialization
   useEffect(() => {
     let isMounted = true;
     async function loadGraphData() {
@@ -152,24 +167,61 @@ export default function TradeGraphVisualizer({
         const rawNodes: GraphNode[] = data.nodes || [];
         const rawLinks: GraphLink[] = data.links || [];
 
-        // Assign radii based on node type
-        rawNodes.forEach((n, idx) => {
+        // Structured Concept Anchor Coordinates
+        const conceptAnchors: Record<string, { x: number; y: number }> = {
+          'Session: London/NY Overlap (Peak Volume)': { x: 0, y: -280 },
+          'Session: London Morning': { x: 300, y: -70 },
+          'Session: Asian Liquidity': { x: 120, y: 280 },
+          'Session: NY Afternoon': { x: -300, y: 70 },
+          'Session: Global Twilight': { x: -180, y: -230 },
+          'Angle: 40°-45° (Golden Impulse)': { x: 0, y: -50 },
+          'Angle: 35°-40° (Trending Base)': { x: -110, y: 90 },
+          'Angle: 45°-50° (Aggressive Expansion)': { x: 110, y: 90 },
+          'Angle: 50°+ (Parabolic Momentum)': { x: 0, y: 190 },
+          'Asset: XAUUSD': { x: -210, y: -90 },
+          'Asset: BTCUSDT': { x: 210, y: -90 },
+          'Pattern: CONTINUATION_BOS': { x: -80, y: -150 },
+          'Pattern: REVERSAL_CHOCH': { x: 80, y: -150 },
+          'Direction: LONG': { x: -120, y: 0 },
+          'Direction: SHORT': { x: 120, y: 0 },
+        };
+
+        // Counters for trade dispersion around concepts
+        const sessionCounters: Record<string, number> = {};
+
+        rawNodes.forEach((n) => {
           if (n.node_type === 'feature') {
             n.radius = 24;
+            const anchor = conceptAnchors[n.id];
+            if (anchor) {
+              n.x = anchor.x;
+              n.y = anchor.y;
+            } else {
+              n.x = (Math.random() - 0.5) * 350;
+              n.y = (Math.random() - 0.5) * 350;
+            }
           } else {
             n.radius = n.result === 'WIN' ? 14 : 11;
+            // Find parent session feature
+            const sessFeat = n.features?.find((f) => f.startsWith('Session:')) || 'Session: London Morning';
+            const anchor = conceptAnchors[sessFeat] || { x: 0, y: 0 };
+            
+            const count = (sessionCounters[sessFeat] || 0);
+            sessionCounters[sessFeat] = count + 1;
+            
+            const clusterAngle = (count * 0.45) % (2 * Math.PI);
+            const clusterRadius = 65 + (count % 4) * 28 + (n.result === 'WIN' ? 0 : 20);
+            
+            n.x = anchor.x + Math.cos(clusterAngle) * clusterRadius;
+            n.y = anchor.y + Math.sin(clusterAngle) * clusterRadius;
           }
-          // Initial randomized circular layout
-          const angle = (idx / rawNodes.length) * 2 * Math.PI;
-          const dist = n.node_type === 'feature' ? 140 + (idx % 3) * 60 : 280 + Math.random() * 220;
-          n.x = Math.cos(angle) * dist;
-          n.y = Math.sin(angle) * dist;
           n.vx = 0;
           n.vy = 0;
         });
 
         setNodes(rawNodes);
         setLinks(rawLinks);
+        alphaRef.current = 1.0; // Reset simulation cooling
 
         if (data.graph_summary) {
           setWinningDNA(data.graph_summary.winning_dna);
@@ -266,104 +318,109 @@ export default function TradeGraphVisualizer({
     return set;
   }, [hoveredNode, selectedNode, links]);
 
-  // 2. Physics Simulation Loop (Verlet Force Relaxation)
+  // 2. Physics Simulation Loop with Alpha Temperature, Speed & Calm Damping
   useEffect(() => {
     if (nodes.length === 0) return;
 
     let running = true;
-    let iteration = 0;
 
     const stepSimulation = () => {
       if (!running) return;
 
-      // Pulse offset for synaptic transmission animation
-      pulseOffset.current = (pulseOffset.current + 0.035) % 1.0;
+      const currentSpeed = simSpeedRef.current;
+      const isPausedNow = isPausedRef.current;
 
-      // Apply light physical relaxation forces
-      const repulsion = 1100;
-      const centerGravity = 0.0035;
-      const damping = 0.88;
+      // Pulse offset for synaptic transmission animation: calm, smooth biological signal
+      const pulseDelta = 0.006 * (isPausedNow ? 0.35 : currentSpeed);
+      pulseOffset.current = (pulseOffset.current + pulseDelta) % 1.0;
 
-      // 1. Repulsion between all nodes
-      for (let i = 0; i < nodes.length; i++) {
-        const n1 = nodes[i];
-        if (!visibleNodeIds.has(n1.id)) continue;
+      // Only compute and update physical positions if not paused and alpha hasn't cooled down
+      if (!isPausedNow && alphaRef.current > 0.003) {
+        const alpha = alphaRef.current * currentSpeed;
 
-        for (let j = i + 1; j < nodes.length; j++) {
-          const n2 = nodes[j];
-          if (!visibleNodeIds.has(n2.id)) continue;
+        const repulsion = 850 * alpha;
+        const centerGravity = 0.002 * alpha;
+        const damping = 0.82;
 
-          const dx = (n2.x || 0) - (n1.x || 0);
-          const dy = (n2.y || 0) - (n1.y || 0);
-          let distSq = dx * dx + dy * dy;
-          if (distSq < 1) distSq = 1;
-          const dist = Math.sqrt(distSq);
+        // 1. Repulsion between all nodes
+        for (let i = 0; i < nodes.length; i++) {
+          const n1 = nodes[i];
+          if (!visibleNodeIds.has(n1.id)) continue;
 
-          // Minimum collision distance
-          const minDist = (n1.radius || 15) + (n2.radius || 15) + 12;
-          if (dist < minDist * 3) {
-            const force = (repulsion / distSq) * (n1.node_type === 'feature' ? 1.8 : 1.0);
-            const fx = (dx / dist) * force;
-            const fy = (dy / dist) * force;
+          for (let j = i + 1; j < nodes.length; j++) {
+            const n2 = nodes[j];
+            if (!visibleNodeIds.has(n2.id)) continue;
 
-            if (n1 !== draggedNode.current && !n1.fx) {
-              n1.vx = (n1.vx || 0) - fx;
-              n1.vy = (n1.vy || 0) - fy;
-            }
-            if (n2 !== draggedNode.current && !n2.fx) {
-              n2.vx = (n2.vx || 0) + fx;
-              n2.vy = (n2.vy || 0) + fy;
+            const dx = (n2.x || 0) - (n1.x || 0);
+            const dy = (n2.y || 0) - (n1.y || 0);
+            let distSq = dx * dx + dy * dy;
+            if (distSq < 1) distSq = 1;
+            const dist = Math.sqrt(distSq);
+
+            const minDist = (n1.radius || 15) + (n2.radius || 15) + 14;
+            if (dist < minDist * 3) {
+              const force = (repulsion / distSq) * (n1.node_type === 'feature' ? 1.6 : 1.0);
+              const fx = (dx / dist) * force;
+              const fy = (dy / dist) * force;
+
+              if (n1 !== draggedNode.current && !n1.fx) {
+                n1.vx = (n1.vx || 0) - fx;
+                n1.vy = (n1.vy || 0) - fy;
+              }
+              if (n2 !== draggedNode.current && !n2.fx) {
+                n2.vx = (n2.vx || 0) + fx;
+                n2.vy = (n2.vy || 0) + fy;
+              }
             }
           }
         }
-      }
 
-      // 2. Attraction along links
-      for (let k = 0; k < links.length; k++) {
-        const link = links[k];
-        const sNode = typeof link.source === 'string' ? nodeMap.get(link.source) : link.source;
-        const tNode = typeof link.target === 'string' ? nodeMap.get(link.target) : link.target;
-        if (!sNode || !tNode) continue;
-        if (!visibleNodeIds.has(sNode.id) || !visibleNodeIds.has(tNode.id)) continue;
+        // 2. Attraction along links
+        for (let k = 0; k < links.length; k++) {
+          const link = links[k];
+          const sNode = typeof link.source === 'string' ? nodeMap.get(link.source) : link.source;
+          const tNode = typeof link.target === 'string' ? nodeMap.get(link.target) : link.target;
+          if (!sNode || !tNode) continue;
+          if (!visibleNodeIds.has(sNode.id) || !visibleNodeIds.has(tNode.id)) continue;
 
-        const dx = (tNode.x || 0) - (sNode.x || 0);
-        const dy = (tNode.y || 0) - (sNode.y || 0);
-        const dist = Math.sqrt(dx * dx + dy * dy) || 1;
+          const dx = (tNode.x || 0) - (sNode.x || 0);
+          const dy = (tNode.y || 0) - (sNode.y || 0);
+          const dist = Math.sqrt(dx * dx + dy * dy) || 1;
 
-        // Desired length
-        const targetLen = link.relation === 'EXHIBITS' ? 110 : 85;
-        const springForce = (dist - targetLen) * 0.008 * (link.weight || 1.0);
+          const targetLen = link.relation === 'EXHIBITS' ? 120 : 85;
+          const springForce = (dist - targetLen) * 0.007 * (link.weight || 1.0) * alpha;
 
-        const fx = (dx / dist) * springForce;
-        const fy = (dy / dist) * springForce;
+          const fx = (dx / dist) * springForce;
+          const fy = (dy / dist) * springForce;
 
-        if (sNode !== draggedNode.current && !sNode.fx) {
-          sNode.vx = (sNode.vx || 0) + fx;
-          sNode.vy = (sNode.vy || 0) + fy;
+          if (sNode !== draggedNode.current && !sNode.fx) {
+            sNode.vx = (sNode.vx || 0) + fx;
+            sNode.vy = (sNode.vy || 0) + fy;
+          }
+          if (tNode !== draggedNode.current && !tNode.fx) {
+            tNode.vx = (tNode.vx || 0) - fx;
+            tNode.vy = (tNode.vy || 0) - fy;
+          }
         }
-        if (tNode !== draggedNode.current && !tNode.fx) {
-          tNode.vx = (tNode.vx || 0) - fx;
-          tNode.vy = (tNode.vy || 0) - fy;
+
+        // 3. Center gravity & update positions
+        for (let i = 0; i < nodes.length; i++) {
+          const n = nodes[i];
+          if (n === draggedNode.current) continue;
+
+          n.vx = ((n.vx || 0) - (n.x || 0) * centerGravity) * damping;
+          n.vy = ((n.vy || 0) - (n.y || 0) * centerGravity) * damping;
+
+          n.x = (n.x || 0) + n.vx;
+          n.y = (n.y || 0) + n.vy;
         }
+
+        // Gradual alpha cooling: brings the network into a completely stable, tranquil resting state
+        alphaRef.current *= 0.988;
       }
 
-      // 3. Center gravity & update positions
-      for (let i = 0; i < nodes.length; i++) {
-        const n = nodes[i];
-        if (n === draggedNode.current) continue;
-
-        // Pull toward center
-        n.vx = ((n.vx || 0) - (n.x || 0) * centerGravity) * damping;
-        n.vy = ((n.vy || 0) - (n.y || 0) * centerGravity) * damping;
-
-        n.x = (n.x || 0) + n.vx;
-        n.y = (n.y || 0) + n.vy;
-      }
-
-      // Render the current frame
+      // Render the current frame (synaptic pulses continue even when nodes are settled)
       drawCanvas();
-
-      iteration++;
       animFrameId.current = requestAnimationFrame(stepSimulation);
     };
 
@@ -540,6 +597,38 @@ export default function TradeGraphVisualizer({
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
         ctx.fillText(`${node.trade_num}`, x, y);
+
+        // On-canvas interactive tooltip on hover
+        if (isHovered && node.node_type === 'trade') {
+          const tipX = x + radius + 10;
+          const tipY = y - 24;
+          const tipW = 155;
+          const tipH = 46;
+
+          ctx.save();
+          ctx.shadowColor = 'rgba(0, 0, 0, 0.7)';
+          ctx.shadowBlur = 12;
+          ctx.fillStyle = 'rgba(15, 23, 42, 0.96)';
+          ctx.strokeStyle = isWin ? '#10b981' : '#ef4444';
+          ctx.lineWidth = 1.2;
+
+          ctx.beginPath();
+          ctx.roundRect(tipX, tipY, tipW, tipH, 6);
+          ctx.fill();
+          ctx.stroke();
+
+          ctx.fillStyle = '#ffffff';
+          ctx.font = 'bold 11px sans-serif';
+          ctx.textAlign = 'left';
+          ctx.fillText(`Trade #${node.trade_num} (${node.symbol})`, tipX + 8, tipY + 16);
+
+          ctx.fillStyle = isWin ? '#34d399' : '#f87171';
+          ctx.font = 'bold 10px sans-serif';
+          const pnlText = `${node.result} ${node.pnl_dollar! >= 0 ? '+' : ''}$${node.pnl_dollar?.toFixed(1)}`;
+          const angleText = `📐 ${node.angle?.toFixed(1)}°`;
+          ctx.fillText(`${pnlText}  |  ${angleText}`, tipX + 8, tipY + 33);
+          ctx.restore();
+        }
       }
 
       ctx.restore();
@@ -579,6 +668,7 @@ export default function TradeGraphVisualizer({
       clicked.fx = clicked.x;
       clicked.fy = clicked.y;
       setSelectedNode(clicked);
+      alphaRef.current = 0.35; // gently reheat layout for smooth dragging
     } else {
       isDraggingCanvas.current = true;
       dragStartPos.current = { x: e.clientX - zoomTransform.x, y: e.clientY - zoomTransform.y };
@@ -712,28 +802,82 @@ export default function TradeGraphVisualizer({
             </p>
           </div>
 
-          <div className="flex items-center gap-3">
+          <div className="flex flex-wrap items-center gap-2.5">
+            {/* Play / Pause Toggle */}
+            <button
+              onClick={() => setIsPaused((prev) => !prev)}
+              className={`px-3 py-1.5 text-xs font-semibold rounded-lg flex items-center gap-1.5 transition border ${
+                isPaused
+                  ? 'bg-amber-500/20 text-amber-300 border-amber-500/40 hover:bg-amber-500/30'
+                  : 'bg-cyan-500/10 text-cyan-400 border-cyan-500/30 hover:bg-cyan-500/20'
+              }`}
+              title="Pause or Resume Network Movement"
+            >
+              <span className="text-sm leading-none">{isPaused ? '▶' : '⏸'}</span>
+              <span>{isPaused ? 'Resume Motion' : 'Pause Motion'}</span>
+            </button>
+
+            {/* Simulation Speed Selector */}
+            <div className="flex items-center bg-slate-900 border border-slate-700/80 rounded-lg p-0.5 text-xs font-mono">
+              <span className="px-2 text-slate-400 font-sans text-[11px]">Speed:</span>
+              {[
+                { val: 0.15, label: '0.2x Slow' },
+                { val: 0.35, label: '0.4x Calm' },
+                { val: 0.8, label: '1x Normal' },
+              ].map((s) => (
+                <button
+                  key={s.val}
+                  onClick={() => {
+                    setSimSpeed(s.val);
+                    alphaRef.current = Math.max(alphaRef.current, 0.3);
+                  }}
+                  className={`px-2 py-1 rounded transition text-[11px] ${
+                    simSpeed === s.val
+                      ? 'bg-cyan-500 text-slate-950 font-bold shadow-2xs'
+                      : 'text-slate-400 hover:text-slate-200'
+                  }`}
+                >
+                  {s.label}
+                </button>
+              ))}
+            </div>
+
+            {/* Settle Formation Button */}
+            <button
+              onClick={() => {
+                alphaRef.current = 0.45;
+                setIsPaused(false);
+              }}
+              className="px-2.5 py-1.5 text-xs font-medium rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 transition flex items-center gap-1"
+              title="Gently re-float and settle the neural layout"
+            >
+              <span>🔄 Settle</span>
+            </button>
+
+            {/* Reset View Button */}
             <button
               onClick={() => {
                 setZoomTransform({ x: 0, y: 0, scale: 0.95 });
                 setSelectedNode(null);
               }}
-              className="px-3.5 py-2 text-xs font-medium rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 transition"
+              className="px-2.5 py-1.5 text-xs font-medium rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 transition"
             >
               Reset View
             </button>
+
+            {/* Zoom Controls */}
             <div className="flex items-center bg-slate-800/80 rounded-lg p-1 border border-slate-700">
               <button
                 onClick={() => setZoomTransform((prev) => ({ ...prev, scale: Math.min(2.5, prev.scale * 1.2) }))}
-                className="w-8 h-7 flex items-center justify-center text-slate-300 hover:text-white font-bold"
+                className="w-7 h-6 flex items-center justify-center text-slate-300 hover:text-white font-bold text-xs"
                 title="Zoom In"
               >
                 +
               </button>
-              <div className="w-[1px] h-4 bg-slate-700" />
+              <div className="w-[1px] h-3.5 bg-slate-700" />
               <button
                 onClick={() => setZoomTransform((prev) => ({ ...prev, scale: Math.max(0.35, prev.scale * 0.8) }))}
-                className="w-8 h-7 flex items-center justify-center text-slate-300 hover:text-white font-bold"
+                className="w-7 h-6 flex items-center justify-center text-slate-300 hover:text-white font-bold text-xs"
                 title="Zoom Out"
               >
                 -
