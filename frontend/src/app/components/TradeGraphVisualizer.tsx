@@ -888,7 +888,7 @@ export default function TradeGraphVisualizer({
 
         {/* Neural Memory KPI Summary Cards */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-6">
-          <div className="bg-slate-900/80 border border-slate-800 rounded-xl p-4">
+          <div className="bg-slate-900/80 border border-slate-800 hover:border-cyan-500/30 rounded-xl p-4 transition-all">
             <span className="text-xs text-slate-400 font-medium">Interconnected Nodes</span>
             <div className="text-2xl font-black text-white mt-1 flex items-center gap-2">
               <span>{nodes.length || 190}</span>
@@ -989,31 +989,24 @@ export default function TradeGraphVisualizer({
         {/* Main Canvas Viewport (2 Columns) */}
         <div className="lg:col-span-2 bg-[#0b0f19] border border-slate-800 rounded-2xl relative overflow-hidden h-[680px] shadow-2xl flex flex-col">
           {/* Canvas Overlay Legend */}
-          <div className="absolute top-4 left-4 z-10 bg-slate-950/85 backdrop-blur-md border border-slate-800 rounded-xl p-3 flex flex-wrap items-center gap-3 text-[11px] text-slate-300 pointer-events-none">
-            <div className="flex items-center gap-1.5">
-              <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 shadow-sm shadow-emerald-500" />
-              <span>Win Trade (+2%)</span>
-            </div>
-            <div className="flex items-center gap-1.5">
-              <span className="w-2.5 h-2.5 rounded-full bg-rose-500 shadow-sm shadow-rose-500" />
-              <span>Loss Trade (-1%)</span>
-            </div>
-            <div className="flex items-center gap-1.5">
-              <span className="w-2.5 h-2.5 rounded-full bg-purple-500 shadow-sm shadow-purple-500" />
-              <span>Session Concept</span>
-            </div>
-            <div className="flex items-center gap-1.5">
-              <span className="w-2.5 h-2.5 rounded-full bg-cyan-500 shadow-sm shadow-cyan-500" />
-              <span>Angle Range</span>
-            </div>
-            <div className="flex items-center gap-1.5">
-              <span className="w-2.5 h-2.5 rounded-full bg-amber-500 shadow-sm shadow-amber-500" />
-              <span>Twin Synapse</span>
-            </div>
+          <div className="absolute top-3 left-3 z-10 bg-slate-950/90 backdrop-blur-md border border-slate-800/80 rounded-xl p-2.5 flex flex-col gap-1.5 text-[10px] text-slate-300 pointer-events-none shadow-lg">
+            <div className="text-[9px] uppercase font-bold text-slate-500 tracking-widest mb-0.5">Legend</div>
+            {[
+              { dot: 'bg-emerald-500 shadow-emerald-500/60', label: 'Win Trade' },
+              { dot: 'bg-rose-500 shadow-rose-500/60', label: 'Loss Trade' },
+              { dot: 'bg-purple-500 shadow-purple-500/60', label: 'Session Node' },
+              { dot: 'bg-cyan-500 shadow-cyan-500/60', label: 'Angle Node' },
+              { dot: 'bg-amber-500 shadow-amber-500/60', label: 'Synapse Link' },
+            ].map((item, i) => (
+              <div key={i} className="flex items-center gap-1.5">
+                <span className={`w-2 h-2 rounded-full shadow-sm ${item.dot} flex-shrink-0`} />
+                <span>{item.label}</span>
+              </div>
+            ))}
           </div>
 
-          <div className="absolute bottom-4 left-4 z-10 bg-slate-950/85 backdrop-blur-md border border-slate-800 rounded-lg px-3 py-1.5 text-[11px] text-slate-400 pointer-events-none">
-            💡 <strong className="text-slate-200">Tip:</strong> Click any trade node to inspect its twin trades & winning reason. Drag nodes to reshape the neural web. Scroll to zoom.
+          <div className="absolute bottom-3 left-3 z-10 bg-slate-950/85 backdrop-blur-md border border-slate-800 rounded-lg px-3 py-1.5 text-[11px] text-slate-400 pointer-events-none max-w-sm">
+            💡 <strong className="text-slate-200">Click</strong> a node to inspect · <strong className="text-slate-200">Drag</strong> to reshape · <strong className="text-slate-200">Scroll</strong> to zoom
           </div>
 
           {/* HTML5 Canvas */}
@@ -1028,13 +1021,17 @@ export default function TradeGraphVisualizer({
         </div>
 
         {/* Synaptic Node Inspector Panel (1 Column) */}
-        <div className="bg-[#0f172a] border border-slate-800 rounded-2xl p-6 flex flex-col h-[680px] overflow-y-auto shadow-xl">
+        <div className="bg-[#0f172a] border border-slate-800 rounded-2xl p-5 flex flex-col h-[680px] overflow-y-auto shadow-xl">
           {selectedNode ? (
-            <div className="space-y-5">
+            <div className="space-y-4">
               {/* Node Header */}
               <div className="pb-4 border-b border-slate-800">
-                <div className="flex items-center justify-between">
-                  <span className="text-xs uppercase font-mono tracking-wider px-2 py-0.5 rounded bg-slate-800 text-slate-300">
+                <div className="flex items-center justify-between mb-2">
+                  <span className={`text-[10px] uppercase font-mono tracking-wider px-2 py-0.5 rounded border ${
+                    selectedNode.node_type === 'trade'
+                      ? 'bg-cyan-500/10 text-cyan-400 border-cyan-500/25'
+                      : 'bg-purple-500/10 text-purple-400 border-purple-500/25'
+                  }`}>
                     {selectedNode.node_type === 'trade'
                       ? `TRADE #${selectedNode.trade_num}`
                       : 'CONCEPT NEURON'}
@@ -1047,40 +1044,42 @@ export default function TradeGraphVisualizer({
                           : 'bg-rose-500/20 text-rose-400 border border-rose-500/30'
                       }`}
                     >
-                      {selectedNode.result} ({selectedNode.pnl_percent! > 0 ? '+' : ''}
-                      {selectedNode.pnl_percent}%)
+                      {selectedNode.result} {selectedNode.pnl_percent !== undefined ? `(${selectedNode.pnl_percent! > 0 ? '+' : ''}${selectedNode.pnl_percent}%)` : ''}
                     </span>
                   )}
                 </div>
 
-                <h2 className="text-xl font-black text-white mt-2 flex items-center gap-2">
+                <h2 className="text-xl font-black text-white flex items-center gap-2">
                   {selectedNode.node_type === 'trade' ? (
                     <>
                       <span>{selectedNode.symbol}</span>
                       <span
-                        className={`text-sm px-2 py-0.5 rounded ${
+                        className={`text-sm px-2 py-0.5 rounded-md ${
                           selectedNode.direction === 'LONG'
-                            ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
-                            : 'bg-rose-500/10 text-rose-400 border border-rose-500/20'
+                            ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/25'
+                            : 'bg-rose-500/15 text-rose-400 border border-rose-500/25'
                         }`}
                       >
                         {selectedNode.direction}
                       </span>
                     </>
                   ) : (
-                    <span>{selectedNode.id}</span>
+                    <span className="text-sm">{selectedNode.id}</span>
                   )}
                 </h2>
 
                 {selectedNode.node_type === 'trade' && (
-                  <div className="flex items-center gap-3 mt-2 text-xs text-slate-400">
-                    <span>PnL: <strong className={selectedNode.pnl_dollar! >= 0 ? 'text-emerald-400' : 'text-rose-400'}>
-                      {selectedNode.pnl_dollar! >= 0 ? '+' : ''}${selectedNode.pnl_dollar?.toFixed(2)}
-                    </strong></span>
-                    <span>•</span>
-                    <span>Duration: <strong className="text-slate-200">{selectedNode.duration_hours}h</strong></span>
-                    <span>•</span>
-                    <span>Angle: <strong className="text-cyan-400">📐 {selectedNode.angle?.toFixed(1)}°</strong></span>
+                  <div className="grid grid-cols-3 gap-2 mt-3">
+                    {[
+                      { label: 'PnL', value: `${selectedNode.pnl_dollar! >= 0 ? '+' : ''}\$${selectedNode.pnl_dollar?.toFixed(2)}`, color: selectedNode.pnl_dollar! >= 0 ? 'text-emerald-400' : 'text-rose-400' },
+                      { label: 'Duration', value: `${selectedNode.duration_hours}h`, color: 'text-slate-200' },
+                      { label: 'Angle', value: `${selectedNode.angle?.toFixed(1)}°`, color: 'text-cyan-400' },
+                    ].map((s, i) => (
+                      <div key={i} className="bg-slate-900/60 rounded-lg p-2 text-center border border-slate-800">
+                        <div className={`text-sm font-black ${s.color}`}>{s.value}</div>
+                        <div className="text-[10px] text-slate-500 mt-0.5">{s.label}</div>
+                      </div>
+                    ))}
                   </div>
                 )}
               </div>
@@ -1096,10 +1095,10 @@ export default function TradeGraphVisualizer({
                       : 'bg-slate-900 border-slate-800'
                   }`}
                 >
-                  <div className="flex items-center justify-between text-xs">
-                    <span className="font-semibold text-slate-300">Neighborhood Cluster WR:</span>
+                  <div className="flex items-center justify-between text-xs mb-2">
+                    <span className="font-semibold text-slate-300">Cluster Win Rate</span>
                     <span
-                      className={`font-black text-sm ${
+                      className={`font-black text-lg leading-none ${
                         selectedNode.neighborhood_win_rate >= 55
                           ? 'text-emerald-400'
                           : selectedNode.neighborhood_win_rate <= 25
@@ -1110,24 +1109,24 @@ export default function TradeGraphVisualizer({
                       {selectedNode.neighborhood_win_rate.toFixed(1)}%
                     </span>
                   </div>
-                  <div className="w-full bg-slate-800 h-1.5 rounded-full mt-2 overflow-hidden">
+                  <div className="w-full bg-slate-800 h-2 rounded-full overflow-hidden">
                     <div
                       className={`h-full rounded-full ${
                         selectedNode.neighborhood_win_rate >= 55
-                          ? 'bg-emerald-400'
+                          ? 'bg-gradient-to-r from-emerald-600 to-emerald-400'
                           : selectedNode.neighborhood_win_rate <= 25
-                          ? 'bg-rose-500'
-                          : 'bg-cyan-500'
+                          ? 'bg-gradient-to-r from-rose-700 to-rose-500'
+                          : 'bg-gradient-to-r from-cyan-600 to-cyan-400'
                       }`}
                       style={{ width: `${Math.min(100, selectedNode.neighborhood_win_rate)}%` }}
                     />
                   </div>
-                  <span className="text-[11px] text-slate-400 mt-1.5 block">
+                  <span className="text-[11px] text-slate-400 mt-2 block">
                     {selectedNode.neighborhood_win_rate >= 55
-                      ? '🚀 High-probability cluster! Model gives maximum execution confidence.'
+                      ? '🚀 High-probability cluster! Max execution confidence.'
                       : selectedNode.neighborhood_win_rate <= 25
-                      ? '⚠️ High-risk chop/trap cluster! Model applies extra invalidation scrutiny.'
-                      : 'Balanced SMC structural setup.'}
+                      ? '⚠️ High-risk chop/trap cluster! Extra invalidation needed.'
+                      : '⚖️ Balanced SMC structural setup.'}
                   </span>
                 </div>
               )}
@@ -1137,7 +1136,7 @@ export default function TradeGraphVisualizer({
                 <div className="bg-slate-900/90 border border-slate-800 rounded-xl p-4">
                   <h3 className="text-xs font-bold text-cyan-400 uppercase tracking-wider mb-2 flex items-center gap-1.5">
                     <BrainCircuitIcon className="w-4 h-4" />
-                    Neural Explanation (Reason for Outcome)
+                    Neural Explanation
                   </h3>
                   <p className="text-xs text-slate-300 leading-relaxed">
                     {selectedNode.neural_explanation}
@@ -1152,24 +1151,35 @@ export default function TradeGraphVisualizer({
                     Active Structural Features
                   </h3>
                   <div className="flex flex-wrap gap-1.5">
-                    {selectedNode.features.map((feat, idx) => (
-                      <span
-                        key={idx}
-                        className="text-[11px] font-medium px-2.5 py-1 rounded-md bg-slate-800/80 text-cyan-300 border border-slate-700/60"
-                      >
-                        {feat}
-                      </span>
-                    ))}
+                    {selectedNode.features.map((feat, idx) => {
+                      const isSession = feat.startsWith('Session');
+                      const isAngle = feat.startsWith('Angle');
+                      const isAsset = feat.startsWith('Asset');
+                      const isPattern = feat.startsWith('Pattern');
+                      const colorClass = isSession ? 'bg-purple-950/40 text-purple-300 border-purple-500/25'
+                        : isAngle ? 'bg-cyan-950/40 text-cyan-300 border-cyan-500/25'
+                        : isAsset ? 'bg-pink-950/40 text-pink-300 border-pink-500/25'
+                        : isPattern ? 'bg-amber-950/40 text-amber-300 border-amber-500/25'
+                        : 'bg-slate-800/80 text-slate-300 border-slate-700/60';
+                      return (
+                        <span
+                          key={idx}
+                          className={`text-[10px] font-medium px-2 py-0.5 rounded-md border ${colorClass}`}
+                        >
+                          {feat.split(':').pop()?.trim() || feat}
+                        </span>
+                      );
+                    })}
                   </div>
                 </div>
               )}
 
-              {/* Connected Twin Trades */}
+              {/* Connected Twin Trades with Similarity Bars */}
               {selectedNode.twin_trades && selectedNode.twin_trades.length > 0 && (
                 <div>
-                  <h3 className="text-xs font-bold text-amber-400 uppercase tracking-wider mb-2 flex items-center gap-1.5">
+                  <h3 className="text-xs font-bold text-amber-400 uppercase tracking-wider mb-2.5 flex items-center gap-1.5">
                     <TargetIcon className="w-3.5 h-3.5" />
-                    Connected Twin Trades (Nearest Precedents)
+                    Twin Trade Precedents
                   </h3>
                   <div className="space-y-2">
                     {selectedNode.twin_trades.map((tw, idx) => (
@@ -1183,16 +1193,16 @@ export default function TradeGraphVisualizer({
                         }}
                         className="bg-slate-900 hover:bg-slate-800/90 border border-slate-800 hover:border-amber-500/40 p-2.5 rounded-lg cursor-pointer transition"
                       >
-                        <div className="flex items-center justify-between text-xs">
+                        <div className="flex items-center justify-between text-xs mb-1.5">
                           <span className="font-bold text-white flex items-center gap-1.5">
-                            Trade #{tw.trade_num}
+                            #{tw.trade_num}
                             <span className="text-[10px] text-slate-400 font-normal">
-                              ({tw.symbol} {tw.direction})
+                              {tw.symbol} {tw.direction}
                             </span>
                           </span>
-                          <div className="flex items-center gap-2">
+                          <div className="flex items-center gap-1.5">
                             <span
-                              className={`text-[10px] font-black px-1.5 py-0.2 rounded ${
+                              className={`text-[10px] font-black px-1.5 rounded ${
                                 tw.result === 'WIN'
                                   ? 'bg-emerald-500/20 text-emerald-400'
                                   : 'bg-rose-500/20 text-rose-400'
@@ -1200,15 +1210,23 @@ export default function TradeGraphVisualizer({
                             >
                               {tw.result}
                             </span>
-                            <span className="text-[11px] font-semibold text-amber-400">
-                              {(tw.similarity_score * 100).toFixed(0)}% Match
-                            </span>
                           </div>
                         </div>
-
+                        {/* Similarity Match Bar */}
+                        <div className="flex items-center gap-2">
+                          <div className="flex-1 bg-slate-800 h-1 rounded-full overflow-hidden">
+                            <div
+                              className="h-full rounded-full bg-gradient-to-r from-amber-600 to-amber-400"
+                              style={{ width: `${Math.min(100, tw.similarity_score * 100)}%` }}
+                            />
+                          </div>
+                          <span className="text-[10px] font-semibold text-amber-400 w-12 text-right">
+                            {(tw.similarity_score * 100).toFixed(0)}% match
+                          </span>
+                        </div>
                         {tw.shared_features && tw.shared_features.length > 0 && (
-                          <div className="text-[10px] text-slate-400 mt-1 line-clamp-1">
-                            Shared: {tw.shared_features.slice(0, 3).join(', ')}
+                          <div className="text-[10px] text-slate-500 mt-1 truncate">
+                            ↔ {tw.shared_features.slice(0, 2).join(', ')}
                           </div>
                         )}
                       </div>
@@ -1232,74 +1250,274 @@ export default function TradeGraphVisualizer({
             </div>
           ) : (
             <div className="flex flex-col items-center justify-center h-full text-center p-6 text-slate-500">
-              <BrainCircuitIcon className="w-12 h-12 text-slate-600 mb-3 animate-pulse" />
-              <h3 className="text-sm font-bold text-slate-300">Select Any Neuron</h3>
-              <p className="text-xs text-slate-500 mt-1 max-w-xs">
-                Click on any trade node (Green/Red) or concept node (Purple/Cyan) in the neural canvas to inspect its twin trades, win cluster, and neural reasoning.
+              <BrainCircuitIcon className="w-14 h-14 text-slate-700 mb-4" />
+              <h3 className="text-sm font-bold text-slate-300 mb-2">Click a Neuron to Inspect</h3>
+              <p className="text-xs text-slate-500 max-w-xs leading-relaxed mb-5">
+                Click any <span className="text-emerald-400 font-semibold">green (WIN)</span> or <span className="text-rose-400 font-semibold">red (LOSS)</span> trade node in the canvas to see its twin precedents, cluster win rate, and neural explanation.
               </p>
-            </div>
-          )}
-        </div>
-      </div>
-
-      {/* ── Winning DNA & High-Win Clusters Analysis ───────────────────────────── */}
-      {winningDNA && (
-        <div className="bg-[#0f172a] border border-slate-800 rounded-2xl p-6">
-          <div className="flex items-center gap-2 mb-4">
-            <SparklesIcon className="w-5 h-5 text-amber-400" />
-            <h2 className="text-lg font-bold text-white tracking-tight">
-              Knowledge Graph Discovery: The "Winning DNA"
-            </h2>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-            {winningDNA.core_rules.map((rule, idx) => (
-              <div key={idx} className="bg-slate-900 border border-slate-800 rounded-xl p-4">
-                <span className="text-xs font-bold text-cyan-400 uppercase tracking-wider block mb-1">
-                  Rule {idx + 1}: {rule.factor}
-                </span>
-                <p className="text-xs text-slate-300 font-medium mb-2">{rule.finding}</p>
-                <div className="text-[11px] text-amber-300/90 bg-amber-500/10 border border-amber-500/20 rounded-md p-2">
-                  <strong>DNA Impact:</strong> {rule.dna_impact}
-                </div>
-              </div>
-            ))}
-          </div>
-
-          {/* High-Win Clusters Table */}
-          {highWinClusters.length > 0 && (
-            <div>
-              <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3">
-                Top High-Probability Subgraph Clusters (WR ≥ 55%)
-              </h3>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                {highWinClusters.slice(0, 6).map((cl, idx) => (
-                  <div
-                    key={idx}
-                    className="bg-slate-900/80 border border-emerald-500/20 rounded-xl p-3.5 flex flex-col justify-between"
-                  >
-                    <div>
-                      <div className="flex items-center justify-between text-xs mb-1.5">
-                        <span className="font-bold text-emerald-400">
-                          {cl.win_rate.toFixed(1)}% Win Rate
-                        </span>
-                        <span className="text-[11px] text-slate-400">
-                          {cl.wins}W / {cl.losses}L ({cl.trade_count}T)
-                        </span>
-                      </div>
-                      <h4 className="text-xs font-semibold text-white line-clamp-2">
-                        {cl.cluster_name}
-                      </h4>
-                    </div>
-                    <div className="mt-3 pt-2 border-t border-slate-800 flex items-center justify-between text-[11px]">
-                      <span className="text-slate-400">Total Net PnL:</span>
-                      <span className="font-bold text-emerald-400">+${cl.pnl_dollar.toFixed(2)}</span>
-                    </div>
+              <div className="w-full space-y-2 text-left">
+                {[
+                  { dot: 'bg-emerald-500', label: 'Win Trade' },
+                  { dot: 'bg-rose-500', label: 'Loss Trade' },
+                  { dot: 'bg-purple-500', label: 'Session Concept' },
+                  { dot: 'bg-cyan-500', label: 'Angle Range Node' },
+                  { dot: 'bg-amber-500', label: 'Synapse Connection' },
+                ].map((item, i) => (
+                  <div key={i} className="flex items-center gap-2.5 text-xs text-slate-400 bg-slate-900/60 rounded-lg px-3 py-2 border border-slate-800">
+                    <span className={`w-2.5 h-2.5 rounded-full ${item.dot} flex-shrink-0`} />
+                    {item.label}
                   </div>
                 ))}
               </div>
             </div>
           )}
+        </div>
+      </div>
+
+      {/* ── Winning DNA, High-Win Clusters & Trap Avoidance ────────────────────── */}
+      {winningDNA && (
+        <div className="space-y-5">
+
+          {/* ─── WINNING DNA: Hero Section ─────────────────────────────────────────── */}
+          <div className="relative bg-gradient-to-br from-[#0c1426] via-[#0f172a] to-[#0a1220] border border-emerald-500/25 rounded-2xl p-6 overflow-hidden shadow-2xl">
+            {/* Background glow orbs */}
+            <div className="absolute top-0 right-0 w-72 h-72 bg-emerald-500/5 rounded-full blur-3xl pointer-events-none" />
+            <div className="absolute bottom-0 left-0 w-56 h-56 bg-amber-500/5 rounded-full blur-3xl pointer-events-none" />
+
+            {/* Section Header */}
+            <div className="flex items-center gap-3 mb-5">
+              <div className="flex items-center justify-center w-9 h-9 rounded-xl bg-emerald-500/15 border border-emerald-500/30">
+                <SparklesIcon className="w-5 h-5 text-emerald-400" />
+              </div>
+              <div>
+                <h2 className="text-lg font-extrabold text-white tracking-tight flex items-center gap-2">
+                  🧬 Winning DNA
+                  <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-400 border border-emerald-500/25">
+                    Knowledge Graph Discovery
+                  </span>
+                </h2>
+                <p className="text-xs text-slate-400 mt-0.5">Common traits found across all winning trades — the strategy's genetic blueprint</p>
+              </div>
+            </div>
+
+            {/* Stat Bar */}
+            <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mb-6 p-4 bg-slate-900/60 rounded-xl border border-slate-800/80">
+              {[
+                { label: 'Total Trades', value: winningDNA.total_trades, color: 'text-white', sub: 'Backtested' },
+                { label: 'Total Wins', value: winningDNA.total_wins, color: 'text-emerald-400', sub: 'Profitable' },
+                { label: 'Total Losses', value: winningDNA.total_losses, color: 'text-rose-400', sub: 'SL Hit' },
+                { label: 'Overall WR', value: `${winningDNA.overall_win_rate.toFixed(1)}%`, color: winningDNA.overall_win_rate >= 50 ? 'text-emerald-400' : 'text-amber-400', sub: 'Win Rate' },
+                { label: 'Avg Win Angle', value: `${winningDNA.avg_win_angle.toFixed(1)}°`, color: 'text-cyan-400', sub: 'Trending market' },
+              ].map((stat, i) => (
+                <div key={i} className="text-center">
+                  <div className={`text-2xl font-black ${stat.color}`}>{stat.value}</div>
+                  <div className="text-[10px] text-slate-400 font-medium mt-0.5">{stat.label}</div>
+                  <div className="text-[10px] text-slate-600">{stat.sub}</div>
+                </div>
+              ))}
+            </div>
+
+            {/* Win Rate Progress Bar */}
+            <div className="mb-6">
+              <div className="flex items-center justify-between text-xs mb-1.5">
+                <span className="text-slate-400 font-medium">Portfolio Win Rate</span>
+                <span className="font-black text-emerald-400">{winningDNA.overall_win_rate.toFixed(1)}%</span>
+              </div>
+              <div className="w-full bg-slate-800 h-3 rounded-full overflow-hidden">
+                <div
+                  className="h-full rounded-full bg-gradient-to-r from-emerald-600 to-emerald-400 relative"
+                  style={{ width: `${Math.min(100, winningDNA.overall_win_rate)}%` }}
+                >
+                  <div className="absolute inset-0 bg-white/10 rounded-full" />
+                </div>
+              </div>
+              <div className="flex justify-between text-[10px] text-slate-600 mt-1">
+                <span>0%</span><span>50%</span><span>100%</span>
+              </div>
+            </div>
+
+            {/* Core Rules: DNA Cards */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              {winningDNA.core_rules.map((rule, idx) => {
+                const icons = ['⚡', '📐', '🕐'];
+                const colors = [
+                  { border: 'border-cyan-500/30', bg: 'bg-cyan-500/5', badge: 'bg-cyan-500/15 text-cyan-400 border-cyan-500/30', impact: 'bg-emerald-500/10 border-emerald-500/20 text-emerald-300' },
+                  { border: 'border-amber-500/30', bg: 'bg-amber-500/5', badge: 'bg-amber-500/15 text-amber-400 border-amber-500/30', impact: 'bg-emerald-500/10 border-emerald-500/20 text-emerald-300' },
+                  { border: 'border-purple-500/30', bg: 'bg-purple-500/5', badge: 'bg-purple-500/15 text-purple-400 border-purple-500/30', impact: 'bg-emerald-500/10 border-emerald-500/20 text-emerald-300' },
+                ];
+                const c = colors[idx % 3];
+                return (
+                  <div key={idx} className={`relative border ${c.border} ${c.bg} rounded-xl p-5 flex flex-col gap-3 hover:border-opacity-60 transition-all`}>
+                    <div className="flex items-start justify-between">
+                      <span className={`text-[11px] font-bold uppercase tracking-widest px-2 py-0.5 rounded-full border ${c.badge}`}>
+                        Rule {idx + 1}
+                      </span>
+                      <span className="text-2xl">{icons[idx]}</span>
+                    </div>
+                    <div>
+                      <h4 className="text-sm font-extrabold text-white mb-1">{rule.factor}</h4>
+                      <p className="text-xs text-slate-300 leading-relaxed">{rule.finding}</p>
+                    </div>
+                    <div className={`text-[11px] rounded-lg px-3 py-2 border font-medium ${c.impact}`}>
+                      <span className="font-bold text-white">Impact → </span>{rule.dna_impact}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* ─── TWO-COLUMN: High Win Clusters + Losing Traps ─────────────────────── */}
+          <div className="grid grid-cols-1 xl:grid-cols-2 gap-5">
+
+            {/* HIGH-WIN CLUSTERS: Leaderboard */}
+            {highWinClusters.length > 0 && (
+              <div className="relative bg-[#0f172a] border border-emerald-500/20 rounded-2xl p-5 overflow-hidden">
+                <div className="absolute top-0 right-0 w-48 h-48 bg-emerald-500/5 rounded-full blur-3xl pointer-events-none" />
+                <div className="flex items-center gap-2.5 mb-4">
+                  <div className="flex items-center justify-center w-8 h-8 rounded-lg bg-emerald-500/15 border border-emerald-500/30">
+                    <TrendingUpIcon className="w-4 h-4 text-emerald-400" />
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-extrabold text-white flex items-center gap-2">
+                      🔥 High Win Rate Clusters
+                      <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-emerald-500/15 text-emerald-400 border border-emerald-500/30">
+                        WR ≥ 55%
+                      </span>
+                    </h3>
+                    <p className="text-[11px] text-slate-500">Best setups by probability — enter here for max edge</p>
+                  </div>
+                </div>
+
+                <div className="space-y-2.5">
+                  {highWinClusters.slice(0, 5).map((cl, idx) => {
+                    const medals = ['🥇', '🥈', '🥉', '4️⃣', '5️⃣'];
+                    const wrColor = cl.win_rate >= 70 ? 'text-emerald-400' : cl.win_rate >= 60 ? 'text-lime-400' : 'text-yellow-400';
+                    const barColor = cl.win_rate >= 70 ? 'from-emerald-600 to-emerald-400' : cl.win_rate >= 60 ? 'from-lime-600 to-lime-400' : 'from-yellow-600 to-yellow-400';
+                    return (
+                      <div key={idx} className="bg-slate-900/70 hover:bg-slate-900 border border-slate-800 hover:border-emerald-500/30 rounded-xl p-3.5 transition-all group">
+                        <div className="flex items-start gap-3">
+                          <span className="text-xl mt-0.5 flex-shrink-0">{medals[idx]}</span>
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center justify-between mb-1.5">
+                              <h4 className="text-xs font-bold text-slate-200 truncate pr-2">{cl.cluster_name}</h4>
+                              <span className={`text-xl font-black flex-shrink-0 ${wrColor}`}>{cl.win_rate.toFixed(0)}%</span>
+                            </div>
+                            {/* WR Progress Bar */}
+                            <div className="w-full bg-slate-800 h-1.5 rounded-full overflow-hidden mb-2">
+                              <div
+                                className={`h-full rounded-full bg-gradient-to-r ${barColor}`}
+                                style={{ width: `${Math.min(100, cl.win_rate)}%` }}
+                              />
+                            </div>
+                            <div className="flex items-center justify-between text-[10px]">
+                              <div className="flex items-center gap-2 text-slate-400">
+                                <span className="text-emerald-400 font-bold">{cl.wins}W</span>
+                                <span>/</span>
+                                <span className="text-rose-400 font-bold">{cl.losses}L</span>
+                                <span className="text-slate-500">({cl.trade_count} trades)</span>
+                              </div>
+                              <span className={`font-bold ${cl.pnl_dollar >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                                {cl.pnl_dollar >= 0 ? '+' : ''}\${cl.pnl_dollar.toFixed(0)} PnL
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+                        {/* Feature pills */}
+                        {cl.features && cl.features.length > 0 && (
+                          <div className="flex flex-wrap gap-1 mt-2.5 pl-8">
+                            {cl.features.slice(0, 4).map((feat, fi) => (
+                              <span key={fi} className="text-[10px] px-1.5 py-0.5 rounded-md bg-slate-800 text-slate-400 border border-slate-700/60">
+                                {feat.split(':').pop()?.trim() || feat}
+                              </span>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            {/* LOSING TRAPS: Avoidance Radar */}
+            {losingTraps.length > 0 && (
+              <div className="relative bg-[#0f172a] border border-rose-500/20 rounded-2xl p-5 overflow-hidden">
+                <div className="absolute top-0 right-0 w-48 h-48 bg-rose-500/5 rounded-full blur-3xl pointer-events-none" />
+                <div className="flex items-center gap-2.5 mb-4">
+                  <div className="flex items-center justify-center w-8 h-8 rounded-lg bg-rose-500/15 border border-rose-500/30">
+                    <ShieldCheckIcon className="w-4 h-4 text-rose-400" />
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-extrabold text-white flex items-center gap-2">
+                      ⚠️ Traps Avoided
+                      <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-rose-500/15 text-rose-400 border border-rose-500/30">
+                        WR ≤ 30%
+                      </span>
+                    </h3>
+                    <p className="text-[11px] text-slate-500">Losing setups the model blocks — Judas swings &amp; chop traps</p>
+                  </div>
+                </div>
+
+                <div className="space-y-2.5">
+                  {losingTraps.slice(0, 5).map((trap, idx) => {
+                    const trapIcons = ['🪤', '🔴', '⛔', '🚫', '❌'];
+                    const savedLoss = Math.abs(trap.pnl_dollar);
+                    return (
+                      <div key={idx} className="bg-rose-950/20 hover:bg-rose-950/30 border border-rose-500/15 hover:border-rose-500/30 rounded-xl p-3.5 transition-all">
+                        <div className="flex items-start gap-3">
+                          <span className="text-xl mt-0.5 flex-shrink-0">{trapIcons[idx]}</span>
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center justify-between mb-1.5">
+                              <h4 className="text-xs font-bold text-slate-200 truncate pr-2">{trap.cluster_name}</h4>
+                              <span className="text-xl font-black flex-shrink-0 text-rose-400">{trap.win_rate.toFixed(0)}%</span>
+                            </div>
+                            {/* Danger bar */}
+                            <div className="w-full bg-slate-800 h-1.5 rounded-full overflow-hidden mb-2">
+                              <div
+                                className="h-full rounded-full bg-gradient-to-r from-rose-700 to-rose-500"
+                                style={{ width: `${Math.min(100, trap.win_rate)}%` }}
+                              />
+                            </div>
+                            <div className="flex items-center justify-between text-[10px]">
+                              <div className="flex items-center gap-2 text-slate-400">
+                                <span className="text-emerald-400 font-bold">{trap.wins}W</span>
+                                <span>/</span>
+                                <span className="text-rose-400 font-bold">{trap.losses}L</span>
+                                <span className="text-slate-500">({trap.trade_count} trades)</span>
+                              </div>
+                              <span className="font-bold text-rose-400">
+                                Saved \${savedLoss.toFixed(0)}
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+                        {/* What to avoid */}
+                        {trap.features && trap.features.length > 0 && (
+                          <div className="flex flex-wrap gap-1 mt-2.5 pl-8">
+                            {trap.features.slice(0, 4).map((feat, fi) => (
+                              <span key={fi} className="text-[10px] px-1.5 py-0.5 rounded-md bg-rose-950/50 text-rose-300 border border-rose-500/20">
+                                {feat.split(':').pop()?.trim() || feat}
+                              </span>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+
+                {/* Avoidance summary */}
+                <div className="mt-3 pt-3 border-t border-rose-500/10 flex items-center justify-between text-xs">
+                  <span className="text-slate-400">Total loss exposure blocked</span>
+                  <span className="font-black text-rose-400">
+                    \${losingTraps.reduce((s, t) => s + Math.abs(t.pnl_dollar), 0).toFixed(0)}
+                  </span>
+                </div>
+              </div>
+            )}
+
+          </div>
         </div>
       )}
     </div>
