@@ -25,6 +25,7 @@ def run_chain_of_choch(
     path_15m: str = "trading-agent/data_cache/PAXG_15m.pkl",
     start_date: str = "2026-08-01",
     end_date: str = "2026-10-15 23:59:59",
+    min_trend_angle: float = 35.0, # Visual chart trending angle (40-45 deg filter; rejects flat 20-30 deg chop)
     starting_balance: float = 10000.0,
     risk_percent: float = 1.0,
 ) -> Tuple[Dict[str, Any], List[Dict[str, Any]], Dict[str, Any]]:
@@ -32,6 +33,7 @@ def run_chain_of_choch(
     print(f"  RUNNING CHAIN-OF-CHOCH ENGINE: {symbol}")
     print(f"  PERIOD: {start_date} TO {end_date}")
     print(f"  TIMEFRAME: PURE 15M (BOS CONTINUATION + CHOCH REVERSAL)")
+    print(f"  FILTER: TRENDING IMPULSE (ANGLE >= {min_trend_angle}°, NO SIDEWAYS CHOP)")
     print(f"  RULE #8 C1 SL & RULE #9 1:2 TP & STRICT BODY CHOCH BREAK")
     print("=" * 70)
 
@@ -43,8 +45,24 @@ def run_chain_of_choch(
     df = df_raw[(df_raw['dt'] >= start_date) & (df_raw['dt'] <= end_date)].reset_index(drop=True)
     print(f"Loaded {len(df)} 15M candles for {symbol}")
 
-    # 2. Detect 15M Fractal Swing Points (p=3)
-    p = 3
+    # Compute ATR for visual slope/angle normalization
+    high = df['high']
+    low = df['low']
+    close = df['close']
+    prev_c = close.shift(1)
+    tr = pd.concat([high - low, (high - prev_c).abs(), (low - prev_c).abs()], axis=1).max(axis=1)
+    df['atr'] = tr.rolling(14).mean().bfill()
+
+    def get_impulse_angle(idx, lookback=4):
+        if idx < lookback: return 0.0
+        dp = abs(df['close'].iloc[idx] - df['close'].iloc[idx - lookback])
+        atr_val = df['atr'].iloc[idx]
+        if atr_val <= 0: return 0.0
+        slope = dp / (lookback * atr_val)
+        return float(np.degrees(np.arctan(slope)))
+
+    # 2. Detect 15M Fractal Swing Points (p=4 for clean structural swings, eliminating 3-candle micro-noise)
+    p = 4
     df['sh'] = np.nan
     df['sl'] = np.nan
     for i in range(p, len(df) - p):
@@ -57,7 +75,7 @@ def run_chain_of_choch(
 
     swing_highs = [(idx, float(df['high'].iloc[idx])) for idx in df[df['sh'].notna()].index]
     swing_lows = [(idx, float(df['low'].iloc[idx])) for idx in df[df['sl'].notna()].index]
-    print(f"Precomputed {len(swing_highs)} swing highs, {len(swing_lows)} swing lows")
+    print(f"Precomputed {len(swing_highs)} swing highs, {len(swing_lows)} swing lows (p={p})")
 
     # 3. State Tracking
     trend = 'BULLISH'
@@ -157,6 +175,7 @@ def run_chain_of_choch(
                     "fvg_bottom": round(pos['fvg_bottom'], 2),
                     "entry_idx": pos['entry_idx'],
                     "exit_idx": i,
+                    "angle": round(pos.get('angle', 0.0), 1),
                 }
                 trades.append(trade_record)
 
@@ -199,6 +218,7 @@ def run_chain_of_choch(
                     "exit_price": round(exit_price, 2),
                     "direction": pos['direction'],
                     "result": outcome,
+                    "angle": round(pos.get('angle', 0.0), 1),
                     "candles": candles_list,
                 }
                 active_pos = None
@@ -243,6 +263,7 @@ def run_chain_of_choch(
                                 'fvg_top': f['fvg_top'],
                                 'fvg_bottom': f['fvg_bottom'],
                                 'entry_idx': i,
+                                'angle': f.get('angle', 0.0),
                             }
                             pending_fvg = None
 
@@ -282,13 +303,21 @@ def run_chain_of_choch(
                                 'fvg_top': f['fvg_top'],
                                 'fvg_bottom': f['fvg_bottom'],
                                 'entry_idx': i,
+                                'angle': f.get('angle', 0.0),
                             }
                             pending_fvg = None
+
+        # ── Impulse Angle & Trending Market Filter ──
+        # Computes visual chart slope/angle: rejects flat sideways drift (20°-30°), requires steep trending impulse (>= 35°-45°)
+        ang_4 = get_impulse_angle(i, 4)
+        ang_6 = get_impulse_angle(i, 6)
+        max_angle = max(ang_4, ang_6)
+        is_trending = max_angle >= min_trend_angle
 
         # ── Step C: CHoCH Break (Trend Reversal) Detection ──
         # Rule 3: Body Close beyond active CHoCH level flips trend!
         # First Break of Structure confirmed -> Then Change of Character Break -> Then FVG Gap!
-        if current_choch is not None:
+        if current_choch is not None and is_trending:
             if trend == 'BULLISH' and c_close < current_choch['price']:
                 # Bearish CHoCH Breakout!
                 trend = 'BEARISH'
@@ -329,6 +358,7 @@ def run_chain_of_choch(
                                 'fvg_top': float(c1['low']),
                                 'fvg_bottom': float(c3['high']),
                                 'gap_size': gap,
+                                'angle': max_angle,
                             }
 
             elif trend == 'BEARISH' and c_close > current_choch['price']:
@@ -371,10 +401,11 @@ def run_chain_of_choch(
                                 'fvg_top': float(c3['low']),
                                 'fvg_bottom': float(c1['high']),
                                 'gap_size': gap,
+                                'angle': max_angle,
                             }
 
         # ── Step D: Trend Continuation (BOS) & CHoCH Computation ──
-        if trend == 'BULLISH':
+        if trend == 'BULLISH' and is_trending:
             recent_shs = [(sh_idx, sh_p) for (sh_idx, sh_p) in swing_highs if sh_idx < i - 1 and sh_idx >= i - 60]
             for (sh_idx, sh_p) in reversed(recent_shs):
                 if c_close > sh_p and prev['close'] <= sh_p:
@@ -454,10 +485,11 @@ def run_chain_of_choch(
                                         'fvg_top': float(c3['low']),
                                         'fvg_bottom': float(c1['high']),
                                         'gap_size': gap,
+                                        'angle': max_angle,
                                     }
                         break
 
-        elif trend == 'BEARISH':
+        elif trend == 'BEARISH' and is_trending:
             recent_sls = [(sl_idx, sl_p) for (sl_idx, sl_p) in swing_lows if sl_idx < i - 1 and sl_idx >= i - 60]
             for (sl_idx, sl_p) in reversed(recent_sls):
                 if c_close < sl_p and prev['close'] >= sl_p:
@@ -536,6 +568,7 @@ def run_chain_of_choch(
                                         'fvg_top': float(c1['low']),
                                         'fvg_bottom': float(c3['high']),
                                         'gap_size': gap,
+                                        'angle': max_angle,
                                     }
                         break
 
@@ -588,7 +621,7 @@ def run_chain_of_choch(
     continuations = len([t for t in trades if t['trade_type'] == 'CONTINUATION_BOS'])
 
     summary = {
-        "name": f"{'Gold (XAU/USD)' if 'XAU' in symbol or 'PAXG' in symbol else 'Bitcoin (BTC/USDT)'} [1 Aug - 15 Oct 2026 · 15M Chain-of-CHoCH]",
+        "name": f"{'Gold (XAU/USD)' if 'XAU' in symbol or 'PAXG' in symbol else 'Bitcoin (BTC/USDT)'} [15M Trending SMC · Nov 2025 – Nov 2026]",
         "symbol": symbol,
         "period": f"{start_date} - {end_date[:10]}",
         "total_trades": total,

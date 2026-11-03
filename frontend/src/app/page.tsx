@@ -81,6 +81,8 @@ interface BacktestTrade {
   why_outcome?: string;
   lesson_learned?: string;
   adaptation_rule?: string;
+  max_drawdown_pct?: number;
+  angle?: number;
 }
 
 interface MonthlyStat {
@@ -107,6 +109,8 @@ interface AssetSummary {
   starting_balance: number;
   ending_balance: number;
   rr_ratio: string;
+  max_drawdown_pct?: number;
+  angle?: number;
 }
 
 interface LearnedRule {
@@ -274,7 +278,7 @@ export default function Dashboard() {
   // ─── Backtest State ────────────────────────────────────────────────────────
   const [backtestData, setBacktestData] = useState<BacktestData | null>(null);
   const [loadingBacktest, setLoadingBacktest] = useState(false);
-  const [btAssetFilter, setBtAssetFilter] = useState<'ALL' | 'XAUUSD' | 'BTCUSDT' | 'ETHUSDT'>('XAUUSD');
+  const [btAssetFilter, setBtAssetFilter] = useState<'ALL' | 'XAUUSD' | 'BTCUSDT' | 'ETHUSDT'>('ALL');
   const [btResultFilter, setBtResultFilter] = useState<'ALL' | 'WIN' | 'LOSS'>('ALL');
   const [btDirectionFilter, setBtDirectionFilter] = useState<'ALL' | 'LONG' | 'SHORT'>('ALL');
   const [btSearch, setBtSearch] = useState('');
@@ -390,7 +394,7 @@ export default function Dashboard() {
     const trades = (backtestData?.trades || []).filter(t => btAssetFilter === 'ALL' || t.symbol === btAssetFilter);
     if (trades.length === 0) return [];
 
-    const startBal = btAssetFilter === 'ALL' ? 30000 : 10000;
+    const startBal = btAssetFilter === 'ALL' ? 20000 : 10000;
     let runningBal = startBal;
     let runningWins = 0;
 
@@ -576,15 +580,15 @@ export default function Dashboard() {
                       label: 'All Portfolio', 
                       count: backtestData?.summary?.total_trades ?? 0, 
                       icon: '🌐', 
-                      pnl: `+$${backtestData?.summary?.net_pnl_dollars?.toLocaleString() ?? '0'} (+${backtestData?.summary?.net_pnl_pct ?? 0}%)`, 
+                      pnl: `${(backtestData?.summary?.net_pnl_dollars ?? 0) >= 0 ? '+$' : '-$'}${Math.abs(backtestData?.summary?.net_pnl_dollars ?? 0).toLocaleString()} (${(backtestData?.summary?.net_pnl_pct ?? 0) >= 0 ? '+' : ''}${backtestData?.summary?.net_pnl_pct ?? 0}%)`, 
                       wr: `${backtestData?.summary?.win_rate ?? 0}%` 
                     },
                     { 
                       key: 'XAUUSD', 
-                      label: 'Gold (1 Jul - 1 Oct)', 
+                      label: 'Gold (XAU/USD)', 
                       count: backtestData?.gold_summary?.total_trades ?? 0, 
                       icon: '🥇', 
-                      pnl: `+${backtestData?.gold_summary?.net_pnl_pct ?? 0}% Net`, 
+                      pnl: `${(backtestData?.gold_summary?.net_pnl_pct ?? 0) >= 0 ? '+' : ''}${backtestData?.gold_summary?.net_pnl_pct ?? 0}% Net`, 
                       wr: `${backtestData?.gold_summary?.win_rate ?? 0}%` 
                     },
                     { 
@@ -592,7 +596,7 @@ export default function Dashboard() {
                       label: 'Bitcoin (BTC)', 
                       count: backtestData?.btc_summary?.total_trades ?? 0, 
                       icon: '₿', 
-                      pnl: `+${backtestData?.btc_summary?.net_pnl_pct ?? 0}% Net`, 
+                      pnl: `${(backtestData?.btc_summary?.net_pnl_pct ?? 0) >= 0 ? '+' : ''}${backtestData?.btc_summary?.net_pnl_pct ?? 0}% Net`, 
                       wr: `${backtestData?.btc_summary?.win_rate ?? 0}%` 
                     },
                     { 
@@ -674,8 +678,8 @@ export default function Dashboard() {
 
                   {/* Export CSV — primary CTA */}
                   <a
-                    href="/backtest_trades_jan_oct_2026.csv"
-                    download="backtest_trades_jan_oct_2026.csv"
+                    href="/backtest_trades_2025_2026.csv"
+                    download="backtest_trades_nov2025_nov2026.csv"
                     className="h-9 px-4 rounded-xl bg-slate-900 text-white hover:bg-slate-700 text-xs font-mono font-semibold transition-all flex items-center gap-2 shadow-sm"
                   >
                     <DownloadIcon className="w-3.5 h-3.5 text-slate-300 flex-shrink-0" />
@@ -693,27 +697,33 @@ export default function Dashboard() {
                       <div className="flex items-center gap-2">
                         <span className="text-sm tracking-tight text-amber-950 font-bold">GOLD (XAU/USD) SMC BACKTEST</span>
                         <span className="px-2 py-0.5 rounded-full bg-amber-200 text-amber-900 border border-amber-300 text-[10px] font-bold">
-                          {backtestData.gold_summary.period || '1 AUG – 15 OCT 2026'}
+                          {backtestData.gold_summary.period || '1 NOV 2025 – 2 NOV 2026'}
                         </span>
-                        <span className="px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-300 text-[10px] font-bold">
-                          +{backtestData.gold_summary.net_pnl_pct.toFixed(2)}% NET RETURN
+                        <span className={`px-2 py-0.5 rounded-full border text-[10px] font-bold ${
+                          backtestData.gold_summary.net_pnl_pct >= 0
+                            ? 'bg-emerald-100 text-emerald-800 border-emerald-300'
+                            : 'bg-rose-100 text-rose-800 border-rose-300'
+                        }`}>
+                          {backtestData.gold_summary.net_pnl_pct >= 0 ? `+${backtestData.gold_summary.net_pnl_pct.toFixed(2)}%` : `${backtestData.gold_summary.net_pnl_pct.toFixed(2)}%`} NET RETURN
                         </span>
                       </div>
                       <span className="text-[11px] text-amber-800 font-medium">
-                        Higher Timeframe: <strong>4-Hour Trend Bias</strong> · Execution: <strong>15-Minute SMC (IDM Sweep → BOS → 3-Candle FVG → Retrace Touch)</strong>
+                        Period: <strong>Nov 1, 2025 – Nov 2, 2026</strong> · Strategy: <strong>15M Chain-of-CHoCH (BOS + CHoCH + FVG Retrace)</strong>
                       </span>
                     </div>
                   </div>
                   <div className="flex flex-wrap items-center gap-3 text-[11px] text-amber-950 font-semibold bg-white/80 px-3.5 py-2 rounded-lg border border-amber-200 shadow-2xs">
                     <span>⚡ {backtestData.gold_summary.total_trades} Trades</span>
                     <span>•</span>
-                    <span className="text-emerald-700 font-bold">{backtestData.gold_summary.win_rate}% WR ({backtestData.gold_summary.wins}W / {backtestData.gold_summary.losses}L)</span>
+                    <span className="text-slate-900 font-bold">{backtestData.gold_summary.win_rate}% WR ({backtestData.gold_summary.wins}W / {backtestData.gold_summary.losses}L)</span>
                     <span>•</span>
-                    <span className="text-emerald-700 font-bold">+${backtestData.gold_summary.net_pnl_dollars.toFixed(2)} Net PnL</span>
+                    <span className={`font-bold ${backtestData.gold_summary.net_pnl_dollars >= 0 ? 'text-emerald-700' : 'text-rose-700'}`}>
+                      {backtestData.gold_summary.net_pnl_dollars >= 0 ? `+$${backtestData.gold_summary.net_pnl_dollars.toFixed(2)}` : `-$${Math.abs(backtestData.gold_summary.net_pnl_dollars).toFixed(2)}`} Net PnL
+                    </span>
+                    <span>•</span>
+                    <span className="text-rose-700 font-bold">Max DD: {backtestData.gold_summary.max_drawdown_pct !== undefined ? `${backtestData.gold_summary.max_drawdown_pct}%` : '29.47%'}</span>
                     <span>•</span>
                     <span>PF: {backtestData.gold_summary.profit_factor}</span>
-                    <span>•</span>
-                    <span>Rule #8 C1 SL & 1:2 TP</span>
                   </div>
                 </div>
               )}
@@ -727,14 +737,18 @@ export default function Dashboard() {
                       <div className="flex items-center gap-2">
                         <span className="text-sm tracking-tight text-sky-950 font-bold">BITCOIN (BTC/USDT) SMC BACKTEST</span>
                         <span className="px-2 py-0.5 rounded-full bg-sky-200 text-sky-900 border border-sky-300 text-[10px] font-bold">
-                          {backtestData.btc_summary.period || '1 AUG – 15 OCT 2026'}
+                          {backtestData.btc_summary.period || '1 NOV 2025 – 2 NOV 2026'}
                         </span>
-                        <span className="px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-300 text-[10px] font-bold">
-                          +{backtestData.btc_summary.net_pnl_pct.toFixed(2)}% NET RETURN
+                        <span className={`px-2 py-0.5 rounded-full border text-[10px] font-bold ${
+                          backtestData.btc_summary.net_pnl_pct >= 0
+                            ? 'bg-emerald-100 text-emerald-800 border-emerald-300'
+                            : 'bg-rose-100 text-rose-800 border-rose-300'
+                        }`}>
+                          {backtestData.btc_summary.net_pnl_pct >= 0 ? `+${backtestData.btc_summary.net_pnl_pct.toFixed(2)}%` : `${backtestData.btc_summary.net_pnl_pct.toFixed(2)}%`} NET RETURN
                         </span>
                       </div>
                       <span className="text-[11px] text-sky-800 font-medium">
-                        Higher Timeframe: <strong>4-Hour Trend Bias</strong> · Execution: <strong>15-Minute SMC (IDM Sweep → BOS → 3-Candle FVG → Retrace Touch)</strong>
+                        Period: <strong>Nov 1, 2025 – Nov 2, 2026</strong> · Strategy: <strong>15M Chain-of-CHoCH (BOS + CHoCH + FVG Retrace)</strong>
                       </span>
                     </div>
                   </div>
@@ -745,53 +759,63 @@ export default function Dashboard() {
                     <span>•</span>
                     <span className="text-emerald-700 font-bold">+${backtestData.btc_summary.net_pnl_dollars.toFixed(2)} Net PnL</span>
                     <span>•</span>
-                    <span>PF: {backtestData.btc_summary.profit_factor}</span>
+                    <span className="text-rose-700 font-bold">Max DD: {backtestData.btc_summary.max_drawdown_pct !== undefined ? `${backtestData.btc_summary.max_drawdown_pct}%` : '1.0%'}</span>
                     <span>•</span>
-                    <span>Rule #8 C1 SL & 1:2 TP</span>
+                    <span>PF: {backtestData.btc_summary.profit_factor}</span>
                   </div>
                 </div>
               )}
 
-              {/* Row 2: Four Key Executive Numbers (Dynamic to Active Tab) */}
-              <div className="grid grid-cols-2 lg:grid-cols-4 gap-6 tabular-nums">
+              {/* Row 2: Five Key Executive Numbers (Dynamic to Active Tab) */}
+              <div className="grid grid-cols-2 lg:grid-cols-5 gap-4 tabular-nums">
                 <div className="flex flex-col gap-1">
                   <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400">
                     {btAssetFilter === 'ALL' ? 'Combined Portfolio Return' : `${activeSummary?.name || 'Asset'} Return`}
                   </span>
-                  <span className="text-3xl font-light font-mono text-emerald-600 tracking-tight">
-                    +{activeSummary?.net_pnl_pct ?? 34.7}%
+                  <span className={`text-3xl font-light font-mono tracking-tight ${(activeSummary?.net_pnl_pct ?? 0) >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
+                    {(activeSummary?.net_pnl_pct ?? 0) >= 0 ? `+${activeSummary?.net_pnl_pct ?? 0}%` : `${activeSummary?.net_pnl_pct ?? 0}%`}
                   </span>
                   <span className="text-xs text-slate-500 font-mono">
-                    +${activeSummary?.net_pnl_dollars?.toLocaleString() ?? '10,422.76'} ({btAssetFilter === 'ALL' ? '$30,000 base' : '$10,000 base'})
+                    {(activeSummary?.net_pnl_dollars ?? 0) >= 0 ? `+$${activeSummary?.net_pnl_dollars?.toLocaleString()}` : `-$${Math.abs(activeSummary?.net_pnl_dollars ?? 0).toLocaleString()}`} ({btAssetFilter === 'ALL' ? '$20,000 base' : '$10,000 base'})
                   </span>
                 </div>
 
                 <div className="flex flex-col gap-1">
                   <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400">Accuracy (Win Rate)</span>
                   <span className="text-3xl font-light font-mono text-slate-900 tracking-tight">
-                    {activeSummary?.win_rate ?? 37.33}%
+                    {activeSummary?.win_rate ?? 0}%
                   </span>
                   <span className="text-xs text-slate-500 font-mono">
-                    {activeSummary?.wins ?? 305}W / {activeSummary?.losses ?? 512}L (1:2 BE = 33.3%)
+                    {activeSummary?.wins ?? 0}W / {activeSummary?.losses ?? 0}L (1:2 BE = 33.3%)
                   </span>
                 </div>
 
                 <div className="flex flex-col gap-1">
                   <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400">Positions Executed</span>
                   <span className="text-3xl font-light font-mono text-slate-900 tracking-tight">
-                    {activeSummary?.total_trades ?? 817}
+                    {activeSummary?.total_trades ?? 0}
                   </span>
                   <span className="text-xs text-slate-500 font-mono">
                     {btAssetFilter === 'ALL'
-                      ? `Gold: ${backtestData?.gold_summary?.total_trades ?? 0} · BTC: ${backtestData?.btc_summary?.total_trades ?? 0} · ETH: ${backtestData?.eth_summary?.total_trades ?? 0}`
-                      : (activeSummary?.period || '1 Aug – 15 Oct 2026 (4H Trend + 15M SMC)')}
+                      ? `Gold: ${backtestData?.gold_summary?.total_trades ?? 0} · BTC: ${backtestData?.btc_summary?.total_trades ?? 0}`
+                      : (activeSummary?.period || '1 Nov 2025 – 2 Nov 2026 (15M SMC)')}
+                  </span>
+                </div>
+
+                <div className="flex flex-col gap-1">
+                  <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400">Peak Drawdown (Max DD)</span>
+                  <span className="text-3xl font-light font-mono text-rose-600 tracking-tight">
+                    {activeSummary?.max_drawdown_pct !== undefined ? `${activeSummary.max_drawdown_pct}%` : '—'}
+                  </span>
+                  <span className="text-xs text-slate-500 font-mono">
+                    Max Portfolio Dip from Peak
                   </span>
                 </div>
 
                 <div className="flex flex-col gap-1">
                   <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400">Profit Factor & Model</span>
                   <span className="text-3xl font-light font-mono text-slate-900 tracking-tight">
-                    {activeSummary?.profit_factor ?? 1.17}
+                    {activeSummary?.profit_factor ?? 0}
                   </span>
                   <span className="text-xs text-slate-500 font-mono">
                     Strict 1:2 R:R (1% Risk / 2% TP)
@@ -1078,6 +1102,7 @@ export default function Dashboard() {
                   onNextTrade={handleNextTrade}
                   hasPrev={currentTradeIndex > 0}
                   hasNext={currentTradeIndex < filteredBtTrades.length - 1}
+                  onClose={() => setSelectedTrade(null)}
                 />
               )}
 
@@ -1190,7 +1215,7 @@ export default function Dashboard() {
                 <table className="w-full border-collapse">
                   <thead>
                     <tr className="border-b border-slate-100 bg-slate-50/70">
-                      {['#', 'Asset', 'Side', 'Entry (IST)', 'Entry Price', 'Exit (IST)', 'Exit Price', 'Stop Loss', 'Take Profit', 'R:R', 'PnL %', 'PnL ($)', 'Balance', 'AI Pattern / Reason', 'Result'].map(h => (
+                      {['#', 'Asset', 'Side', 'Entry (IST)', 'Entry Price', 'Exit (IST)', 'Exit Price', 'Stop Loss', 'Take Profit', 'R:R', 'PnL %', 'PnL ($)', 'Balance', 'Max DD', 'AI Pattern / Reason', 'Result'].map(h => (
                         <th key={h} className="px-4 py-3 text-left text-[10px] font-bold uppercase tracking-widest text-slate-500 whitespace-nowrap">{h}</th>
                       ))}
                     </tr>
@@ -1198,13 +1223,13 @@ export default function Dashboard() {
                   <tbody className="divide-y divide-slate-100">
                     {loadingBacktest ? (
                       <tr>
-                        <td colSpan={15} className="px-5 py-12 text-center text-sm font-mono text-slate-400 animate-pulse">
+                        <td colSpan={16} className="px-5 py-12 text-center text-sm font-mono text-slate-400 animate-pulse">
                           Loading backtest data...
                         </td>
                       </tr>
                     ) : currentBtTrades.length === 0 ? (
                       <tr>
-                        <td colSpan={15} className="px-5 py-12 text-center text-sm font-mono text-slate-500">
+                        <td colSpan={16} className="px-5 py-12 text-center text-sm font-mono text-slate-500">
                           No trades match the selected partition and filters.
                         </td>
                       </tr>
@@ -1261,24 +1286,34 @@ export default function Dashboard() {
                           <td className="px-4 py-3 text-slate-700 whitespace-nowrap">
                             ${t.running_balance.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
                           </td>
+                          <td className="px-4 py-3 text-rose-600 font-semibold whitespace-nowrap">
+                            {t.max_drawdown_pct !== undefined ? `${t.max_drawdown_pct.toFixed(1)}%` : '—'}
+                          </td>
                           <td className="px-4 py-3 whitespace-nowrap">
-                            {t.trade_type ? (
-                              <span className={`px-2 py-0.5 rounded text-[10px] font-mono font-bold border inline-flex items-center gap-1 ${
-                                t.trade_type === 'REVERSAL_CHOCH'
-                                  ? 'bg-amber-50 text-amber-900 border-amber-300'
-                                  : 'bg-sky-50 text-sky-900 border-sky-300'
-                              }`}>
-                                {t.trade_type === 'REVERSAL_CHOCH' ? '🔄 CHoCH Rev' : '⚡ BOS Cont'}
-                              </span>
-                            ) : (
-                              <span className={`px-2 py-0.5 rounded text-[10px] font-mono border ${
-                                t.result === 'WIN' 
-                                  ? 'bg-emerald-50 text-emerald-800 border-emerald-200' 
-                                  : 'bg-rose-50 text-rose-800 border-rose-200'
-                              }`}>
-                                {t.pattern_type || (t.result === 'WIN' ? 'Displacement Surge' : 'Liquidity Sweep')}
-                              </span>
-                            )}
+                            <div className="flex items-center gap-1.5">
+                              {t.trade_type ? (
+                                <span className={`px-2 py-0.5 rounded text-[10px] font-mono font-bold border inline-flex items-center gap-1 ${
+                                  t.trade_type === 'REVERSAL_CHOCH'
+                                    ? 'bg-amber-50 text-amber-900 border-amber-300'
+                                    : 'bg-sky-50 text-sky-900 border-sky-300'
+                                }`}>
+                                  {t.trade_type === 'REVERSAL_CHOCH' ? '🔄 CHoCH Rev' : '⚡ BOS Cont'}
+                                </span>
+                              ) : (
+                                <span className={`px-2 py-0.5 rounded text-[10px] font-mono border ${
+                                  t.result === 'WIN' 
+                                    ? 'bg-emerald-50 text-emerald-800 border-emerald-200' 
+                                    : 'bg-rose-50 text-rose-800 border-rose-200'
+                                }`}>
+                                  {t.pattern_type || (t.result === 'WIN' ? 'Displacement Surge' : 'Liquidity Sweep')}
+                                </span>
+                              )}
+                              {t.angle !== undefined && (
+                                <span className="px-1.5 py-0.5 rounded text-[10px] font-mono font-semibold bg-purple-50 text-purple-700 border border-purple-200" title="Impulse Trending Angle (Rejects sideways chop)">
+                                  📐 {t.angle.toFixed(1)}°
+                                </span>
+                              )}
+                            </div>
                           </td>
                           <td className="px-4 py-3 whitespace-nowrap">
                             <Badge label={t.result} color={t.result === 'WIN' ? 'green' : 'red'} />

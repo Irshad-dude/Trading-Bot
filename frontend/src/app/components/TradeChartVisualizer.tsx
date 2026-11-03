@@ -51,6 +51,7 @@ export interface BacktestTradeItem {
   why_outcome?: string;
   lesson_learned?: string;
   adaptation_rule?: string;
+  angle?: number;
 }
 
 export interface TradeCandleData {
@@ -83,6 +84,7 @@ export interface TradeCandleData {
   exit_price?: number;
   direction?: string;
   result?: string;
+  angle?: number;
   candles: [string, number, number, number, number][]; // [time, open, high, low, close]
 }
 
@@ -526,6 +528,13 @@ export default function TradeChartVisualizer({
               }`}
             >
               <span>🧭 4H: {trade['4h_trend'] || trade.four_h_trend}</span>
+            </span>
+          )}
+
+          {/* Impulse Trending Angle Badge (40°-45° Trending Market) */}
+          {(trade.angle || candleData?.angle) && (
+            <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider border flex items-center gap-1 font-mono bg-purple-50 text-purple-700 border-purple-200 shadow-2xs">
+              <span>📐 Angle: {trade.angle || candleData?.angle}° (Trending Impulse)</span>
             </span>
           )}
         </div>
