@@ -12,6 +12,7 @@ import uvicorn
 from backend.data.fetcher import DataFetcher
 from backend.strategy.smc import SMCEngine
 from backend.ai.analyst import AIAnalyst
+from backend.ai.graph_rag import TradeKnowledgeGraph
 from backend.risk.manager import RiskManager
 from backend.execution.broker import BrokerAdapter
 from backend.state import bot, TradeRecord, ScanResult
@@ -32,6 +33,7 @@ app.add_middleware(
 fetcher = DataFetcher()
 smc     = SMCEngine()
 ai      = AIAnalyst()
+kg      = ai.kg
 risk    = RiskManager()
 broker  = BrokerAdapter()
 
@@ -305,6 +307,52 @@ async def get_backtest_results():
         with open(json_path, "r") as f:
             return json.load(f)
     return {"summary": None, "trades": []}
+
+
+# ─── Graph RAG Endpoints ─────────────────────────────────────────────────────
+
+@app.get("/api/graph/network")
+async def get_graph_network():
+    """Returns the full knowledge graph nodes, links, winning DNA, and high-win clusters."""
+    return kg.export_graph_for_frontend()
+
+
+@app.get("/api/graph/winning-dna")
+async def get_winning_dna():
+    """Returns the Winning DNA rules, cluster win rates, and losing trap filters."""
+    return {
+        "winning_dna": kg.winning_dna,
+        "high_win_clusters": [c for c in kg.clusters if c["status"] == "HIGH_WIN_CLUSTER"],
+        "losing_traps": kg.losing_traps,
+        "all_clusters": kg.clusters,
+    }
+
+
+class GraphQueryRequest(BaseModel):
+    symbol: str
+    direction: str
+    angle: Optional[float] = 42.0
+    session_name: Optional[str] = "London / New York Overlap (Peak Volatility)"
+    setup_reason: Optional[str] = "Chain-of-CHoCH: CONTINUATION_BOS (LONG) -> 15M FVG Retrace Touch"
+
+
+@app.post("/api/graph/query")
+async def query_graph(req: GraphQueryRequest):
+    """Retrieves nearest neighbor trades and calculates cluster win rate."""
+    candidate = {
+        "symbol": req.symbol,
+        "direction": req.direction,
+        "angle": req.angle,
+        "session_name": req.session_name,
+        "setup_reason": req.setup_reason,
+    }
+    retrieval = kg.retrieve_similar_trades(candidate, top_k=6)
+    reasoning_prompt = kg.generate_rag_reasoning_prompt(candidate)
+    return {
+        "query": candidate,
+        "retrieval": retrieval,
+        "rag_prompt": reasoning_prompt,
+    }
 
 
 # ─── Startup ──────────────────────────────────────────────────────────────────

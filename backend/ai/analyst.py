@@ -3,6 +3,7 @@ import os
 from loguru import logger
 from typing import Dict
 from backend import config
+from backend.ai.graph_rag import TradeKnowledgeGraph
 
 try:
     from langchain_google_genai import ChatGoogleGenerativeAI
@@ -13,12 +14,14 @@ except ImportError:
 
 class AIAnalyst:
     """
-    Uses Gemini to evaluate SMC trade setups before execution.
-    If no API key is set OR if Gemini errors, auto-approves all valid setups.
+    Uses Gemini + Graph RAG (Knowledge Graph Memory) to evaluate SMC trade setups.
+    Retrieves structurally similar past trades to identify winning DNA vs losing traps.
+    If no API key is set OR if Gemini errors, leverages deterministic Graph RAG rules.
     """
 
     def __init__(self):
         self.llm = None
+        self.kg = TradeKnowledgeGraph()
         if _GENAI_AVAILABLE and config.GEMINI_API_KEY:
             try:
                 self.llm = ChatGoogleGenerativeAI(
@@ -31,7 +34,7 @@ class AIAnalyst:
             except Exception as e:
                 logger.warning(f"[AI] Gemini init failed: {e}. Running in bypass mode.")
         else:
-            logger.warning("[AI] No Gemini API key. AI validation bypassed.")
+            logger.warning("[AI] No Gemini API key. AI validation powered by deterministic Graph RAG.")
 
     def validate_setup(self, candidate: Dict, trend: str) -> Dict:
         if "TESTING MODE" in candidate.get("setup_reason", ""):
@@ -40,17 +43,38 @@ class AIAnalyst:
             candidate["ai_reasoning"]  = "Auto-approved: Force Testing Mode."
             return candidate
 
+        # ─── Graph RAG Retrieval ──────────────────────────────────────────────
+        rag_retrieval = self.kg.retrieve_similar_trades(candidate, top_k=6)
+        candidate["graph_rag"] = {
+            "neighborhood_win_rate": rag_retrieval["neighborhood_win_rate"],
+            "sample_size": rag_retrieval["neighborhood_sample_size"],
+            "recommendation": rag_retrieval["recommendation"],
+            "top_matches": rag_retrieval["top_matches"][:3],
+        }
+        rag_prompt = self.kg.generate_rag_reasoning_prompt(candidate)
+
         if not self.llm:
-            candidate["ai_decision"]   = "APPROVE"
-            candidate["ai_confidence"] = 75
-            candidate["ai_reasoning"]  = "Auto-approved: No Gemini API key configured."
+            # Deterministic Graph RAG evaluation
+            wr = rag_retrieval["neighborhood_win_rate"]
+            if wr >= 60.0:
+                candidate["ai_decision"]   = "APPROVE"
+                candidate["ai_confidence"] = int(min(95, wr + 15))
+                candidate["ai_reasoning"]  = f"Graph RAG Approved: High-win cluster ({wr}% win rate across {rag_retrieval['neighborhood_sample_size']} twin trades)."
+            elif wr <= 25.0 and rag_retrieval["neighborhood_sample_size"] >= 4:
+                candidate["ai_decision"]   = "REJECT"
+                candidate["ai_confidence"] = 80
+                candidate["ai_reasoning"]  = f"Graph RAG Filter: Low-win trap detected ({wr}% win rate across similar trades; e.g. London open fakeout / late NY chop)."
+            else:
+                candidate["ai_decision"]   = "APPROVE"
+                candidate["ai_confidence"] = 75
+                candidate["ai_reasoning"]  = f"Graph RAG Approved: Balanced structural setup ({wr}% cluster win rate)."
             return candidate
 
         rr = abs(candidate["take_profit"] - candidate["entry_price"]) / max(
             abs(candidate["stop_loss"] - candidate["entry_price"]), 0.0001
         )
         prompt = (
-            f"You are a senior SMC quantitative analyst. Evaluate this trade strictly.\n\n"
+            f"You are a senior SMC quantitative analyst. Evaluate this trade strictly using Knowledge Graph memory.\n\n"
             f"Symbol: {candidate['symbol']}\n"
             f"Direction: {candidate['direction']}\n"
             f"4H Trend: {trend}\n"
@@ -60,10 +84,11 @@ class AIAnalyst:
             f"Take Profit: {candidate['take_profit']}\n"
             f"ATR: {candidate.get('atr', 'N/A')}\n"
             f"Risk/Reward: {rr:.2f}\n\n"
+            f"{rag_prompt}\n"
             f"Rules:\n"
             f"- APPROVE only if direction aligns with 4H trend\n"
             f"- APPROVE only if RR >= 1.5\n"
-            f"- REJECT if this looks like a fakeout or news trap\n\n"
+            f"- REJECT if this looks like a fakeout, news trap, or low-win historical cluster (<30% WR)\n\n"
             f"Respond ONLY in this exact JSON, no markdown:\n"
             f'{{\"decision\": \"APPROVE\" or \"REJECT\", \"confidence\": 0-100, \"reasoning\": \"one concise sentence\"}}'
         )
@@ -75,12 +100,12 @@ class AIAnalyst:
             candidate["ai_decision"]   = data.get("decision", "REJECT")
             candidate["ai_confidence"] = int(data.get("confidence", 0))
             candidate["ai_reasoning"]  = data.get("reasoning", "")
-            logger.info(f"[AI] {candidate['symbol']} → {candidate['ai_decision']} ({candidate['ai_confidence']}%): {candidate['ai_reasoning']}")
+            logger.info(f"[AI+GraphRAG] {candidate['symbol']} → {candidate['ai_decision']} ({candidate['ai_confidence']}%): {candidate['ai_reasoning']}")
         except Exception as e:
-            logger.warning(f"[AI] Gemini error (falling back to auto-approve): {e}")
-            # ── CRITICAL FIX: Never hard-reject on API error — fallback to approve ──
-            candidate["ai_decision"]   = "APPROVE"
-            candidate["ai_confidence"] = 72
-            candidate["ai_reasoning"]  = "Auto-approved: Gemini API unavailable, setup passed SMC structural checks."
+            logger.warning(f"[AI] Gemini error (falling back to Graph RAG auto-decision): {e}")
+            wr = rag_retrieval["neighborhood_win_rate"]
+            candidate["ai_decision"]   = "APPROVE" if wr >= 30.0 else "REJECT"
+            candidate["ai_confidence"] = int(max(60, wr))
+            candidate["ai_reasoning"]  = f"Graph RAG fallback: {wr}% historical win rate across similar trades."
 
         return candidate

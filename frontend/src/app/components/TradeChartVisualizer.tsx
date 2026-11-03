@@ -96,6 +96,7 @@ interface TradeChartVisualizerProps {
   hasPrev?: boolean;
   hasNext?: boolean;
   onClose?: () => void;
+  onViewInGraph?: (tradeNum: number) => void;
 }
 
 export default function TradeChartVisualizer({
@@ -106,6 +107,7 @@ export default function TradeChartVisualizer({
   hasPrev = true,
   hasNext = true,
   onClose,
+  onViewInGraph,
 }: TradeChartVisualizerProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [hoverIdx, setHoverIdx] = useState<number | null>(null);
@@ -582,6 +584,17 @@ export default function TradeChartVisualizer({
             <span>Next</span>
             <ChevronRightIcon className="w-3.5 h-3.5 flex-shrink-0" />
           </button>
+
+          {onViewInGraph && (
+            <button
+              onClick={() => onViewInGraph(trade.trade_num)}
+              className="px-2.5 py-1.5 rounded-xl bg-purple-50 hover:bg-purple-100 text-purple-700 border border-purple-200 text-xs font-semibold flex items-center gap-1.5 transition-colors shadow-2xs"
+              title="Inspect trade in Trade Brain (Graph RAG)"
+            >
+              <BrainCircuitIcon className="w-3.5 h-3.5 text-purple-600" />
+              <span className="hidden sm:inline">Brain (Graph RAG)</span>
+            </button>
+          )}
 
           {onClose && (
             <button

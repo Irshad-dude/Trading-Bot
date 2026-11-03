@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import TradeChartVisualizer, { TradeCandleData } from './components/TradeChartVisualizer';
+import TradeGraphVisualizer from './components/TradeGraphVisualizer';
 import TradingViewWidget from './components/TradingViewWidget';
 import {
   ActivityIcon,
@@ -271,7 +272,8 @@ function Badge({ label, color }: { label: string; color: 'green' | 'red' | 'cyan
 // ─── Main Dashboard ───────────────────────────────────────────────────────────
 export default function Dashboard() {
   const { status, connected, sendControl, sendManualTrade, cancelOrder } = useBackend();
-  const [activeTab, setActiveTab] = useState<'scanner' | 'open_orders' | 'trades' | 'backtest'>('backtest');
+  const [activeTab, setActiveTab] = useState<'scanner' | 'open_orders' | 'trades' | 'backtest' | 'graph_rag'>('backtest');
+  const [targetGraphTradeNum, setTargetGraphTradeNum] = useState<number | undefined>(undefined);
   const [tradeToast, setTradeToast] = useState<string | null>(null);
   const [utcTime, setUtcTime] = useState('');
 
@@ -507,14 +509,15 @@ export default function Dashboard() {
         <nav className="flex bg-slate-100 p-1 rounded-xl border border-slate-200 gap-0.5">
           {[
             { key: 'backtest', label: `Backtest (${backtestData?.trades?.length ?? '...'})` },
+            { key: 'graph_rag', label: '🧠 Trade Brain (Graph RAG)' },
             { key: 'scanner', label: 'Scanner' },
             { key: 'open_orders', label: `Orders (${status?.open_orders?.length ?? 0})` },
             { key: 'trades', label: 'Ledger' },
           ].map(tab => (
             <button
               key={tab.key}
-              onClick={() => setActiveTab(tab.key as 'scanner' | 'open_orders' | 'trades' | 'backtest')}
-              className={`h-8 px-4 rounded-lg text-xs font-semibold transition-all whitespace-nowrap ${
+              onClick={() => setActiveTab(tab.key as any)}
+              className={`h-8 px-3.5 rounded-lg text-xs font-semibold transition-all whitespace-nowrap ${
                 activeTab === tab.key
                   ? 'bg-white text-slate-900 shadow-sm font-bold border border-slate-200/80'
                   : 'text-slate-500 hover:text-slate-800 hover:bg-white/60'
@@ -1103,6 +1106,11 @@ export default function Dashboard() {
                   hasPrev={currentTradeIndex > 0}
                   hasNext={currentTradeIndex < filteredBtTrades.length - 1}
                   onClose={() => setSelectedTrade(null)}
+                  onViewInGraph={(tradeNum) => {
+                    setTargetGraphTradeNum(tradeNum);
+                    setActiveTab('graph_rag');
+                    window.scrollTo({ top: 0, behavior: 'smooth' });
+                  }}
                 />
               )}
 
@@ -1215,7 +1223,7 @@ export default function Dashboard() {
                 <table className="w-full border-collapse">
                   <thead>
                     <tr className="border-b border-slate-100 bg-slate-50/70">
-                      {['#', 'Asset', 'Side', 'Entry (IST)', 'Entry Price', 'Exit (IST)', 'Exit Price', 'Stop Loss', 'Take Profit', 'R:R', 'PnL %', 'PnL ($)', 'Balance', 'Max DD', 'AI Pattern / Reason', 'Result'].map(h => (
+                      {['#', 'Asset', 'Side', 'Entry (IST)', 'Entry Price', 'Exit (IST)', 'Exit Price', 'Stop Loss', 'Take Profit', 'R:R', 'PnL %', 'PnL ($)', 'Balance', 'Max DD', 'AI Pattern / Reason', 'Result', 'Brain'].map(h => (
                         <th key={h} className="px-4 py-3 text-left text-[10px] font-bold uppercase tracking-widest text-slate-500 whitespace-nowrap">{h}</th>
                       ))}
                     </tr>
@@ -1318,6 +1326,20 @@ export default function Dashboard() {
                           <td className="px-4 py-3 whitespace-nowrap">
                             <Badge label={t.result} color={t.result === 'WIN' ? 'green' : 'red'} />
                           </td>
+                          <td className="px-4 py-3 whitespace-nowrap">
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setTargetGraphTradeNum(t.trade_num);
+                                setActiveTab('graph_rag');
+                                window.scrollTo({ top: 0, behavior: 'smooth' });
+                              }}
+                              className="px-2 py-1 rounded-md text-[10px] font-semibold bg-cyan-50 hover:bg-cyan-100 text-cyan-800 border border-cyan-200 transition flex items-center gap-1 shadow-2xs"
+                              title="Inspect Trade in Knowledge Graph (Trade Brain)"
+                            >
+                              <span>🧠 Graph</span>
+                            </button>
+                          </td>
                         </tr>
                       );
                     })
@@ -1361,6 +1383,28 @@ export default function Dashboard() {
             </div>
 
           </div>
+        )}
+
+        {/* ══════════════════════════════════════════════════════════════════
+            TAB: TRADE BRAIN (GRAPH RAG)
+            ══════════════════════════════════════════════════════════════════ */}
+        {activeTab === 'graph_rag' && (
+          <TradeGraphVisualizer
+            initialSelectedTradeNum={targetGraphTradeNum}
+            onNavigateToTrade={(tradeNum, symbol) => {
+              if (backtestData?.trades) {
+                const target = backtestData.trades.find(
+                  (t) => t.trade_num === tradeNum && t.symbol === symbol
+                );
+                if (target) {
+                  setSelectedTrade(target);
+                  setActiveTab('backtest');
+                  const el = document.getElementById('chart-visualizer-section');
+                  if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                }
+              }
+            }}
+          />
         )}
 
         {/* ══════════════════════════════════════════════════════════════════
