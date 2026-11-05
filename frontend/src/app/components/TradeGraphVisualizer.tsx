@@ -13,15 +13,54 @@ import {
   ChevronRightIcon
 } from './Icons';
 
+export interface CandidateSetupData {
+  symbol: string;
+  direction: 'LONG' | 'SHORT';
+  angle?: number;
+  session_name?: string;
+  setup_reason?: string;
+  entry_price?: number;
+  stop_loss?: number;
+  take_profit?: number;
+  ai_decision?: string;
+  ai_confidence?: number;
+  timestamp?: string;
+  is_live_candidate?: boolean;
+  graph_rag?: {
+    neighborhood_win_rate: number;
+    sample_size: number;
+    recommendation: string;
+    avg_pnl_dollar?: number;
+    total_pnl_dollar?: number;
+    cluster_classification?: string;
+    insufficient_data?: boolean;
+    top_matches: Array<{
+      trade_num: number;
+      symbol: string;
+      direction: string;
+      result: string;
+      pnl_dollar: number;
+      pnl_percent?: number;
+      rr_ratio?: string;
+      similarity_score: number;
+      common_features: string[];
+      cluster_status?: string;
+      risk_tier?: string;
+    }>;
+  };
+}
+
 export interface GraphNode {
   id: string;
-  node_type: 'trade' | 'feature';
+  node_type: 'trade' | 'feature' | 'candidate';
   trade_num?: number;
   symbol?: string;
   direction?: 'LONG' | 'SHORT';
   trade_type?: string;
   entry_price?: number;
   exit_price?: number;
+  stop_loss?: number;
+  take_profit?: number;
   result?: 'WIN' | 'LOSS';
   pnl_dollar?: number;
   pnl_percent?: number;
@@ -44,6 +83,11 @@ export interface GraphNode {
   neighborhood_win_rate?: number;
   neural_explanation?: string;
   category?: string;
+  isHighWinCluster?: boolean;
+  isLosingTrap?: boolean;
+  clusterName?: string;
+  risk_tier?: string;
+  candidate_data?: CandidateSetupData;
   
   // Simulation coordinates
   x?: number;
@@ -92,14 +136,18 @@ export interface HighWinCluster {
   status: string;
 }
 
-interface TradeGraphVisualizerProps {
+export interface TradeGraphVisualizerProps {
   onNavigateToTrade?: (tradeNum: number, symbol: string) => void;
   initialSelectedTradeNum?: number;
+  candidateSetup?: CandidateSetupData | null;
+  onRefreshGraph?: () => void;
 }
 
 export default function TradeGraphVisualizer({
   onNavigateToTrade,
-  initialSelectedTradeNum
+  initialSelectedTradeNum,
+  candidateSetup,
+  onRefreshGraph,
 }: TradeGraphVisualizerProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
 
@@ -117,7 +165,7 @@ export default function TradeGraphVisualizer({
   const [hoveredNode, setHoveredNode] = useState<GraphNode | null>(null);
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [filterType, setFilterType] = useState<
-    'all' | 'wins_only' | 'high_win_clusters' | 'traps_only' | 'gold_only' | 'btc_only' | 'golden_angle'
+    'all' | 'wins_only' | 'high_win_clusters' | 'traps_only' | 'gold_only' | 'btc_only' | 'golden_angle' | 'candidate_neighborhood'
   >('all');
   const [zoomTransform, setZoomTransform] = useState<{ x: number; y: number; scale: number }>({
     x: 0,
@@ -148,108 +196,169 @@ export default function TradeGraphVisualizer({
   const pulseOffset = useRef<number>(0);
 
   // 1. Fetch Knowledge Graph JSON & Cluster-Aware Layout Initialization
-  useEffect(() => {
-    let isMounted = true;
-    async function loadGraphData() {
-      try {
-        setIsLoading(true);
-        // Attempt to fetch from public directory first, fallback to API
-        let response = await fetch('/trade_knowledge_graph.json');
-        if (!response.ok) {
-          response = await fetch('/api/graph/network');
-        }
-        if (!response.ok) {
-          throw new Error(`Failed to load graph data (${response.status})`);
-        }
-        const data = await response.json();
-        if (!isMounted) return;
-
-        const rawNodes: GraphNode[] = data.nodes || [];
-        const rawLinks: GraphLink[] = data.links || [];
-
-        // Structured Concept Anchor Coordinates
-        const conceptAnchors: Record<string, { x: number; y: number }> = {
-          'Session: London/NY Overlap (Peak Volume)': { x: 0, y: -280 },
-          'Session: London Morning': { x: 300, y: -70 },
-          'Session: Asian Liquidity': { x: 120, y: 280 },
-          'Session: NY Afternoon': { x: -300, y: 70 },
-          'Session: Global Twilight': { x: -180, y: -230 },
-          'Angle: 40°-45° (Golden Impulse)': { x: 0, y: -50 },
-          'Angle: 35°-40° (Trending Base)': { x: -110, y: 90 },
-          'Angle: 45°-50° (Aggressive Expansion)': { x: 110, y: 90 },
-          'Angle: 50°+ (Parabolic Momentum)': { x: 0, y: 190 },
-          'Asset: XAUUSD': { x: -210, y: -90 },
-          'Asset: BTCUSDT': { x: 210, y: -90 },
-          'Pattern: CONTINUATION_BOS': { x: -80, y: -150 },
-          'Pattern: REVERSAL_CHOCH': { x: 80, y: -150 },
-          'Direction: LONG': { x: -120, y: 0 },
-          'Direction: SHORT': { x: 120, y: 0 },
-        };
-
-        // Counters for trade dispersion around concepts
-        const sessionCounters: Record<string, number> = {};
-
-        rawNodes.forEach((n) => {
-          if (n.node_type === 'feature') {
-            n.radius = 24;
-            const anchor = conceptAnchors[n.id];
-            if (anchor) {
-              n.x = anchor.x;
-              n.y = anchor.y;
-            } else {
-              n.x = (Math.random() - 0.5) * 350;
-              n.y = (Math.random() - 0.5) * 350;
-            }
-          } else {
-            n.radius = n.result === 'WIN' ? 14 : 11;
-            // Find parent session feature
-            const sessFeat = n.features?.find((f) => f.startsWith('Session:')) || 'Session: London Morning';
-            const anchor = conceptAnchors[sessFeat] || { x: 0, y: 0 };
-            
-            const count = (sessionCounters[sessFeat] || 0);
-            sessionCounters[sessFeat] = count + 1;
-            
-            const clusterAngle = (count * 0.45) % (2 * Math.PI);
-            const clusterRadius = 65 + (count % 4) * 28 + (n.result === 'WIN' ? 0 : 20);
-            
-            n.x = anchor.x + Math.cos(clusterAngle) * clusterRadius;
-            n.y = anchor.y + Math.sin(clusterAngle) * clusterRadius;
-          }
-          n.vx = 0;
-          n.vy = 0;
-        });
-
-        setNodes(rawNodes);
-        setLinks(rawLinks);
-        alphaRef.current = 1.0; // Reset simulation cooling
-
-        if (data.graph_summary) {
-          setWinningDNA(data.graph_summary.winning_dna);
-          setHighWinClusters(data.graph_summary.high_win_clusters || []);
-          setLosingTraps(data.graph_summary.losing_traps || []);
-        }
-
-        // Check if an initial trade is requested
-        if (initialSelectedTradeNum) {
-          const match = rawNodes.find(
-            (n) => n.node_type === 'trade' && n.trade_num === initialSelectedTradeNum
-          );
-          if (match) setSelectedNode(match);
-        }
-
-        setIsLoading(false);
-      } catch (err: any) {
-        if (!isMounted) return;
-        setLoadError(err.message || 'Error loading trade knowledge graph');
-        setIsLoading(false);
+  const loadGraphData = useCallback(async () => {
+    try {
+      setIsLoading(true);
+      setLoadError(null);
+      // Attempt to fetch from public directory first, fallback to backend proxy API
+      let response = await fetch('/trade_knowledge_graph.json');
+      if (!response.ok) {
+        response = await fetch('/api/backend/graph/network');
       }
-    }
+      if (!response.ok) {
+        throw new Error(`Failed to load graph data (${response.status})`);
+      }
+      const data = await response.json();
 
+      const rawNodes: GraphNode[] = data.nodes || [];
+      const rawLinks: GraphLink[] = data.links || [];
+
+      // Build cluster membership sets
+      const highWinTrades = new Set<number>();
+      const trapTrades = new Set<number>();
+      const clusterNameMap: Record<number, string> = {};
+
+      (data.graph_summary?.high_win_clusters || []).forEach((c: any) => {
+        (c.trades || []).forEach((tNum: number) => {
+          highWinTrades.add(tNum);
+          if (!clusterNameMap[tNum]) clusterNameMap[tNum] = c.cluster_name;
+        });
+      });
+
+      (data.graph_summary?.losing_traps || []).forEach((c: any) => {
+        (c.trades || []).forEach((tNum: number) => {
+          trapTrades.add(tNum);
+        });
+      });
+
+      // Structured Concept Anchor Coordinates
+      const conceptAnchors: Record<string, { x: number; y: number }> = {
+        'Session: London/NY Overlap (Peak Volume)': { x: 0, y: -280 },
+        'Session: London Morning': { x: 300, y: -70 },
+        'Session: Asian Liquidity': { x: 120, y: 280 },
+        'Session: NY Afternoon': { x: -300, y: 70 },
+        'Session: Global Twilight': { x: -180, y: -230 },
+        'Angle: 40°-45° (Golden Impulse)': { x: 0, y: -50 },
+        'Angle: 35°-40° (Trending Base)': { x: -110, y: 90 },
+        'Angle: 45°-50° (Aggressive Expansion)': { x: 110, y: 90 },
+        'Angle: 50°+ (Parabolic Momentum)': { x: 0, y: 190 },
+        'Asset: XAUUSD': { x: -210, y: -90 },
+        'Asset: BTCUSDT': { x: 210, y: -90 },
+        'Pattern: CONTINUATION_BOS': { x: -80, y: -150 },
+        'Pattern: REVERSAL_CHOCH': { x: 80, y: -150 },
+        'Direction: LONG': { x: -120, y: 0 },
+        'Direction: SHORT': { x: 120, y: 0 },
+      };
+
+      // Counters for trade dispersion around concepts
+      const sessionCounters: Record<string, number> = {};
+
+      rawNodes.forEach((n) => {
+        if (n.node_type === 'feature') {
+          n.radius = 24;
+          const anchor = conceptAnchors[n.id];
+          if (anchor) {
+            n.x = anchor.x;
+            n.y = anchor.y;
+          } else {
+            n.x = (Math.random() - 0.5) * 350;
+            n.y = (Math.random() - 0.5) * 350;
+          }
+        } else {
+          n.radius = n.result === 'WIN' ? 14 : 11;
+          if (n.trade_num !== undefined) {
+            if (highWinTrades.has(n.trade_num)) {
+              n.isHighWinCluster = true;
+              n.clusterName = clusterNameMap[n.trade_num] || 'Winning DNA Cluster';
+            }
+            if (trapTrades.has(n.trade_num)) {
+              n.isLosingTrap = true;
+            }
+          }
+          // Find parent session feature
+          const sessFeat = n.features?.find((f) => f.startsWith('Session:')) || 'Session: London Morning';
+          const anchor = conceptAnchors[sessFeat] || { x: 0, y: 0 };
+          
+          const count = (sessionCounters[sessFeat] || 0);
+          sessionCounters[sessFeat] = count + 1;
+          
+          const clusterAngle = (count * 0.45) % (2 * Math.PI);
+          const clusterRadius = 65 + (count % 4) * 28 + (n.result === 'WIN' ? 0 : 20);
+          
+          n.x = anchor.x + Math.cos(clusterAngle) * clusterRadius;
+          n.y = anchor.y + Math.sin(clusterAngle) * clusterRadius;
+        }
+        n.vx = 0;
+        n.vy = 0;
+      });
+
+      // Inject candidate setup node & links if available
+      if (candidateSetup) {
+        const candId = 'CANDIDATE_SETUP';
+        const candNode: GraphNode = {
+          id: candId,
+          node_type: 'candidate',
+          symbol: candidateSetup.symbol,
+          direction: candidateSetup.direction,
+          angle: candidateSetup.angle || 42.0,
+          session: candidateSetup.session_name || 'London/NY Overlap (Peak Volume)',
+          setup_reason: candidateSetup.setup_reason || 'Chain-of-CHoCH Continuation BOS',
+          entry_price: candidateSetup.entry_price,
+          stop_loss: candidateSetup.stop_loss,
+          take_profit: candidateSetup.take_profit,
+          neighborhood_win_rate: candidateSetup.graph_rag?.neighborhood_win_rate,
+          candidate_data: candidateSetup,
+          radius: 20,
+          x: 0,
+          y: -140,
+          vx: 0,
+          vy: 0,
+          fx: 0,
+          fy: -140,
+        };
+        rawNodes.push(candNode);
+
+        if (candidateSetup.graph_rag?.top_matches) {
+          candidateSetup.graph_rag.top_matches.forEach((m) => {
+            rawLinks.push({
+              source: candId,
+              target: `TRADE_${m.trade_num}_${m.symbol}`,
+              relation: 'CANDIDATE_SIMILARITY',
+              weight: m.similarity_score,
+              shared_features: m.common_features || [],
+            });
+          });
+        }
+      }
+
+      setNodes(rawNodes);
+      setLinks(rawLinks);
+      alphaRef.current = 1.0; // Reset simulation cooling
+
+      if (data.graph_summary) {
+        setWinningDNA(data.graph_summary.winning_dna);
+        setHighWinClusters(data.graph_summary.high_win_clusters || []);
+        setLosingTraps(data.graph_summary.losing_traps || []);
+      }
+
+      // Check if an initial trade is requested
+      if (initialSelectedTradeNum) {
+        const match = rawNodes.find(
+          (n) => n.node_type === 'trade' && n.trade_num === initialSelectedTradeNum
+        );
+        if (match) setSelectedNode(match);
+      }
+
+      setIsLoading(false);
+    } catch (err: any) {
+      setLoadError(err.message || 'Error loading trade knowledge graph');
+      setIsLoading(false);
+    }
+  }, [initialSelectedTradeNum, candidateSetup]);
+
+  useEffect(() => {
     loadGraphData();
-    return () => {
-      isMounted = false;
-    };
-  }, [initialSelectedTradeNum]);
+  }, [loadGraphData]);
 
   // Fast node lookup
   const nodeMap = useMemo(() => {
@@ -258,15 +367,31 @@ export default function TradeGraphVisualizer({
     return map;
   }, [nodes]);
 
-  // Filtered nodes based on filterType
+  // Filtered nodes based on filterType and search query
   const visibleNodeIds = useMemo(() => {
     const ids = new Set<string>();
+    const queryLower = searchQuery.trim().toLowerCase();
 
     nodes.forEach((n) => {
+      if (n.node_type === 'candidate') {
+        ids.add(n.id);
+        return;
+      }
       if (n.node_type === 'feature') {
         // Always show feature/concept neurons to anchor the network
         ids.add(n.id);
         return;
+      }
+
+      // Quick search filter
+      if (queryLower) {
+        const matchesNum = n.trade_num !== undefined && String(n.trade_num).includes(queryLower.replace('#', ''));
+        const matchesSym = n.symbol?.toLowerCase().includes(queryLower);
+        const matchesSess = n.session?.toLowerCase().includes(queryLower);
+        const matchesReason = n.setup_reason?.toLowerCase().includes(queryLower);
+        if (!matchesNum && !matchesSym && !matchesSess && !matchesReason) {
+          return;
+        }
       }
 
       if (filterType === 'all') {
@@ -274,20 +399,30 @@ export default function TradeGraphVisualizer({
       } else if (filterType === 'wins_only') {
         if (n.result === 'WIN') ids.add(n.id);
       } else if (filterType === 'high_win_clusters') {
-        if ((n.neighborhood_win_rate || 0) >= 50) ids.add(n.id);
+        if (n.isHighWinCluster || (n.neighborhood_win_rate || 0) >= 55) ids.add(n.id);
       } else if (filterType === 'traps_only') {
-        if ((n.neighborhood_win_rate || 0) <= 25) ids.add(n.id);
+        if (n.isLosingTrap || (n.neighborhood_win_rate || 0) <= 30) ids.add(n.id);
       } else if (filterType === 'gold_only') {
         if (n.symbol === 'XAUUSD') ids.add(n.id);
       } else if (filterType === 'btc_only') {
         if (n.symbol === 'BTCUSDT') ids.add(n.id);
       } else if (filterType === 'golden_angle') {
         if ((n.angle || 0) >= 40 && (n.angle || 0) <= 45) ids.add(n.id);
+      } else if (filterType === 'candidate_neighborhood') {
+        const isConnectedToCandidate = links.some((l) => {
+          const s = typeof l.source === 'string' ? l.source : l.source.id;
+          const t = typeof l.target === 'string' ? l.target : l.target.id;
+          return (
+            l.relation === 'CANDIDATE_SIMILARITY' &&
+            ((s === 'CANDIDATE_SETUP' && t === n.id) || (t === 'CANDIDATE_SETUP' && s === n.id))
+          );
+        });
+        if (isConnectedToCandidate) ids.add(n.id);
       }
     });
 
     return ids;
-  }, [nodes, filterType]);
+  }, [nodes, links, filterType, searchQuery]);
 
   // Active / connected nodes to selected or hovered node
   const highlightedNodeIds = useMemo(() => {
@@ -296,6 +431,13 @@ export default function TradeGraphVisualizer({
 
     const set = new Set<string>();
     set.add(active.id);
+
+    // If candidate is active, add its matched twin trades
+    if (active.candidate_data?.graph_rag?.top_matches) {
+      active.candidate_data.graph_rag.top_matches.forEach((tw) => {
+        set.add(`TRADE_${tw.trade_num}_${tw.symbol}`);
+      });
+    }
 
     // If it's a trade, add its feature nodes and twin trades
     if (active.features) {
@@ -462,12 +604,37 @@ export default function TradeGraphVisualizer({
         (highlightedNodeIds.has(sNode.id) && highlightedNodeIds.has(tNode.id));
 
       const isSimilarityLink = link.relation === 'SYNAPSE_SIMILARITY';
+      const isCandidateLink = link.relation === 'CANDIDATE_SIMILARITY';
 
       ctx.beginPath();
       ctx.moveTo(sNode.x || 0, sNode.y || 0);
       ctx.lineTo(tNode.x || 0, tNode.y || 0);
 
-      if (isSynapseActive) {
+      if (isCandidateLink) {
+        ctx.strokeStyle = '#06b6d4';
+        ctx.lineWidth = 2.2;
+        ctx.setLineDash([5, 3]);
+        ctx.shadowColor = '#06b6d4';
+        ctx.shadowBlur = 8;
+        ctx.stroke();
+        ctx.setLineDash([]);
+        ctx.shadowBlur = 0;
+
+        // Draw animated pulse along candidate link
+        const sx = sNode.x || 0;
+        const sy = sNode.y || 0;
+        const tx = tNode.x || 0;
+        const ty = tNode.y || 0;
+        const pulseX = sx + (tx - sx) * pulseOffset.current;
+        const pulseY = sy + (ty - sy) * pulseOffset.current;
+        ctx.beginPath();
+        ctx.arc(pulseX, pulseY, 4, 0, 2 * Math.PI);
+        ctx.fillStyle = '#38bdf8';
+        ctx.shadowColor = '#38bdf8';
+        ctx.shadowBlur = 10;
+        ctx.fill();
+        ctx.shadowBlur = 0;
+      } else if (isSynapseActive) {
         // Glowing active synapse
         ctx.strokeStyle = isSimilarityLink ? '#f59e0b' : '#38bdf8';
         ctx.lineWidth = 2.4;
@@ -519,7 +686,95 @@ export default function TradeGraphVisualizer({
         ctx.globalAlpha = 0.22;
       }
 
-      if (node.node_type === 'feature') {
+      if (node.node_type === 'candidate') {
+        // ── Target Candidate Setup Neuron ──
+        const pulseScale = 1 + Math.sin(pulseOffset.current * Math.PI * 2) * 0.12;
+
+        // Outer pulsing radar ring
+        ctx.beginPath();
+        ctx.arc(x, y, (radius + 8) * pulseScale, 0, 2 * Math.PI);
+        ctx.strokeStyle = 'rgba(6, 182, 212, 0.45)';
+        ctx.lineWidth = 1.5;
+        ctx.stroke();
+
+        // Main radar circle
+        ctx.beginPath();
+        ctx.arc(x, y, radius, 0, 2 * Math.PI);
+        ctx.fillStyle = '#0891b2';
+        ctx.shadowColor = '#06b6d4';
+        ctx.shadowBlur = isSelected || isHovered ? 20 : 10;
+        ctx.fill();
+        ctx.shadowBlur = 0;
+
+        // Inner core
+        ctx.beginPath();
+        ctx.arc(x, y, radius - 4, 0, 2 * Math.PI);
+        ctx.fillStyle = '#082f49';
+        ctx.fill();
+
+        // Crosshairs
+        ctx.strokeStyle = '#38bdf8';
+        ctx.lineWidth = 1.4;
+        ctx.beginPath();
+        ctx.moveTo(x - radius + 3, y);
+        ctx.lineTo(x + radius - 3, y);
+        ctx.moveTo(x, y - radius + 3);
+        ctx.lineTo(x, y + radius - 3);
+        ctx.stroke();
+
+        // Center dot
+        ctx.beginPath();
+        ctx.arc(x, y, 2.5, 0, 2 * Math.PI);
+        ctx.fillStyle = '#ffffff';
+        ctx.fill();
+
+        // Label
+        ctx.fillStyle = '#f0f9ff';
+        ctx.font = 'bold 8px monospace';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText('TARGET', x, y - radius - 8);
+
+        ctx.font = 'bold 9px sans-serif';
+        ctx.fillStyle = '#38bdf8';
+        ctx.fillText(`${node.symbol || ''} ${node.direction || ''}`, x, y + radius + 11);
+
+        // Tooltip on hover
+        if (isHovered) {
+          const tipX = x + radius + 10;
+          const tipY = y - 32;
+          const tipW = 185;
+          const tipH = 58;
+
+          ctx.save();
+          ctx.shadowColor = 'rgba(0, 0, 0, 0.7)';
+          ctx.shadowBlur = 12;
+          ctx.fillStyle = 'rgba(15, 23, 42, 0.96)';
+          ctx.strokeStyle = '#06b6d4';
+          ctx.lineWidth = 1.5;
+
+          ctx.beginPath();
+          ctx.roundRect(tipX, tipY, tipW, tipH, 6);
+          ctx.fill();
+          ctx.stroke();
+
+          ctx.fillStyle = '#38bdf8';
+          ctx.font = 'bold 11px sans-serif';
+          ctx.textAlign = 'left';
+          ctx.fillText(`Target Candidate (${node.symbol} ${node.direction})`, tipX + 8, tipY + 16);
+
+          ctx.fillStyle = '#cbd5e1';
+          ctx.font = '10px sans-serif';
+          ctx.fillText(`Angle: ${node.angle?.toFixed(1)}° | ${node.session?.slice(0, 16)}...`, tipX + 8, tipY + 32);
+
+          const wr = node.neighborhood_win_rate || 0;
+          ctx.fillStyle = wr >= 55 ? '#34d399' : wr <= 30 ? '#f87171' : '#fbbf24';
+          ctx.font = 'bold 10px monospace';
+          const sampleCnt = node.candidate_data?.graph_rag?.sample_size || 0;
+          ctx.fillText(`Neighborhood WR: ${wr.toFixed(1)}% (${sampleCnt} twins)`, tipX + 8, tipY + 48);
+          ctx.restore();
+        }
+      } else if (node.node_type === 'feature') {
         // ── Concept / Feature Neuron ──
         const category = node.category || '';
         let nodeColor = '#818cf8'; // default indigo
@@ -569,6 +824,23 @@ export default function TradeGraphVisualizer({
         const baseColor = isWin ? '#10b981' : '#ef4444'; // Emerald for WIN, Rose for LOSS
         const glowColor = isWin ? 'rgba(16, 185, 129, 0.8)' : 'rgba(239, 68, 68, 0.8)';
 
+        // High-Win Cluster (Winning DNA) or Losing Trap Ring
+        if (node.isHighWinCluster) {
+          ctx.beginPath();
+          ctx.arc(x, y, radius + 4, 0, 2 * Math.PI);
+          ctx.strokeStyle = 'rgba(52, 211, 153, 0.75)';
+          ctx.lineWidth = 1.6;
+          ctx.stroke();
+        } else if (node.isLosingTrap) {
+          ctx.beginPath();
+          ctx.arc(x, y, radius + 4, 0, 2 * Math.PI);
+          ctx.strokeStyle = 'rgba(244, 63, 94, 0.8)';
+          ctx.lineWidth = 1.6;
+          ctx.setLineDash([3, 2]);
+          ctx.stroke();
+          ctx.setLineDash([]);
+        }
+
         // Selection / Hover Halo
         if (isSelected || isHovered) {
           ctx.beginPath();
@@ -601,9 +873,9 @@ export default function TradeGraphVisualizer({
         // On-canvas interactive tooltip on hover
         if (isHovered && node.node_type === 'trade') {
           const tipX = x + radius + 10;
-          const tipY = y - 24;
-          const tipW = 155;
-          const tipH = 46;
+          const tipY = y - 28;
+          const tipW = 165;
+          const tipH = 54;
 
           ctx.save();
           ctx.shadowColor = 'rgba(0, 0, 0, 0.7)';
@@ -620,13 +892,18 @@ export default function TradeGraphVisualizer({
           ctx.fillStyle = '#ffffff';
           ctx.font = 'bold 11px sans-serif';
           ctx.textAlign = 'left';
-          ctx.fillText(`Trade #${node.trade_num} (${node.symbol})`, tipX + 8, tipY + 16);
+          ctx.fillText(`Trade #${node.trade_num} (${node.symbol} ${node.direction || ''})`, tipX + 8, tipY + 16);
 
           ctx.fillStyle = isWin ? '#34d399' : '#f87171';
           ctx.font = 'bold 10px sans-serif';
           const pnlText = `${node.result} ${node.pnl_dollar! >= 0 ? '+' : ''}$${node.pnl_dollar?.toFixed(1)}`;
           const angleText = `${node.angle?.toFixed(1)}°`;
-          ctx.fillText(`${pnlText}  |  ${angleText}`, tipX + 8, tipY + 33);
+          ctx.fillText(`${pnlText}  |  ${angleText}`, tipX + 8, tipY + 31);
+
+          ctx.fillStyle = node.isHighWinCluster ? '#34d399' : node.isLosingTrap ? '#f87171' : '#94a3b8';
+          ctx.font = '9px monospace';
+          const clusterText = node.isHighWinCluster ? '★ Winning DNA Cluster' : node.isLosingTrap ? '⚠ Avoided Trap Setup' : 'Standard SMC';
+          ctx.fillText(clusterText, tipX + 8, tipY + 45);
           ctx.restore();
         }
       }
@@ -822,8 +1099,11 @@ export default function TradeGraphVisualizer({
           {/* Action buttons */}
           <div className="flex items-center gap-3">
             <button
-              onClick={() => window.location.reload()}
-              className="h-8 px-4 text-xs font-medium rounded-lg bg-rose-600 hover:bg-rose-700 text-white transition-colors"
+              onClick={() => {
+                loadGraphData();
+                if (onRefreshGraph) onRefreshGraph();
+              }}
+              className="h-8 px-4 text-xs font-medium rounded-lg bg-rose-600 hover:bg-rose-700 text-white transition-colors cursor-pointer"
             >
               Retry connection
             </button>
@@ -1003,6 +1283,7 @@ export default function TradeGraphVisualizer({
           <span className="text-xs font-medium text-slate-500 mr-1">Filter:</span>
           {[
             { id: 'all', label: 'All trades (169)' },
+            ...(candidateSetup ? [{ id: 'candidate_neighborhood', label: `🎯 ${candidateSetup.symbol} Setup Match` }] : []),
             { id: 'wins_only', label: 'Winning DNA' },
             { id: 'high_win_clusters', label: 'High WR clusters' },
             { id: 'traps_only', label: 'Traps avoided' },
@@ -1052,15 +1333,55 @@ export default function TradeGraphVisualizer({
             {[
               { dot: 'bg-emerald-500', label: 'Win trade' },
               { dot: 'bg-rose-500', label: 'Loss trade' },
-              { dot: 'bg-purple-500', label: 'Session node' },
-              { dot: 'bg-cyan-500', label: 'Angle node' },
-              { dot: 'bg-amber-500', label: 'Synapse link' },
+              { dot: 'bg-cyan-400', label: 'Target candidate' },
+              { dot: 'bg-emerald-400 ring-2 ring-emerald-400/40', label: 'Winning DNA (WR ≥ 55%)' },
+              { dot: 'bg-rose-400 ring-2 ring-rose-400/40', label: 'Avoided trap (WR ≤ 30%)' },
+              { dot: 'bg-purple-500', label: 'Session neuron' },
+              { dot: 'bg-cyan-500', label: 'Angle neuron' },
+              { dot: 'bg-amber-500', label: 'Similarity synapse' },
             ].map((item, i) => (
               <div key={i} className="flex items-center gap-1.5">
                 <span className={`w-2 h-2 rounded-full ${item.dot} flex-shrink-0`} />
                 <span>{item.label}</span>
               </div>
             ))}
+          </div>
+
+          {/* Floating Canvas Viewport Controls */}
+          <div className="absolute top-3 right-3 z-10 bg-slate-950/85 backdrop-blur-md border border-slate-800 rounded-lg p-1 flex items-center gap-1 text-slate-300 shadow-md">
+            <button
+              onClick={() => setZoomTransform((prev) => ({ ...prev, scale: Math.min(2.5, prev.scale * 1.2) }))}
+              className="w-7 h-7 flex items-center justify-center hover:bg-slate-800 rounded text-xs font-bold transition-colors"
+              title="Zoom in"
+            >
+              +
+            </button>
+            <button
+              onClick={() => setZoomTransform((prev) => ({ ...prev, scale: Math.max(0.35, prev.scale * 0.8) }))}
+              className="w-7 h-7 flex items-center justify-center hover:bg-slate-800 rounded text-xs font-bold transition-colors"
+              title="Zoom out"
+            >
+              -
+            </button>
+            <button
+              onClick={() => {
+                setZoomTransform({ x: 0, y: 0, scale: 0.95 });
+                setSelectedNode(null);
+              }}
+              className="px-2 h-7 flex items-center justify-center hover:bg-slate-800 rounded text-[11px] font-mono transition-colors"
+              title="Reset viewport"
+            >
+              Fit
+            </button>
+            <button
+              onClick={() => setIsPaused(!isPaused)}
+              className={`px-2 h-7 flex items-center justify-center rounded text-[11px] font-mono transition-colors ${
+                isPaused ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30' : 'hover:bg-slate-800 text-slate-300'
+              }`}
+              title="Pause / Resume physics simulation"
+            >
+              {isPaused ? 'Play' : 'Pause'}
+            </button>
           </div>
 
           <div className="absolute bottom-3 left-3 z-10 bg-slate-950/90 backdrop-blur-md border border-slate-800 rounded-md px-3 py-1.5 text-[11px] text-slate-400 pointer-events-none">
@@ -1090,9 +1411,11 @@ export default function TradeGraphVisualizer({
                       ? 'bg-sky-50 text-sky-700 border-sky-200'
                       : 'bg-purple-50 text-purple-700 border-purple-200'
                   }`}>
-                    {selectedNode.node_type === 'trade'
+                    {selectedNode.node_type === 'candidate'
+                      ? '🎯 Target Candidate'
+                      : selectedNode.node_type === 'trade'
                       ? `Trade #${selectedNode.trade_num}`
-                      : 'Concept neuron'}
+                      : `${selectedNode.category || 'Feature'} Neuron`}
                   </span>
                   {selectedNode.result && (
                     <span
@@ -1105,10 +1428,26 @@ export default function TradeGraphVisualizer({
                       {selectedNode.result} {selectedNode.pnl_percent !== undefined ? `(${selectedNode.pnl_percent! > 0 ? '+' : ''}${selectedNode.pnl_percent}%)` : ''}
                     </span>
                   )}
+                  {selectedNode.node_type === 'candidate' && selectedNode.candidate_data && (
+                    <span className="text-xs font-mono font-semibold px-2 py-0.5 rounded-md border bg-cyan-50 text-cyan-700 border-cyan-200">
+                      {selectedNode.candidate_data.ai_decision || 'ACTIVE SETUP'}
+                    </span>
+                  )}
                 </div>
 
                 <h2 className="text-lg font-bold text-slate-900 flex items-center gap-2">
-                  {selectedNode.node_type === 'trade' ? (
+                  {selectedNode.node_type === 'candidate' ? (
+                    <>
+                      <span>{selectedNode.symbol}</span>
+                      <span className={`text-xs font-mono px-2 py-0.5 rounded font-semibold ${
+                        selectedNode.direction === 'LONG'
+                          ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                          : 'bg-rose-50 text-rose-700 border border-rose-200'
+                      }`}>
+                        {selectedNode.direction}
+                      </span>
+                    </>
+                  ) : selectedNode.node_type === 'trade' ? (
                     <>
                       <span>{selectedNode.symbol}</span>
                       <span
@@ -1120,12 +1459,23 @@ export default function TradeGraphVisualizer({
                       >
                         {selectedNode.direction}
                       </span>
+                      {selectedNode.isHighWinCluster && (
+                        <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-700 border border-emerald-200">
+                          ★ Winning DNA
+                        </span>
+                      )}
+                      {selectedNode.isLosingTrap && (
+                        <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-rose-50 text-rose-700 border border-rose-200">
+                          ⚠ Avoided Trap
+                        </span>
+                      )}
                     </>
                   ) : (
-                    <span className="text-sm text-slate-800">{selectedNode.id}</span>
+                    <span className="text-sm font-semibold text-slate-900">{selectedNode.id}</span>
                   )}
                 </h2>
 
+                {/* Key Price Metrics for Trade */}
                 {selectedNode.node_type === 'trade' && (
                   <div className="grid grid-cols-3 gap-2 mt-3 tabular-nums">
                     {[
@@ -1140,13 +1490,31 @@ export default function TradeGraphVisualizer({
                     ))}
                   </div>
                 )}
+
+                {/* Candidate Price Levels */}
+                {selectedNode.node_type === 'candidate' && selectedNode.entry_price && (
+                  <div className="grid grid-cols-3 gap-2 mt-3 tabular-nums">
+                    {[
+                      { label: 'Entry', value: `\$${selectedNode.entry_price.toFixed(2)}`, color: 'text-slate-900' },
+                      { label: 'Stop Loss', value: `\$${selectedNode.stop_loss?.toFixed(2) || 'N/A'}`, color: 'text-rose-700' },
+                      { label: 'Take Profit', value: `\$${selectedNode.take_profit?.toFixed(2) || 'N/A'}`, color: 'text-emerald-700' },
+                    ].map((s, i) => (
+                      <div key={i} className="bg-slate-50 rounded-lg p-2 text-center border border-slate-200/80">
+                        <div className={`text-xs font-semibold font-mono ${s.color}`}>{s.value}</div>
+                        <div className="text-[10px] text-slate-500 mt-0.5">{s.label}</div>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
 
               {/* Cluster Win Rate Badge */}
               {selectedNode.neighborhood_win_rate !== undefined && (
                 <div className="p-3 rounded-lg border border-slate-200 bg-slate-50">
                   <div className="flex items-center justify-between text-xs mb-2">
-                    <span className="font-medium text-slate-600">Cluster win rate</span>
+                    <span className="font-medium text-slate-600">
+                      {selectedNode.node_type === 'candidate' ? 'Neighborhood Win Rate' : 'Cluster win rate'}
+                    </span>
                     <span
                       className={`font-semibold font-mono text-base tabular-nums ${
                         selectedNode.neighborhood_win_rate >= 55
@@ -1171,13 +1539,35 @@ export default function TradeGraphVisualizer({
                       style={{ width: `${Math.min(100, selectedNode.neighborhood_win_rate)}%` }}
                     />
                   </div>
-                  <span className="text-[11px] text-slate-500 mt-2 block">
-                    {selectedNode.neighborhood_win_rate >= 55
-                      ? 'High-probability cluster with validated edge.'
-                      : selectedNode.neighborhood_win_rate <= 25
-                      ? 'Low-probability chop cluster. Higher invalidation risk.'
-                      : 'Balanced SMC structural setup.'}
-                  </span>
+                  <div className="flex items-center justify-between text-[11px] text-slate-500 mt-2">
+                    <span>
+                      {selectedNode.neighborhood_win_rate >= 55
+                        ? 'High-probability cluster with validated edge.'
+                        : selectedNode.neighborhood_win_rate <= 25
+                        ? 'Low-probability chop cluster. Higher invalidation risk.'
+                        : 'Balanced SMC structural setup.'}
+                    </span>
+                    {selectedNode.node_type === 'candidate' && selectedNode.candidate_data?.graph_rag?.sample_size && (
+                      <span className="font-mono text-slate-400">
+                        ({selectedNode.candidate_data.graph_rag.sample_size} twins)
+                      </span>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* Candidate Recommendation Card */}
+              {selectedNode.node_type === 'candidate' && selectedNode.candidate_data?.graph_rag && (
+                <div className="bg-cyan-50/70 border border-cyan-200 rounded-lg p-3">
+                  <div className="flex items-center justify-between text-xs mb-1.5">
+                    <span className="font-semibold text-cyan-900">Graph RAG Intelligence</span>
+                    <span className="font-mono text-[11px] font-bold text-cyan-800 px-2 py-0.5 rounded bg-cyan-100 border border-cyan-300">
+                      {selectedNode.candidate_data.graph_rag.recommendation}
+                    </span>
+                  </div>
+                  <p className="text-xs text-cyan-800 leading-relaxed">
+                    Retrieved {selectedNode.candidate_data.graph_rag.sample_size} historical trades with matching {selectedNode.angle?.toFixed(1)}° impulse velocity and {selectedNode.symbol} order flow.
+                  </p>
                 </div>
               )}
 
@@ -1213,8 +1603,67 @@ export default function TradeGraphVisualizer({
                 </div>
               )}
 
+              {/* Candidate Twin Precedents */}
+              {selectedNode.node_type === 'candidate' && selectedNode.candidate_data?.graph_rag?.top_matches && (
+                <div>
+                  <h3 className="text-xs font-semibold text-slate-900 mb-2 flex items-center gap-1.5">
+                    <TargetIcon className="w-3.5 h-3.5 text-cyan-600" />
+                    Candidate Precedent Twins ({selectedNode.candidate_data.graph_rag.top_matches.length})
+                  </h3>
+                  <div className="space-y-2">
+                    {selectedNode.candidate_data.graph_rag.top_matches.map((tw, idx) => (
+                      <div
+                        key={idx}
+                        onClick={() => {
+                          const target = nodes.find(
+                            (n) => n.node_type === 'trade' && n.trade_num === tw.trade_num
+                          );
+                          if (target) setSelectedNode(target);
+                        }}
+                        className="bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-lg p-2.5 cursor-pointer transition-colors"
+                      >
+                        <div className="flex items-center justify-between text-xs mb-1.5">
+                          <span className="font-semibold text-slate-900 flex items-center gap-1.5">
+                            #{tw.trade_num}
+                            <span className="text-[11px] text-slate-500 font-normal">
+                              {tw.symbol} {tw.direction}
+                            </span>
+                          </span>
+                          <span
+                            className={`text-[10px] font-mono font-medium px-1.5 py-0.5 rounded border ${
+                              tw.result === 'WIN'
+                                ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                                : 'bg-rose-50 text-rose-700 border-rose-200'
+                            }`}
+                          >
+                            {tw.result} {tw.pnl_dollar !== undefined ? `(\$${tw.pnl_dollar >= 0 ? '+' : ''}${tw.pnl_dollar.toFixed(0)})` : ''}
+                          </span>
+                        </div>
+                        {/* Similarity Match Bar */}
+                        <div className="flex items-center gap-2">
+                          <div className="flex-1 bg-slate-200 h-1.5 rounded-full overflow-hidden">
+                            <div
+                              className="h-full rounded-full bg-cyan-600"
+                              style={{ width: `${Math.min(100, tw.similarity_score * 100)}%` }}
+                            />
+                          </div>
+                          <span className="text-[10px] font-mono font-semibold text-slate-700 w-12 text-right">
+                            {(tw.similarity_score * 100).toFixed(0)}%
+                          </span>
+                        </div>
+                        {tw.common_features && tw.common_features.length > 0 && (
+                          <div className="text-[10px] font-mono text-slate-500 mt-1 truncate">
+                            {tw.common_features.slice(0, 3).join(', ')}
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
               {/* Connected Twin Trades with Similarity Bars */}
-              {selectedNode.twin_trades && selectedNode.twin_trades.length > 0 && (
+              {selectedNode.node_type === 'trade' && selectedNode.twin_trades && selectedNode.twin_trades.length > 0 && (
                 <div>
                   <h3 className="text-xs font-semibold text-slate-900 mb-2 flex items-center gap-1.5">
                     <TargetIcon className="w-3.5 h-3.5 text-slate-600" />
@@ -1268,6 +1717,45 @@ export default function TradeGraphVisualizer({
                         )}
                       </div>
                     ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Connected Trades for Feature Neuron */}
+              {selectedNode.node_type === 'feature' && (
+                <div>
+                  <h3 className="text-xs font-semibold text-slate-900 mb-2 flex items-center gap-1.5">
+                    <TargetIcon className="w-3.5 h-3.5 text-purple-600" />
+                    Connected Trades ({
+                      nodes.filter(
+                        (n) => n.node_type === 'trade' && n.features?.includes(selectedNode.id)
+                      ).length
+                    })
+                  </h3>
+                  <div className="space-y-1.5 max-h-64 overflow-y-auto pr-1">
+                    {nodes
+                      .filter((n) => n.node_type === 'trade' && n.features?.includes(selectedNode.id))
+                      .slice(0, 20)
+                      .map((t, idx) => (
+                        <div
+                          key={idx}
+                          onClick={() => setSelectedNode(t)}
+                          className="flex items-center justify-between p-2 rounded-lg bg-slate-50 hover:bg-slate-100 border border-slate-200 cursor-pointer text-xs transition-colors"
+                        >
+                          <span className="font-mono font-medium text-slate-800">
+                            #{t.trade_num} {t.symbol} {t.direction}
+                          </span>
+                          <span
+                            className={`text-[10px] font-mono font-medium px-1.5 py-0.5 rounded border ${
+                              t.result === 'WIN'
+                                ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                                : 'bg-rose-50 text-rose-700 border-rose-200'
+                            }`}
+                          >
+                            {t.result} {t.pnl_dollar !== undefined ? `(\$${t.pnl_dollar >= 0 ? '+' : ''}${t.pnl_dollar.toFixed(0)})` : ''}
+                          </span>
+                        </div>
+                      ))}
                   </div>
                 </div>
               )}

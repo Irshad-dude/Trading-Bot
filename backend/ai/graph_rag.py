@@ -59,7 +59,9 @@ class TradeKnowledgeGraph:
         else:
             return "Session: Global Twilight"
 
-    def _categorize_risk(self, risk_dist: float, symbol: str) -> str:
+    def _categorize_risk(self, risk_dist: Optional[float], symbol: str) -> str:
+        if risk_dist is None or (isinstance(risk_dist, float) and math.isnan(risk_dist)):
+            risk_dist = 3.0
         if symbol == "BTCUSDT":
             if risk_dist < 200:
                 return "Risk: Tight SL (<$200)"
@@ -342,11 +344,14 @@ class TradeKnowledgeGraph:
         Retrieves nearest neighbor trades from the knowledge graph
         based on structural feature match.
         """
-        cand_angle = candidate.get("angle", 42.0)
-        cand_session = candidate.get("session_name", "")
-        cand_symbol = candidate.get("symbol", "XAUUSD")
-        cand_dir = candidate.get("direction", "LONG")
-        cand_type = candidate.get("setup_reason", "")
+        cand_angle = candidate.get("angle")
+        if cand_angle is None or (isinstance(cand_angle, float) and math.isnan(cand_angle)):
+            cand_angle = 42.0
+
+        cand_session = candidate.get("session_name") or ""
+        cand_symbol = candidate.get("symbol") or "XAUUSD"
+        cand_dir = candidate.get("direction") or "LONG"
+        cand_type = candidate.get("setup_reason") or ""
         if "REVERSAL_CHOCH" in cand_type:
             cand_pattern = "Pattern: REVERSAL_CHOCH"
         else:
@@ -360,6 +365,21 @@ class TradeKnowledgeGraph:
             cand_pattern
         }
 
+        # Build trade to cluster membership map for fast lookup
+        trade_cluster_lookup: Dict[int, Dict[str, str]] = {}
+        for cl in self.clusters:
+            for t_num in cl.get("trades", []):
+                if t_num not in trade_cluster_lookup:
+                    trade_cluster_lookup[t_num] = {
+                        "cluster_status": cl.get("status", "NEUTRAL"),
+                        "cluster_name": cl.get("cluster_name", "")
+                    }
+                elif cl.get("status") == "HIGH_WIN_CLUSTER":
+                    trade_cluster_lookup[t_num] = {
+                        "cluster_status": "HIGH_WIN_CLUSTER",
+                        "cluster_name": cl.get("cluster_name", "")
+                    }
+
         # Match trades in graph
         scored_trades = []
         for t in self.trades:
@@ -371,15 +391,31 @@ class TradeKnowledgeGraph:
                 f"Pattern: {t.get('trade_type', 'CONTINUATION_BOS')}"
             }
             common = target_features.intersection(t_feats)
-            score = len(common) / len(target_features.union(t_feats))
+            union = target_features.union(t_feats)
+            score = len(common) / len(union) if union else 0.0
+
+            t_num = t.get("trade_num")
+            cluster_meta = trade_cluster_lookup.get(t_num, {"cluster_status": "NEUTRAL", "cluster_name": "Standard SMC"})
+            risk_tier = self._categorize_risk(t.get("risk_distance", 3.0), t.get("symbol", "XAUUSD"))
+
             scored_trades.append({
                 "trade_num": t["trade_num"],
                 "symbol": t["symbol"],
                 "direction": t["direction"],
                 "result": t["result"],
                 "pnl_dollar": t.get("pnl_dollar", 0.0),
+                "pnl_percent": t.get("pnl_percent", 0.0),
+                "rr_ratio": t.get("rr_ratio", "1:2"),
+                "entry_price": t.get("entry_price", 0.0),
+                "exit_price": t.get("exit_price", 0.0),
+                "entry_time": t.get("entry_time", ""),
+                "entry_time_ist": t.get("entry_time_ist", ""),
+                "duration_hours": t.get("duration_hours", 0.0),
                 "angle": t.get("angle", 0.0),
                 "session": t.get("session_name", ""),
+                "risk_tier": risk_tier,
+                "cluster_status": cluster_meta["cluster_status"],
+                "cluster_name": cluster_meta["cluster_name"],
                 "common_features": list(common),
                 "similarity_score": round(score, 3)
             })
@@ -388,14 +424,47 @@ class TradeKnowledgeGraph:
         top_matches = scored_trades[:top_k]
 
         matched_wins = sum(1 for m in top_matches if m["result"] == "WIN")
-        cluster_win_prob = round((matched_wins / len(top_matches) * 100), 1) if top_matches else 50.0
+        matched_losses = sum(1 for m in top_matches if m["result"] == "LOSS")
+        sample_size = len(top_matches)
+
+        if sample_size == 0:
+            cluster_win_prob = 0.0
+            avg_pnl = 0.0
+            total_pnl = 0.0
+            recommendation = "INSUFFICIENT_DATA"
+            cluster_class = "INSUFFICIENT_DATA"
+            insufficient_data = True
+        else:
+            cluster_win_prob = round((matched_wins / sample_size * 100), 1)
+            total_pnl = round(sum(m["pnl_dollar"] for m in top_matches), 2)
+            avg_pnl = round(total_pnl / sample_size, 2)
+            insufficient_data = sample_size < 3
+
+            if cluster_win_prob >= 65.0:
+                recommendation = "STRONG_BUY"
+                cluster_class = "WINNING_DNA_CLUSTER"
+            elif cluster_win_prob >= 55.0:
+                recommendation = "PROCEED"
+                cluster_class = "HIGH_WIN_CLUSTER"
+            elif cluster_win_prob <= 30.0 and sample_size >= 3:
+                recommendation = "CAUTION_LOW_WR"
+                cluster_class = "LOSING_TRAP"
+            else:
+                recommendation = "PROCEED" if cluster_win_prob >= 40.0 else "CAUTION_LOW_WR"
+                cluster_class = "NEUTRAL"
 
         return {
             "query_features": list(target_features),
             "top_matches": top_matches,
             "neighborhood_win_rate": cluster_win_prob,
-            "neighborhood_sample_size": len(top_matches),
-            "recommendation": "STRONG_BUY" if cluster_win_prob >= 65.0 else ("PROCEED" if cluster_win_prob >= 40.0 else "CAUTION_LOW_WR")
+            "neighborhood_sample_size": sample_size,
+            "wins": matched_wins,
+            "losses": matched_losses,
+            "avg_pnl_dollar": avg_pnl,
+            "total_pnl_dollar": total_pnl,
+            "cluster_classification": cluster_class,
+            "insufficient_data": insufficient_data,
+            "recommendation": recommendation
         }
 
     def generate_rag_reasoning_prompt(self, candidate: Dict[str, Any]) -> str:
@@ -443,8 +512,12 @@ class TradeKnowledgeGraph:
             }
             links.append(link_entry)
 
+        from datetime import datetime, timezone
         export_data = {
             "graph_summary": {
+                "schema_version": "2.0.0",
+                "is_static": True,
+                "exported_at": datetime.now(timezone.utc).isoformat(),
                 "total_nodes": len(nodes),
                 "total_links": len(links),
                 "total_trades": len(self.trades),

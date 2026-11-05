@@ -50,6 +50,7 @@ class BotState:
     trade_history: List[TradeRecord] = field(default_factory=list)
     scanner_results: List[ScanResult] = field(default_factory=list)
     open_positions: List[Dict[str, Any]] = field(default_factory=list)
+    last_candidate_graph_rag: Optional[Dict[str, Any]] = None
 
     def add_log(self, message: str):
         ts = datetime.utcnow().strftime("%H:%M:%S")

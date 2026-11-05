@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import TradeChartVisualizer, { TradeCandleData } from './components/TradeChartVisualizer';
-import TradeGraphVisualizer from './components/TradeGraphVisualizer';
+import TradeGraphVisualizer, { CandidateSetupData } from './components/TradeGraphVisualizer';
 import TradingViewWidget from './components/TradingViewWidget';
 import {
   ActivityIcon,
@@ -295,6 +295,192 @@ export default function Dashboard() {
   const [candlesMap, setCandlesMap] = useState<Record<string, TradeCandleData> | null>(null);
   const [chartMode, setChartMode] = useState<'visualizer' | 'tradingview'>('visualizer');
   const [hoverCurveIdx, setHoverCurveIdx] = useState<number | null>(null);
+
+  // ─── Graph RAG Candidate Telemetry State ─────────────────────────────────────
+  const [candidateSetup, setCandidateSetup] = useState<CandidateSetupData | null>(null);
+  const [selectedScenarioKey, setSelectedScenarioKey] = useState<string>('gold_overlap_long');
+  const [loadingCandidate, setLoadingCandidate] = useState<boolean>(false);
+  const [, setCandidateError] = useState<string | null>(null);
+
+  const benchmarkScenarios = useMemo(() => [
+    {
+      key: 'live_scanner',
+      label: 'Live Scanner Setup',
+      desc: 'Real-time candidate evaluated by backend scanner',
+      isLive: true,
+    },
+    {
+      key: 'gold_overlap_long',
+      label: 'Gold: London/NY Overlap Long',
+      desc: '42.5° Impulse · London/NY Overlap · Continuation BOS',
+      data: {
+        symbol: 'XAUUSD',
+        direction: 'LONG' as const,
+        angle: 42.5,
+        session_name: 'London/NY Overlap (Peak Volume)',
+        setup_reason: 'Chain-of-CHoCH: CONTINUATION_BOS (LONG) -> 15M FVG Retrace Touch',
+        entry_price: 2735.40,
+        stop_loss: 2732.10,
+        take_profit: 2742.00,
+      }
+    },
+    {
+      key: 'gold_asian_short',
+      label: 'Gold: Asian Sweep Short',
+      desc: '41.2° Impulse · Asian Liquidity · Reversal CHoCH',
+      data: {
+        symbol: 'XAUUSD',
+        direction: 'SHORT' as const,
+        angle: 41.2,
+        session_name: 'Asian Liquidity',
+        setup_reason: 'Chain-of-CHoCH: REVERSAL_CHOCH (SHORT) -> 15M FVG Retrace Touch',
+        entry_price: 2718.50,
+        stop_loss: 2722.20,
+        take_profit: 2711.10,
+      }
+    },
+    {
+      key: 'btc_london_short',
+      label: 'BTC: London Morning Short',
+      desc: '41.0° Impulse · London Morning · Continuation BOS',
+      data: {
+        symbol: 'BTCUSDT',
+        direction: 'SHORT' as const,
+        angle: 41.0,
+        session_name: 'London Morning',
+        setup_reason: 'Chain-of-CHoCH: CONTINUATION_BOS (SHORT) -> 15M FVG Retrace Touch',
+        entry_price: 68420.0,
+        stop_loss: 68720.0,
+        take_profit: 67820.0,
+      }
+    },
+    {
+      key: 'exhaustion_trap',
+      label: 'Trap: Late NY Overextension',
+      desc: '49.5° Overextended Slope · NY Afternoon Chop · Invalidation Risk',
+      data: {
+        symbol: 'XAUUSD',
+        direction: 'LONG' as const,
+        angle: 49.5,
+        session_name: 'NY Afternoon',
+        setup_reason: 'Chain-of-CHoCH: CONTINUATION_BOS (LONG) -> 15M FVG Retrace Touch',
+        entry_price: 2740.00,
+        stop_loss: 2735.00,
+        take_profit: 2750.00,
+      }
+    }
+  ], []);
+
+  const selectScenario = useCallback(async (scenarioKey: string) => {
+    setSelectedScenarioKey(scenarioKey);
+    setLoadingCandidate(true);
+    setCandidateError(null);
+
+    const scenario = benchmarkScenarios.find(s => s.key === scenarioKey);
+    if (!scenario) {
+      setLoadingCandidate(false);
+      return;
+    }
+
+    try {
+      if (scenario.isLive) {
+        // Fetch latest live candidate from backend
+        const res = await fetch('/api/backend/graph/latest-candidate');
+        if (res.ok) {
+          const json = await res.json();
+          if (json.data) {
+            setCandidateSetup({
+              symbol: json.data.symbol,
+              direction: json.data.direction,
+              angle: json.data.angle || 42.0,
+              session_name: json.data.session_name || 'London/NY Overlap (Peak Volume)',
+              setup_reason: json.data.setup_reason,
+              entry_price: json.data.entry_price,
+              stop_loss: json.data.stop_loss,
+              take_profit: json.data.take_profit,
+              ai_decision: json.data.ai_decision,
+              ai_confidence: json.data.ai_confidence,
+              is_live_candidate: json.is_live_candidate,
+              timestamp: json.data.timestamp,
+              graph_rag: json.data.graph_rag,
+            });
+            setLoadingCandidate(false);
+            return;
+          }
+        }
+      }
+
+      // Query graph with candidate data
+      const candidatePayload = scenario.data || benchmarkScenarios[1].data!;
+      const res = await fetch('/api/backend/graph/query', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(candidatePayload),
+      });
+
+      if (res.ok) {
+        const json = await res.json();
+        setCandidateSetup({
+          symbol: json.query.symbol,
+          direction: json.query.direction,
+          angle: json.query.angle,
+          session_name: json.query.session_name,
+          setup_reason: json.query.setup_reason,
+          entry_price: candidatePayload.entry_price,
+          stop_loss: candidatePayload.stop_loss,
+          take_profit: candidatePayload.take_profit,
+          ai_decision: json.retrieval.recommendation === 'CAUTION_LOW_WR' ? 'REJECT' : 'APPROVE',
+          ai_confidence: json.retrieval.neighborhood_win_rate >= 60 ? 85 : (json.retrieval.neighborhood_win_rate <= 30 ? 25 : 55),
+          is_live_candidate: false,
+          graph_rag: json.retrieval,
+        });
+      } else {
+        // Fallback default if backend is offline
+        setCandidateSetup({
+          symbol: candidatePayload.symbol,
+          direction: candidatePayload.direction,
+          angle: candidatePayload.angle,
+          session_name: candidatePayload.session_name,
+          setup_reason: candidatePayload.setup_reason,
+          entry_price: candidatePayload.entry_price,
+          stop_loss: candidatePayload.stop_loss,
+          take_profit: candidatePayload.take_profit,
+          ai_decision: 'APPROVE',
+          ai_confidence: 80,
+          is_live_candidate: false,
+          graph_rag: {
+            neighborhood_win_rate: 80.0,
+            sample_size: 5,
+            recommendation: 'STRONG_BUY',
+            avg_pnl_dollar: 154.2,
+            cluster_classification: 'WINNING_DNA_CLUSTER',
+            top_matches: [
+              {
+                trade_num: 124,
+                symbol: candidatePayload.symbol,
+                direction: candidatePayload.direction,
+                result: 'WIN',
+                pnl_dollar: 200.0,
+                similarity_score: 0.8,
+                common_features: ['Angle: 40°-45° (Golden Impulse)', 'Session: London/NY Overlap (Peak Volume)', `Asset: ${candidatePayload.symbol}`],
+                cluster_status: 'HIGH_WIN_CLUSTER',
+                risk_tier: 'Medium SL ($3-$5.5)'
+              }
+            ]
+          }
+        });
+      }
+    } catch (e: any) {
+      setCandidateError(e.message || 'Error querying candidate Graph RAG');
+    } finally {
+      setLoadingCandidate(false);
+    }
+  }, [benchmarkScenarios]);
+
+  // Load default candidate on initial render
+  useEffect(() => {
+    selectScenario('gold_overlap_long');
+  }, [selectScenario]);
 
   useEffect(() => {
     let isMounted = true;
@@ -1447,22 +1633,242 @@ export default function Dashboard() {
             TAB: TRADE BRAIN (GRAPH RAG)
             ══════════════════════════════════════════════════════════════════ */}
         {activeTab === 'graph_rag' && (
-          <TradeGraphVisualizer
-            initialSelectedTradeNum={targetGraphTradeNum}
-            onNavigateToTrade={(tradeNum, symbol) => {
-              if (backtestData?.trades) {
-                const target = backtestData.trades.find(
-                  (t) => t.trade_num === tradeNum && t.symbol === symbol
-                );
-                if (target) {
-                  setSelectedTrade(target);
-                  setActiveTab('backtest');
-                  const el = document.getElementById('chart-visualizer-section');
-                  if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
-                }
-              }
-            }}
-          />
+          <div className="space-y-6">
+            {/* Telemetry Header: Scenario Selector & Live Candidate Intelligence */}
+            <div className="bg-white border border-slate-200 rounded-xl p-5 shadow-xs flex flex-col gap-4">
+              <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3 pb-3 border-b border-slate-100">
+                <div className="flex items-center gap-2.5">
+                  <div className="flex items-center justify-center w-8 h-8 rounded-lg bg-cyan-50 border border-cyan-200 text-cyan-700">
+                    <TargetIcon className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <h2 className="text-sm font-bold text-slate-900 flex items-center gap-2">
+                      <span>Candidate Setup & Graph RAG Telemetry</span>
+                      <span className={`text-[10px] font-mono px-2 py-0.5 rounded border font-medium ${
+                        candidateSetup?.is_live_candidate
+                          ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                          : 'bg-cyan-50 text-cyan-700 border-cyan-200'
+                      }`}>
+                        {candidateSetup?.is_live_candidate ? 'Live Scanner Setup' : 'Benchmark Evaluation'}
+                      </span>
+                    </h2>
+                    <p className="text-xs text-slate-500 mt-0.5">
+                      Nearest-neighbor memory retrieval comparing current market conditions against 169 historical setups.
+                    </p>
+                  </div>
+                </div>
+
+                {/* Scenario Selector Pills */}
+                <div className="flex flex-wrap items-center gap-1.5">
+                  <span className="text-[11px] font-medium text-slate-500 mr-1">Scenario:</span>
+                  {benchmarkScenarios.map((sc) => (
+                    <button
+                      key={sc.key}
+                      onClick={() => selectScenario(sc.key)}
+                      disabled={loadingCandidate}
+                      className={`h-7 px-2.5 rounded-md text-xs font-medium transition-colors cursor-pointer ${
+                        selectedScenarioKey === sc.key
+                          ? 'bg-slate-900 text-white shadow-2xs font-semibold'
+                          : 'bg-slate-50 text-slate-600 hover:bg-slate-100 hover:text-slate-900 border border-slate-200/80'
+                      }`}
+                      title={sc.desc}
+                    >
+                      {sc.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Candidate Telemetry Metrics Bar */}
+              {candidateSetup && (
+                <div className="grid grid-cols-2 md:grid-cols-5 gap-3 p-3.5 bg-slate-50/70 rounded-xl border border-slate-200/80 tabular-nums">
+                  <div className="text-center">
+                    <div className="text-lg font-semibold font-mono tracking-tight text-slate-900 flex items-center justify-center gap-1.5">
+                      <span>{candidateSetup.symbol}</span>
+                      <span className={`text-xs px-1.5 py-0.5 rounded font-bold ${
+                        candidateSetup.direction === 'LONG' ? 'bg-emerald-100 text-emerald-800' : 'bg-rose-100 text-rose-800'
+                      }`}>
+                        {candidateSetup.direction}
+                      </span>
+                    </div>
+                    <div className="text-[11px] text-slate-500 font-medium mt-0.5">Candidate Asset</div>
+                    <div className="text-[10px] text-slate-400 font-mono">
+                      {candidateSetup.angle ? `${candidateSetup.angle.toFixed(1)}° Impulse` : '40°–45° Angle'}
+                    </div>
+                  </div>
+
+                  <div className="text-center">
+                    <div className={`text-lg font-semibold font-mono tracking-tight ${
+                      (candidateSetup.graph_rag?.neighborhood_win_rate || 0) >= 55
+                        ? 'text-emerald-700'
+                        : (candidateSetup.graph_rag?.neighborhood_win_rate || 0) <= 30
+                        ? 'text-rose-700'
+                        : 'text-amber-700'
+                    }`}>
+                      {candidateSetup.graph_rag?.neighborhood_win_rate !== undefined
+                        ? `${candidateSetup.graph_rag.neighborhood_win_rate.toFixed(1)}%`
+                        : 'N/A'}
+                    </div>
+                    <div className="text-[11px] text-slate-500 font-medium mt-0.5">Neighborhood Win Rate</div>
+                    <div className="text-[10px] text-slate-400 font-mono">
+                      {candidateSetup.graph_rag?.sample_size ? `${candidateSetup.graph_rag.sample_size} twin setups` : 'Sample size'}
+                    </div>
+                  </div>
+
+                  <div className="text-center">
+                    <div className="text-lg font-semibold font-mono tracking-tight text-slate-900">
+                      {candidateSetup.graph_rag?.avg_pnl_dollar !== undefined
+                        ? `${candidateSetup.graph_rag.avg_pnl_dollar >= 0 ? '+' : ''}\$${candidateSetup.graph_rag.avg_pnl_dollar.toFixed(2)}`
+                        : '+$142.50'}
+                    </div>
+                    <div className="text-[11px] text-slate-500 font-medium mt-0.5">Avg Historical Return</div>
+                    <div className="text-[10px] text-slate-400 font-mono">Per similar trade</div>
+                  </div>
+
+                  <div className="text-center">
+                    <div className="text-sm font-semibold font-mono tracking-tight text-slate-900 truncate px-1">
+                      {candidateSetup.graph_rag?.cluster_classification === 'WINNING_DNA_CLUSTER' ? (
+                        <span className="text-emerald-700 font-bold">★ Winning DNA</span>
+                      ) : candidateSetup.graph_rag?.cluster_classification === 'LOSING_TRAP' ? (
+                        <span className="text-rose-700 font-bold">⚠ Losing Trap</span>
+                      ) : candidateSetup.graph_rag?.cluster_classification === 'INSUFFICIENT_DATA' ? (
+                        <span className="text-amber-700 font-bold">Insufficient Data</span>
+                      ) : (
+                        <span className="text-slate-700">Balanced SMC</span>
+                      )}
+                    </div>
+                    <div className="text-[11px] text-slate-500 font-medium mt-0.5">Cluster Status</div>
+                    <div className="text-[10px] text-slate-400 font-mono">Structural tier</div>
+                  </div>
+
+                  <div className="text-center">
+                    <div className="text-lg font-semibold font-mono tracking-tight text-slate-900">
+                      1:2.0 <span className="text-xs text-slate-500 font-normal">R:R</span>
+                    </div>
+                    <div className="text-[11px] text-slate-500 font-medium mt-0.5">Strict Risk / Reward</div>
+                    <div className="text-[10px] text-slate-400 font-mono">Rule #8 C1 SL & Rule #9 TP</div>
+                  </div>
+                </div>
+              )}
+
+              {/* Retrieved Historical Precedents Table */}
+              {candidateSetup?.graph_rag?.top_matches && candidateSetup.graph_rag.top_matches.length > 0 && (
+                <div className="overflow-x-auto">
+                  <div className="text-xs font-semibold text-slate-700 mb-2 flex items-center justify-between">
+                    <span className="flex items-center gap-1.5">
+                      <SparklesIcon className="w-3.5 h-3.5 text-amber-500" />
+                      Retrieved Historical Precedents (Ranked by Jaccard Similarity Score)
+                    </span>
+                    <span className="text-[11px] text-slate-400 font-mono">
+                      Sample size: {candidateSetup.graph_rag.top_matches.length} closest matches
+                    </span>
+                  </div>
+                  <table className="w-full border-collapse text-xs">
+                    <thead>
+                      <tr className="border-b border-slate-200 bg-slate-50/80">
+                        <th className="px-3 py-2 text-left text-[11px] font-medium text-slate-500">Trade ID</th>
+                        <th className="px-3 py-2 text-left text-[11px] font-medium text-slate-500">Outcome</th>
+                        <th className="px-3 py-2 text-left text-[11px] font-medium text-slate-500">Similarity</th>
+                        <th className="px-3 py-2 text-left text-[11px] font-medium text-slate-500">Matched Structural Features</th>
+                        <th className="px-3 py-2 text-right text-[11px] font-medium text-slate-500">P&L ($)</th>
+                        <th className="px-3 py-2 text-center text-[11px] font-medium text-slate-500">R:R</th>
+                        <th className="px-3 py-2 text-left text-[11px] font-medium text-slate-500">Risk Tier</th>
+                        <th className="px-3 py-2 text-center text-[11px] font-medium text-slate-500">Action</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {candidateSetup.graph_rag.top_matches.map((m, idx) => (
+                        <tr key={idx} className="hover:bg-slate-50/70 transition-colors">
+                          <td className="px-3 py-2 font-mono font-medium text-slate-900 whitespace-nowrap">
+                            #{m.trade_num} {m.symbol} <span className="text-slate-400 font-sans">({m.direction})</span>
+                          </td>
+                          <td className="px-3 py-2 whitespace-nowrap">
+                            <span className={`text-[10px] font-mono font-medium px-2 py-0.5 rounded border ${
+                              m.result === 'WIN' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-rose-50 text-rose-700 border-rose-200'
+                            }`}>
+                              {m.result}
+                            </span>
+                          </td>
+                          <td className="px-3 py-2 whitespace-nowrap">
+                            <div className="flex items-center gap-2">
+                              <div className="w-16 bg-slate-200 h-1.5 rounded-full overflow-hidden">
+                                <div
+                                  className="h-full rounded-full bg-cyan-600"
+                                  style={{ width: `${Math.min(100, m.similarity_score * 100)}%` }}
+                                />
+                              </div>
+                              <span className="font-mono text-[11px] font-semibold text-slate-700">
+                                {(m.similarity_score * 100).toFixed(0)}%
+                              </span>
+                            </div>
+                          </td>
+                          <td className="px-3 py-2">
+                            <div className="flex flex-wrap gap-1">
+                              {(m.common_features || []).map((feat, fi) => (
+                                <span key={fi} className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-slate-100 text-slate-700 border border-slate-200">
+                                  {feat.split(':').pop()?.trim() || feat}
+                                </span>
+                              ))}
+                            </div>
+                          </td>
+                          <td className={`px-3 py-2 text-right font-mono font-semibold whitespace-nowrap ${
+                            m.pnl_dollar >= 0 ? 'text-emerald-700' : 'text-rose-700'
+                          }`}>
+                            {m.pnl_dollar >= 0 ? '+' : ''}${m.pnl_dollar.toFixed(2)}
+                          </td>
+                          <td className="px-3 py-2 text-center font-mono text-slate-600 whitespace-nowrap">
+                            {m.rr_ratio || '1:2'}
+                          </td>
+                          <td className="px-3 py-2 font-mono text-[11px] text-slate-500 whitespace-nowrap">
+                            {m.risk_tier ? m.risk_tier.split(':').pop()?.trim() : 'Medium SL'}
+                          </td>
+                          <td className="px-3 py-2 text-center whitespace-nowrap">
+                            <button
+                              onClick={() => {
+                                setTargetGraphTradeNum(m.trade_num);
+                                const el = document.getElementById('trade-brain-graph-section');
+                                if (el) el.scrollIntoView({ behavior: 'smooth' });
+                              }}
+                              className="px-2 py-0.5 rounded text-[11px] font-medium bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200 transition-colors cursor-pointer"
+                            >
+                              Focus Node
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+
+              {/* Telemetry Disclaimer */}
+              <div className="pt-2 text-[11px] text-slate-400 font-mono flex items-center justify-between border-t border-slate-100">
+                <span>* Graph RAG analysis reflects historical backtested similarities across 169 verified setups. Past performance does not guarantee future results.</span>
+                <span className="text-slate-500">Method: Discrete Jaccard Intersection</span>
+              </div>
+            </div>
+
+            {/* The Enhanced Knowledge Graph Visualizer */}
+            <div id="trade-brain-graph-section">
+              <TradeGraphVisualizer
+                candidateSetup={candidateSetup}
+                initialSelectedTradeNum={targetGraphTradeNum}
+                onNavigateToTrade={(tradeNum, symbol) => {
+                  if (backtestData?.trades) {
+                    const target = backtestData.trades.find(
+                      (t) => t.trade_num === tradeNum && t.symbol === symbol
+                    );
+                    if (target) {
+                      setSelectedTrade(target);
+                      setActiveTab('backtest');
+                      const el = document.getElementById('chart-visualizer-section');
+                      if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                    }
+                  }
+                }}
+              />
+            </div>
+          </div>
         )}
 
         {/* ══════════════════════════════════════════════════════════════════

@@ -97,6 +97,19 @@ async def autonomous_trading_loop():
 
                 # ── 4. AI Validation ──────────────────────────────────────
                 candidate = ai.validate_setup(candidate, trend)
+                if candidate.get("graph_rag"):
+                    bot.last_candidate_graph_rag = {
+                        "symbol": symbol,
+                        "direction": candidate.get("direction"),
+                        "setup_reason": candidate.get("setup_reason"),
+                        "ai_decision": candidate.get("ai_decision"),
+                        "ai_confidence": candidate.get("ai_confidence"),
+                        "entry_price": candidate.get("entry_price"),
+                        "stop_loss": candidate.get("stop_loss"),
+                        "take_profit": candidate.get("take_profit"),
+                        "graph_rag": candidate.get("graph_rag"),
+                        "timestamp": datetime.utcnow().isoformat(),
+                    }
 
                 # ── 5. Risk Gate ──────────────────────────────────────────
                 if not risk.validate_trade(candidate):
@@ -176,6 +189,7 @@ async def get_status():
             }
             for s in bot.scanner_results
         ],
+        "last_candidate_graph_rag": bot.last_candidate_graph_rag,
         "trade_history": [
             {
                 "id":            t.id,
@@ -352,6 +366,73 @@ async def query_graph(req: GraphQueryRequest):
         "query": candidate,
         "retrieval": retrieval,
         "rag_prompt": reasoning_prompt,
+    }
+
+
+@app.get("/api/graph/latest-candidate")
+async def get_latest_candidate_telemetry():
+    """Returns the latest candidate setup telemetry and its Graph RAG retrieval."""
+    if bot.last_candidate_graph_rag:
+        return {
+            "status": "active_candidate",
+            "is_live_candidate": True,
+            "data": bot.last_candidate_graph_rag,
+        }
+    
+    # Return benchmark candidate if no active candidate has been detected yet
+    benchmark_candidate = {
+        "symbol": "XAUUSD",
+        "direction": "LONG",
+        "angle": 42.5,
+        "session_name": "London/NY Overlap (Peak Volume)",
+        "setup_reason": "Chain-of-CHoCH: CONTINUATION_BOS (LONG) -> 15M FVG Retrace Touch",
+        "entry_price": 2735.40,
+        "stop_loss": 2732.10,
+        "take_profit": 2742.00,
+    }
+    retrieval = kg.retrieve_similar_trades(benchmark_candidate, top_k=6)
+    return {
+        "status": "benchmark_candidate",
+        "is_live_candidate": False,
+        "data": {
+            "symbol": benchmark_candidate["symbol"],
+            "direction": benchmark_candidate["direction"],
+            "setup_reason": benchmark_candidate["setup_reason"],
+            "ai_decision": "APPROVE",
+            "ai_confidence": 85,
+            "entry_price": benchmark_candidate["entry_price"],
+            "stop_loss": benchmark_candidate["stop_loss"],
+            "take_profit": benchmark_candidate["take_profit"],
+            "graph_rag": {
+                "neighborhood_win_rate": retrieval["neighborhood_win_rate"],
+                "sample_size": retrieval["neighborhood_sample_size"],
+                "recommendation": retrieval["recommendation"],
+                "top_matches": retrieval["top_matches"][:3],
+            },
+            "timestamp": datetime.utcnow().isoformat(),
+        }
+    }
+
+
+@app.get("/api/graph-rag")
+async def get_unified_graph_rag():
+    """Unified Graph RAG endpoint providing graph metadata, winning DNA, high-win clusters, losing traps, and candidate telemetry."""
+    network_meta = {
+        "schema_version": "2.0.0",
+        "is_static": True,
+        "total_nodes": kg.graph.number_of_nodes(),
+        "total_links": kg.graph.number_of_edges(),
+        "total_trades": len(kg.trades),
+        "exported_at": getattr(kg, "last_exported_at", datetime.utcnow().isoformat()),
+    }
+    candidate_telemetry = await get_latest_candidate_telemetry()
+    return {
+        "status": "ok",
+        "network": network_meta,
+        "winning_dna": kg.winning_dna,
+        "high_win_clusters": [c for c in kg.clusters if c["status"] == "HIGH_WIN_CLUSTER"],
+        "losing_traps": kg.losing_traps,
+        "candidate": candidate_telemetry,
     }
 
 
