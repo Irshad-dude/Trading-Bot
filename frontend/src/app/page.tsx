@@ -263,7 +263,7 @@ function Badge({ label, color }: { label: string; color: 'green' | 'red' | 'cyan
     gray: 'bg-slate-100 text-slate-600 border-slate-200',
   };
   return (
-    <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold uppercase tracking-wider border font-mono ${colors[color]}`}>
+    <span className={`inline-flex items-center px-1.5 py-0.5 rounded-md text-[11px] font-medium border font-mono ${colors[color]}`}>
       {label}
     </span>
   );
@@ -481,37 +481,37 @@ export default function Dashboard() {
       
       {/* ── Toast Notification ── */}
       {tradeToast && (
-        <div className="fixed top-5 right-5 z-50 bg-slate-900 text-white px-5 py-3 rounded-xl text-sm font-mono shadow-xl flex items-center gap-2.5 animate-bounce">
-          <ZapIcon className="w-4 h-4 text-emerald-400" />
+        <div className="fixed top-4 right-4 z-50 bg-slate-900 text-white px-4 py-2.5 rounded-lg text-xs font-mono shadow-lg flex items-center gap-2 border border-slate-800">
+          <ZapIcon className="w-3.5 h-3.5 text-emerald-400 flex-shrink-0" />
           <span>{tradeToast}</span>
         </div>
       )}
 
-      {/* ── Ultra-Clean Minimalist Header ── */}
-      <header className="bg-white border-b border-slate-200 sticky top-0 z-40 px-6 lg:px-10 py-3 flex items-center justify-between shadow-sm">
+      {/* ── Navigation Header ── */}
+      <header className="bg-white border-b border-slate-200 sticky top-0 z-40 px-6 lg:px-8 py-2.5 flex items-center justify-between">
         {/* Left: Brand & Telemetry */}
-        <div className="flex items-center gap-5">
-          <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-xl bg-slate-900 text-white flex items-center justify-center font-bold text-xs tracking-widest shadow-sm flex-shrink-0">
+        <div className="flex items-center gap-4">
+          <div className="flex items-center gap-2.5">
+            <div className="w-8 h-8 rounded-lg bg-slate-900 text-white flex items-center justify-center font-bold text-xs tracking-wider flex-shrink-0">
               NX
             </div>
-            <div className="flex flex-col gap-0.5">
-              <h1 className="text-sm font-bold tracking-tight text-slate-900 leading-none">NEXUS V2</h1>
-              <span className="text-[10px] font-mono text-slate-500 leading-none">SMC Quantitative</span>
+            <div className="flex flex-col">
+              <span className="text-xs font-bold tracking-tight text-slate-900 leading-tight">Nexus Trading</span>
+              <span className="text-[10px] font-mono text-slate-500 leading-tight">SMC Quantitative System</span>
             </div>
           </div>
 
           <div className="hidden md:flex items-center gap-2 pl-4 border-l border-slate-200 text-[11px] text-slate-500 font-mono">
-            <span className={`w-2 h-2 rounded-full flex-shrink-0 ${connected ? 'bg-emerald-500 animate-pulse' : 'bg-rose-500'}`} />
-            <span>{connected ? 'Exchange Feed Active' : 'Offline'}</span>
+            <span className={`w-2 h-2 rounded-full flex-shrink-0 ${connected ? 'bg-emerald-500' : 'bg-rose-500'}`} />
+            <span>{connected ? 'Feed connected' : 'Feed offline'}</span>
           </div>
         </div>
 
-        {/* Center: Segmented Navigation Tabs */}
-        <nav className="flex bg-slate-100 p-1 rounded-xl border border-slate-200 gap-0.5">
+        {/* Center: Navigation Tabs */}
+        <nav className="flex bg-slate-100 p-0.5 rounded-lg border border-slate-200 gap-0.5">
           {[
             { key: 'backtest', label: `Backtest (${backtestData?.trades?.length ?? '...'})` },
-            { key: 'graph_rag', label: '🧠 Trade Brain (Graph RAG)' },
+            { key: 'graph_rag', label: 'Trade Brain (Graph RAG)' },
             { key: 'scanner', label: 'Scanner' },
             { key: 'open_orders', label: `Orders (${status?.open_orders?.length ?? 0})` },
             { key: 'trades', label: 'Ledger' },
@@ -519,10 +519,10 @@ export default function Dashboard() {
             <button
               key={tab.key}
               onClick={() => setActiveTab(tab.key as any)}
-              className={`h-8 px-3.5 rounded-lg text-xs font-semibold transition-all whitespace-nowrap ${
+              className={`h-7 px-3 rounded-md text-xs transition-colors whitespace-nowrap ${
                 activeTab === tab.key
-                  ? 'bg-white text-slate-900 shadow-sm font-bold border border-slate-200/80'
-                  : 'text-slate-500 hover:text-slate-800 hover:bg-white/60'
+                  ? 'bg-white text-slate-900 font-semibold shadow-2xs border border-slate-200/80'
+                  : 'text-slate-600 hover:text-slate-900'
               }`}
             >
               {tab.label}
@@ -530,33 +530,33 @@ export default function Dashboard() {
           ))}
         </nav>
 
-        {/* Right: Quick Controls & IST Clock */}
-        <div className="flex items-center gap-2.5">
+        {/* Right: Controls & Time */}
+        <div className="flex items-center gap-2">
           {/* Engine Toggle Button */}
           <button
             onClick={handleToggleEngine}
             disabled={!connected}
-            className={`h-9 px-4 rounded-xl text-xs font-mono font-semibold transition-all flex items-center gap-2 border disabled:opacity-40 disabled:cursor-not-allowed ${
+            className={`h-8 px-3 rounded-lg text-xs font-mono font-medium transition-colors flex items-center gap-1.5 border disabled:opacity-40 disabled:cursor-not-allowed ${
               status?.is_running
                 ? 'bg-rose-50 text-rose-700 border-rose-200 hover:bg-rose-100'
                 : 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100'
             }`}
           >
-            <span className="text-base leading-none">{status?.is_running ? '■' : '▶'}</span>
-            <span>{status?.is_running ? 'Stop Loop' : 'Start Loop'}</span>
+            <span className="text-xs leading-none">{status?.is_running ? '■' : '▶'}</span>
+            <span>{status?.is_running ? 'Stop Engine' : 'Start Engine'}</span>
           </button>
 
           {/* Test Order Button */}
           <button
             onClick={() => handleManualTrade('BTCUSDT', 'BUY')}
             disabled={!connected}
-            className="hidden sm:flex h-9 px-4 rounded-xl text-xs font-mono font-semibold bg-slate-900 text-white hover:bg-slate-700 transition-all items-center gap-2 shadow-sm disabled:opacity-40 disabled:cursor-not-allowed"
+            className="hidden sm:flex h-8 px-3 rounded-lg text-xs font-mono font-medium bg-slate-900 text-white hover:bg-slate-800 transition-colors items-center gap-1.5 disabled:opacity-40 disabled:cursor-not-allowed"
           >
-            <ZapIcon className="w-3.5 h-3.5 text-amber-400 flex-shrink-0" />
+            <ZapIcon className="w-3 h-3 text-amber-300 flex-shrink-0" />
             <span>Test Order</span>
           </button>
 
-          {/* IST Clock */}
+          {/* Clock */}
           <div className="hidden lg:flex items-center gap-1.5 text-[11px] font-mono text-slate-500 pl-3 border-l border-slate-200">
             <ClockIcon className="w-3.5 h-3.5 text-slate-400 flex-shrink-0" />
             <span className="tabular-nums">{utcTime}</span>
@@ -582,33 +582,33 @@ export default function Dashboard() {
                   {[
                     { 
                       key: 'ALL', 
-                      label: 'All Portfolio', 
+                      label: 'All Markets', 
                       count: backtestData?.summary?.total_trades ?? 0, 
-                      icon: '🌐', 
+                      ticker: 'PORTFOLIO',
                       pnl: `${(backtestData?.summary?.net_pnl_dollars ?? 0) >= 0 ? '+$' : '-$'}${Math.abs(backtestData?.summary?.net_pnl_dollars ?? 0).toLocaleString()} (${(backtestData?.summary?.net_pnl_pct ?? 0) >= 0 ? '+' : ''}${backtestData?.summary?.net_pnl_pct ?? 0}%)`, 
                       wr: `${backtestData?.summary?.win_rate ?? 0}%` 
                     },
                     { 
                       key: 'XAUUSD', 
-                      label: 'Gold (XAU/USD)', 
+                      label: 'Gold', 
                       count: backtestData?.gold_summary?.total_trades ?? 0, 
-                      icon: '🥇', 
+                      ticker: 'XAU/USD',
                       pnl: `${(backtestData?.gold_summary?.net_pnl_pct ?? 0) >= 0 ? '+' : ''}${backtestData?.gold_summary?.net_pnl_pct ?? 0}% Net`, 
                       wr: `${backtestData?.gold_summary?.win_rate ?? 0}%` 
                     },
                     { 
                       key: 'BTCUSDT', 
-                      label: 'Bitcoin (BTC)', 
+                      label: 'Bitcoin', 
                       count: backtestData?.btc_summary?.total_trades ?? 0, 
-                      icon: '₿', 
+                      ticker: 'BTC/USDT',
                       pnl: `${(backtestData?.btc_summary?.net_pnl_pct ?? 0) >= 0 ? '+' : ''}${backtestData?.btc_summary?.net_pnl_pct ?? 0}% Net`, 
                       wr: `${backtestData?.btc_summary?.win_rate ?? 0}%` 
                     },
                     { 
                       key: 'ETHUSDT', 
-                      label: 'Ethereum (ETH)', 
+                      label: 'Ethereum', 
                       count: backtestData?.eth_summary?.total_trades ?? 0, 
-                      icon: '⟠', 
+                      ticker: 'ETH/USDT',
                       pnl: `+${backtestData?.eth_summary?.net_pnl_pct ?? 0}% Net`, 
                       wr: `${backtestData?.eth_summary?.win_rate ?? 0}%` 
                     },
@@ -616,24 +616,28 @@ export default function Dashboard() {
                     <button
                       key={tab.key}
                       onClick={() => handleSelectAssetPartition(tab.key as any)}
-                      className={`px-4 py-2.5 rounded-xl border text-left transition-all flex items-center gap-3 ${
+                      className={`px-3.5 py-2 rounded-lg border text-left transition-colors flex items-center gap-2.5 ${
                         btAssetFilter === tab.key
-                          ? 'bg-slate-900 border-slate-900 text-white shadow-sm'
+                          ? 'bg-slate-900 border-slate-900 text-white'
                           : 'bg-slate-50 border-slate-200 text-slate-700 hover:bg-slate-100 hover:border-slate-300'
                       }`}
                     >
-                      <span className="text-base">{tab.icon}</span>
+                      <span className={`text-[10px] font-mono px-1.5 py-0.5 rounded font-medium ${
+                        btAssetFilter === tab.key ? 'bg-white/20 text-white' : 'bg-slate-200/80 text-slate-600'
+                      }`}>
+                        {tab.ticker}
+                      </span>
                       <div>
                         <div className="flex items-center gap-1.5">
-                          <span className="font-bold text-xs tracking-tight">{tab.label}</span>
-                          <span className={`text-[10px] font-mono px-1.5 rounded ${
-                            btAssetFilter === tab.key ? 'bg-white/20 text-white' : 'bg-slate-200/70 text-slate-600'
+                          <span className="font-semibold text-xs tracking-tight">{tab.label}</span>
+                          <span className={`text-[10px] font-mono px-1 rounded ${
+                            btAssetFilter === tab.key ? 'bg-white/20 text-white' : 'bg-slate-200 text-slate-600'
                           }`}>
                             {tab.count}
                           </span>
                         </div>
                         <span className={`text-[11px] font-mono block tabular-nums ${
-                          btAssetFilter === tab.key ? 'text-emerald-300 font-semibold' : 'text-slate-500'
+                          btAssetFilter === tab.key ? 'text-emerald-300 font-medium' : 'text-slate-500'
                         }`}>
                           {tab.pnl} · {tab.wr} WR
                         </span>
@@ -644,17 +648,17 @@ export default function Dashboard() {
 
                 {/* Right Actions: CSV Export + Drawer Toggles */}
                 <div className="flex items-center gap-2">
-                  {/* AI Memory Bank toggle */}
+                  {/* AI Skills toggle */}
                   <button
                     onClick={() => setShowAiRules(!showAiRules)}
-                    className={`h-9 px-3.5 rounded-xl border text-xs font-mono font-medium transition-all flex items-center gap-2 ${
+                    className={`h-8 px-3 rounded-lg border text-xs font-mono font-medium transition-colors flex items-center gap-1.5 ${
                       showAiRules
                         ? 'bg-indigo-50 border-indigo-200 text-indigo-700 hover:bg-indigo-100'
                         : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50 hover:border-slate-300'
                     }`}
                   >
                     <BrainCircuitIcon className="w-3.5 h-3.5 flex-shrink-0" />
-                    <span>{showAiRules ? 'Hide AI Skills' : 'AI Skills (4 Active)'}</span>
+                    <span>{showAiRules ? 'Hide AI Skills' : 'AI Skills (4)'}</span>
                   </button>
 
                   {/* Jump to Chart Visualizer CTA */}
@@ -663,29 +667,30 @@ export default function Dashboard() {
                       const el = document.getElementById('chart-visualizer-section');
                       if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
                     }}
-                    className="h-9 px-3.5 rounded-xl border border-indigo-200 bg-indigo-50 text-indigo-700 hover:bg-indigo-100 text-xs font-mono font-semibold transition-all flex items-center gap-1.5 shadow-2xs"
+                    className="h-8 px-3 rounded-lg border border-slate-200 bg-white text-slate-700 hover:bg-slate-50 text-xs font-mono font-medium transition-colors flex items-center gap-1.5"
                   >
-                    <span>🎯 View Chart (IDM · BOS · FVG)</span>
+                    <TargetIcon className="w-3.5 h-3.5 text-slate-500 flex-shrink-0" />
+                    <span>Chart View</span>
                   </button>
 
                   {/* Monthly Matrix toggle */}
                   <button
                     onClick={() => setShowMonthly(!showMonthly)}
-                    className={`h-9 px-3.5 rounded-xl border text-xs font-mono font-medium transition-all flex items-center gap-2 ${
+                    className={`h-8 px-3 rounded-lg border text-xs font-mono font-medium transition-colors flex items-center gap-1.5 ${
                       showMonthly
                         ? 'bg-sky-50 border-sky-200 text-sky-700 hover:bg-sky-100'
                         : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50 hover:border-slate-300'
                     }`}
                   >
                     <BarChart2Icon className="w-3.5 h-3.5 flex-shrink-0" />
-                    <span>{showMonthly ? 'Hide Monthly' : 'Monthly Matrix'}</span>
+                    <span>{showMonthly ? 'Hide Monthly' : 'Monthly'}</span>
                   </button>
 
                   {/* Export CSV — primary CTA */}
                   <a
                     href="/backtest_trades_2025_2026.csv"
                     download="backtest_trades_nov2025_nov2026.csv"
-                    className="h-9 px-4 rounded-xl bg-slate-900 text-white hover:bg-slate-700 text-xs font-mono font-semibold transition-all flex items-center gap-2 shadow-sm"
+                    className="h-8 px-3.5 rounded-lg bg-slate-900 text-white hover:bg-slate-800 text-xs font-mono font-medium transition-colors flex items-center gap-1.5"
                   >
                     <DownloadIcon className="w-3.5 h-3.5 text-slate-300 flex-shrink-0" />
                     <span>Export CSV</span>
@@ -693,137 +698,141 @@ export default function Dashboard() {
                 </div>
               </div>
 
-              {/* Highlight Banner when Gold is active */}
+              {/* Detail Banner when Gold is active */}
               {btAssetFilter === 'XAUUSD' && backtestData?.gold_summary && (
-                <div className="bg-gradient-to-r from-amber-500/10 via-amber-500/5 to-transparent border border-amber-300/80 rounded-xl p-4 flex flex-col md:flex-row md:items-center justify-between gap-3 text-xs font-mono shadow-2xs">
-                  <div className="flex items-center gap-3 text-amber-950 font-bold">
-                    <span className="text-2xl">🥇</span>
+                <div className="bg-slate-50/80 border border-slate-200 rounded-xl p-3.5 flex flex-col md:flex-row md:items-center justify-between gap-3 text-xs font-mono">
+                  <div className="flex items-center gap-3">
+                    <span className="text-xs font-mono font-bold px-2 py-1 rounded bg-amber-100 text-amber-900 border border-amber-200">
+                      XAU/USD
+                    </span>
                     <div>
                       <div className="flex items-center gap-2">
-                        <span className="text-sm tracking-tight text-amber-950 font-bold">GOLD (XAU/USD) SMC BACKTEST</span>
-                        <span className="px-2 py-0.5 rounded-full bg-amber-200 text-amber-900 border border-amber-300 text-[10px] font-bold">
-                          {backtestData.gold_summary.period || '1 NOV 2025 – 2 NOV 2026'}
+                        <span className="text-xs font-bold text-slate-900">Gold 15M Institutional Backtest</span>
+                        <span className="text-slate-500 text-[11px]">
+                          {backtestData.gold_summary.period || 'Nov 1, 2025 – Nov 2, 2026'}
                         </span>
-                        <span className={`px-2 py-0.5 rounded-full border text-[10px] font-bold ${
+                        <span className={`px-2 py-0.2 rounded text-[10px] font-semibold border ${
                           backtestData.gold_summary.net_pnl_pct >= 0
-                            ? 'bg-emerald-100 text-emerald-800 border-emerald-300'
-                            : 'bg-rose-100 text-rose-800 border-rose-300'
+                            ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                            : 'bg-rose-50 text-rose-700 border-rose-200'
                         }`}>
-                          {backtestData.gold_summary.net_pnl_pct >= 0 ? `+${backtestData.gold_summary.net_pnl_pct.toFixed(2)}%` : `${backtestData.gold_summary.net_pnl_pct.toFixed(2)}%`} NET RETURN
+                          {backtestData.gold_summary.net_pnl_pct >= 0 ? `+${backtestData.gold_summary.net_pnl_pct.toFixed(2)}%` : `${backtestData.gold_summary.net_pnl_pct.toFixed(2)}%`}
                         </span>
                       </div>
-                      <span className="text-[11px] text-amber-800 font-medium">
-                        Period: <strong>Nov 1, 2025 – Nov 2, 2026</strong> · Strategy: <strong>15M Chain-of-CHoCH (BOS + CHoCH + FVG Retrace)</strong>
+                      <span className="text-[11px] text-slate-500">
+                        15M Chain-of-CHoCH · 40°–45° Angle Filter · 1:2 R:R Rule
                       </span>
                     </div>
                   </div>
-                  <div className="flex flex-wrap items-center gap-3 text-[11px] text-amber-950 font-semibold bg-white/80 px-3.5 py-2 rounded-lg border border-amber-200 shadow-2xs">
-                    <span>⚡ {backtestData.gold_summary.total_trades} Trades</span>
-                    <span>•</span>
-                    <span className="text-slate-900 font-bold">{backtestData.gold_summary.win_rate}% WR ({backtestData.gold_summary.wins}W / {backtestData.gold_summary.losses}L)</span>
-                    <span>•</span>
-                    <span className={`font-bold ${backtestData.gold_summary.net_pnl_dollars >= 0 ? 'text-emerald-700' : 'text-rose-700'}`}>
-                      {backtestData.gold_summary.net_pnl_dollars >= 0 ? `+$${backtestData.gold_summary.net_pnl_dollars.toFixed(2)}` : `-$${Math.abs(backtestData.gold_summary.net_pnl_dollars).toFixed(2)}`} Net PnL
+                  <div className="flex flex-wrap items-center gap-3 text-[11px] text-slate-700 bg-white px-3 py-1.5 rounded-lg border border-slate-200">
+                    <span>{backtestData.gold_summary.total_trades} trades</span>
+                    <span className="text-slate-300">•</span>
+                    <span className="text-slate-900 font-semibold">{backtestData.gold_summary.win_rate}% WR ({backtestData.gold_summary.wins}W / {backtestData.gold_summary.losses}L)</span>
+                    <span className="text-slate-300">•</span>
+                    <span className={`font-semibold ${backtestData.gold_summary.net_pnl_dollars >= 0 ? 'text-emerald-700' : 'text-rose-700'}`}>
+                      {backtestData.gold_summary.net_pnl_dollars >= 0 ? `+$${backtestData.gold_summary.net_pnl_dollars.toFixed(2)}` : `-$${Math.abs(backtestData.gold_summary.net_pnl_dollars).toFixed(2)}`}
                     </span>
-                    <span>•</span>
-                    <span className="text-rose-700 font-bold">Max DD: {backtestData.gold_summary.max_drawdown_pct !== undefined ? `${backtestData.gold_summary.max_drawdown_pct}%` : '29.47%'}</span>
-                    <span>•</span>
+                    <span className="text-slate-300">•</span>
+                    <span className="text-slate-600">Max DD: {backtestData.gold_summary.max_drawdown_pct !== undefined ? `${backtestData.gold_summary.max_drawdown_pct}%` : '6.79%'}</span>
+                    <span className="text-slate-300">•</span>
                     <span>PF: {backtestData.gold_summary.profit_factor}</span>
                   </div>
                 </div>
               )}
 
-              {/* Highlight Banner when BTC is active */}
+              {/* Detail Banner when BTC is active */}
               {btAssetFilter === 'BTCUSDT' && backtestData?.btc_summary && (
-                <div className="bg-gradient-to-r from-sky-500/10 via-amber-500/5 to-transparent border border-sky-300/80 rounded-xl p-4 flex flex-col md:flex-row md:items-center justify-between gap-3 text-xs font-mono shadow-2xs">
-                  <div className="flex items-center gap-3 text-sky-950 font-bold">
-                    <span className="text-2xl">₿</span>
+                <div className="bg-slate-50/80 border border-slate-200 rounded-xl p-3.5 flex flex-col md:flex-row md:items-center justify-between gap-3 text-xs font-mono">
+                  <div className="flex items-center gap-3">
+                    <span className="text-xs font-mono font-bold px-2 py-1 rounded bg-sky-100 text-sky-900 border border-sky-200">
+                      BTC/USDT
+                    </span>
                     <div>
                       <div className="flex items-center gap-2">
-                        <span className="text-sm tracking-tight text-sky-950 font-bold">BITCOIN (BTC/USDT) SMC BACKTEST</span>
-                        <span className="px-2 py-0.5 rounded-full bg-sky-200 text-sky-900 border border-sky-300 text-[10px] font-bold">
-                          {backtestData.btc_summary.period || '1 NOV 2025 – 2 NOV 2026'}
+                        <span className="text-xs font-bold text-slate-900">Bitcoin 15M Institutional Backtest</span>
+                        <span className="text-slate-500 text-[11px]">
+                          {backtestData.btc_summary.period || 'Nov 1, 2025 – Nov 2, 2026'}
                         </span>
-                        <span className={`px-2 py-0.5 rounded-full border text-[10px] font-bold ${
+                        <span className={`px-2 py-0.2 rounded text-[10px] font-semibold border ${
                           backtestData.btc_summary.net_pnl_pct >= 0
-                            ? 'bg-emerald-100 text-emerald-800 border-emerald-300'
-                            : 'bg-rose-100 text-rose-800 border-rose-300'
+                            ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                            : 'bg-rose-50 text-rose-700 border-rose-200'
                         }`}>
-                          {backtestData.btc_summary.net_pnl_pct >= 0 ? `+${backtestData.btc_summary.net_pnl_pct.toFixed(2)}%` : `${backtestData.btc_summary.net_pnl_pct.toFixed(2)}%`} NET RETURN
+                          {backtestData.btc_summary.net_pnl_pct >= 0 ? `+${backtestData.btc_summary.net_pnl_pct.toFixed(2)}%` : `${backtestData.btc_summary.net_pnl_pct.toFixed(2)}%`}
                         </span>
                       </div>
-                      <span className="text-[11px] text-sky-800 font-medium">
-                        Period: <strong>Nov 1, 2025 – Nov 2, 2026</strong> · Strategy: <strong>15M Chain-of-CHoCH (BOS + CHoCH + FVG Retrace)</strong>
+                      <span className="text-[11px] text-slate-500">
+                        15M Chain-of-CHoCH · 40°–45° Angle Filter · 1:2 R:R Rule
                       </span>
                     </div>
                   </div>
-                  <div className="flex flex-wrap items-center gap-3 text-sky-950 font-semibold bg-white/80 px-3.5 py-2 rounded-lg border border-sky-200 shadow-2xs">
-                    <span>⚡ {backtestData.btc_summary.total_trades} Trades</span>
-                    <span>•</span>
-                    <span className="text-emerald-700 font-bold">{backtestData.btc_summary.win_rate}% WR ({backtestData.btc_summary.wins}W / {backtestData.btc_summary.losses}L)</span>
-                    <span>•</span>
-                    <span className="text-emerald-700 font-bold">+${backtestData.btc_summary.net_pnl_dollars.toFixed(2)} Net PnL</span>
-                    <span>•</span>
-                    <span className="text-rose-700 font-bold">Max DD: {backtestData.btc_summary.max_drawdown_pct !== undefined ? `${backtestData.btc_summary.max_drawdown_pct}%` : '1.0%'}</span>
-                    <span>•</span>
+                  <div className="flex flex-wrap items-center gap-3 text-[11px] text-slate-700 bg-white px-3 py-1.5 rounded-lg border border-slate-200">
+                    <span>{backtestData.btc_summary.total_trades} trades</span>
+                    <span className="text-slate-300">•</span>
+                    <span className="text-slate-900 font-semibold">{backtestData.btc_summary.win_rate}% WR ({backtestData.btc_summary.wins}W / {backtestData.btc_summary.losses}L)</span>
+                    <span className="text-slate-300">•</span>
+                    <span className="text-emerald-700 font-semibold">+${backtestData.btc_summary.net_pnl_dollars.toFixed(2)}</span>
+                    <span className="text-slate-300">•</span>
+                    <span className="text-slate-600">Max DD: {backtestData.btc_summary.max_drawdown_pct !== undefined ? `${backtestData.btc_summary.max_drawdown_pct}%` : '8.76%'}</span>
+                    <span className="text-slate-300">•</span>
                     <span>PF: {backtestData.btc_summary.profit_factor}</span>
                   </div>
                 </div>
               )}
 
               {/* Row 2: Five Key Executive Numbers (Dynamic to Active Tab) */}
-              <div className="grid grid-cols-2 lg:grid-cols-5 gap-4 tabular-nums">
-                <div className="flex flex-col gap-1">
-                  <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400">
-                    {btAssetFilter === 'ALL' ? 'Combined Portfolio Return' : `${activeSummary?.name || 'Asset'} Return`}
+              <div className="grid grid-cols-2 lg:grid-cols-5 gap-3 tabular-nums">
+                <div className="p-3.5 rounded-xl border border-slate-200/80 bg-slate-50/50 flex flex-col gap-1">
+                  <span className="text-[11px] font-medium text-slate-500">
+                    {btAssetFilter === 'ALL' ? 'Combined portfolio return' : `${activeSummary?.name || 'Asset'} return`}
                   </span>
-                  <span className={`text-3xl font-light font-mono tracking-tight ${(activeSummary?.net_pnl_pct ?? 0) >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
+                  <span className={`text-2xl font-semibold font-mono tracking-tight ${(activeSummary?.net_pnl_pct ?? 0) >= 0 ? 'text-emerald-700' : 'text-rose-700'}`}>
                     {(activeSummary?.net_pnl_pct ?? 0) >= 0 ? `+${activeSummary?.net_pnl_pct ?? 0}%` : `${activeSummary?.net_pnl_pct ?? 0}%`}
                   </span>
-                  <span className="text-xs text-slate-500 font-mono">
+                  <span className="text-[11px] text-slate-500 font-mono">
                     {(activeSummary?.net_pnl_dollars ?? 0) >= 0 ? `+$${activeSummary?.net_pnl_dollars?.toLocaleString()}` : `-$${Math.abs(activeSummary?.net_pnl_dollars ?? 0).toLocaleString()}`} ({btAssetFilter === 'ALL' ? '$20,000 base' : '$10,000 base'})
                   </span>
                 </div>
 
-                <div className="flex flex-col gap-1">
-                  <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400">Accuracy (Win Rate)</span>
-                  <span className="text-3xl font-light font-mono text-slate-900 tracking-tight">
+                <div className="p-3.5 rounded-xl border border-slate-200/80 bg-slate-50/50 flex flex-col gap-1">
+                  <span className="text-[11px] font-medium text-slate-500">Win rate</span>
+                  <span className="text-2xl font-semibold font-mono text-slate-900 tracking-tight">
                     {activeSummary?.win_rate ?? 0}%
                   </span>
-                  <span className="text-xs text-slate-500 font-mono">
+                  <span className="text-[11px] text-slate-500 font-mono">
                     {activeSummary?.wins ?? 0}W / {activeSummary?.losses ?? 0}L (1:2 BE = 33.3%)
                   </span>
                 </div>
 
-                <div className="flex flex-col gap-1">
-                  <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400">Positions Executed</span>
-                  <span className="text-3xl font-light font-mono text-slate-900 tracking-tight">
+                <div className="p-3.5 rounded-xl border border-slate-200/80 bg-slate-50/50 flex flex-col gap-1">
+                  <span className="text-[11px] font-medium text-slate-500">Positions executed</span>
+                  <span className="text-2xl font-semibold font-mono text-slate-900 tracking-tight">
                     {activeSummary?.total_trades ?? 0}
                   </span>
-                  <span className="text-xs text-slate-500 font-mono">
+                  <span className="text-[11px] text-slate-500 font-mono truncate">
                     {btAssetFilter === 'ALL'
                       ? `Gold: ${backtestData?.gold_summary?.total_trades ?? 0} · BTC: ${backtestData?.btc_summary?.total_trades ?? 0}`
-                      : (activeSummary?.period || '1 Nov 2025 – 2 Nov 2026 (15M SMC)')}
+                      : (activeSummary?.period || 'Nov 1, 2025 – Nov 2, 2026')}
                   </span>
                 </div>
 
-                <div className="flex flex-col gap-1">
-                  <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400">Peak Drawdown (Max DD)</span>
-                  <span className="text-3xl font-light font-mono text-rose-600 tracking-tight">
+                <div className="p-3.5 rounded-xl border border-slate-200/80 bg-slate-50/50 flex flex-col gap-1">
+                  <span className="text-[11px] font-medium text-slate-500">Max drawdown</span>
+                  <span className="text-2xl font-semibold font-mono text-rose-700 tracking-tight">
                     {activeSummary?.max_drawdown_pct !== undefined ? `${activeSummary.max_drawdown_pct}%` : '—'}
                   </span>
-                  <span className="text-xs text-slate-500 font-mono">
-                    Max Portfolio Dip from Peak
+                  <span className="text-[11px] text-slate-500 font-mono">
+                    Peak-to-trough decline
                   </span>
                 </div>
 
-                <div className="flex flex-col gap-1">
-                  <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400">Profit Factor & Model</span>
-                  <span className="text-3xl font-light font-mono text-slate-900 tracking-tight">
+                <div className="p-3.5 rounded-xl border border-slate-200/80 bg-slate-50/50 flex flex-col gap-1">
+                  <span className="text-[11px] font-medium text-slate-500">Profit factor</span>
+                  <span className="text-2xl font-semibold font-mono text-slate-900 tracking-tight">
                     {activeSummary?.profit_factor ?? 0}
                   </span>
-                  <span className="text-xs text-slate-500 font-mono">
-                    Strict 1:2 R:R (1% Risk / 2% TP)
+                  <span className="text-[11px] text-slate-500 font-mono">
+                    1:2 R:R (1% risk / 2% reward)
                   </span>
                 </div>
               </div>
@@ -869,22 +878,22 @@ export default function Dashboard() {
                   <div className="pt-5 border-t border-slate-100 flex flex-col gap-2.5">
                     <div className="flex flex-wrap items-center justify-between gap-3 text-xs font-mono">
                       <div className="flex items-center gap-2">
-                        <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-                        <span className="font-bold text-slate-800 uppercase tracking-wider text-[11px]">
-                          Performance Growth & Accuracy Trendline ({btAssetFilter === 'ALL' ? 'Combined Portfolio' : btAssetFilter})
+                        <span className="w-2 h-2 rounded-full bg-emerald-500" />
+                        <span className="font-semibold text-slate-800 text-xs">
+                          Performance & accuracy trendline ({btAssetFilter === 'ALL' ? 'Combined Portfolio' : btAssetFilter})
                         </span>
                       </div>
                       {/* Legend */}
                       <div className="flex flex-wrap items-center gap-3 text-[11px]">
-                        <span className="flex items-center gap-1.5 text-emerald-700 font-bold">
+                        <span className="flex items-center gap-1.5 text-emerald-700 font-medium">
                           <span className="w-3 h-1 bg-emerald-500 rounded-full" />
-                          <span>Equity Curve ($)</span>
+                          <span>Equity curve ($)</span>
                         </span>
-                        <span className="flex items-center gap-1.5 text-purple-700 font-bold">
+                        <span className="flex items-center gap-1.5 text-purple-700 font-medium">
                           <span className="w-3 h-1 bg-purple-500 rounded-full" />
-                          <span>Win Rate Accuracy (%)</span>
+                          <span>Win rate accuracy (%)</span>
                         </span>
-                        <span className="flex items-center gap-1.5 text-slate-400 font-medium">
+                        <span className="flex items-center gap-1.5 text-slate-400 font-normal">
                           <span className="w-3 h-0.5 border-t border-dashed border-slate-400" />
                           <span>1:2 R:R Breakeven (33.3%)</span>
                         </span>
@@ -987,9 +996,9 @@ export default function Dashboard() {
               {showAiRules && (
                 <div className="pt-5 border-t border-slate-100 flex flex-col gap-3">
                   <div className="flex items-center justify-between">
-                    <span className="text-xs font-bold uppercase tracking-wider text-slate-700 flex items-center gap-2">
+                    <span className="text-xs font-semibold text-slate-700 flex items-center gap-2">
                       <BrainCircuitIcon className="w-4 h-4 text-slate-700" />
-                      Active AI Skills & Architecture Rules (817 Trades Evaluated)
+                      Active AI skills and architecture rules (817 trades evaluated)
                     </span>
                     <span className="text-xs font-mono text-slate-500">Asia/Kolkata IST (UTC+05:30)</span>
                   </div>
@@ -1009,7 +1018,7 @@ export default function Dashboard() {
                       <div key={r.id} className="p-3.5 rounded-xl border border-slate-200 bg-slate-50 flex flex-col justify-between gap-2 hover:border-slate-300 transition-colors">
                         <div className="flex flex-col gap-1">
                           <div className="flex items-center justify-between gap-1">
-                            <span className="text-xs font-bold text-slate-900">{r.title}</span>
+                            <span className="text-xs font-semibold text-slate-900">{r.title}</span>
                             {r.tag && (
                               <a
                                 href={r.url}
@@ -1034,9 +1043,9 @@ export default function Dashboard() {
               {showMonthly && (
                 <div className="pt-5 border-t border-slate-100 flex flex-col gap-3">
                   <div className="flex items-center justify-between">
-                    <span className="text-xs font-bold uppercase tracking-wider text-slate-700 flex items-center gap-2">
+                    <span className="text-xs font-semibold text-slate-700 flex items-center gap-2">
                       <BarChart2Icon className="w-4 h-4 text-slate-700" />
-                      Monthly Performance Matrix (Jan – Sep 2026)
+                      Monthly performance matrix (Jan – Sep 2026)
                     </span>
                     <span className="text-xs font-mono text-slate-500">
                       Showing: {btAssetFilter === 'ALL' ? 'All 3 Assets' : btAssetFilter}
@@ -1046,8 +1055,8 @@ export default function Dashboard() {
                     <table className="w-full border-collapse text-xs font-mono tabular-nums">
                       <thead>
                         <tr className="border-b border-slate-200 text-slate-500">
-                          {['Month', 'Symbol', 'Trades', 'Wins', 'Losses', 'Accuracy (Win %)', 'Net Return (%)'].map(h => (
-                            <th key={h} className="px-4 py-2.5 text-left text-[10px] font-bold uppercase tracking-widest">{h}</th>
+                          {['Month', 'Symbol', 'Trades', 'Wins', 'Losses', 'Win rate', 'Net return'].map(h => (
+                            <th key={h} className="px-4 py-2 text-left text-xs font-medium text-slate-500">{h}</th>
                           ))}
                         </tr>
                       </thead>
@@ -1056,7 +1065,7 @@ export default function Dashboard() {
                           ?.filter(m => btAssetFilter === 'ALL' || m.symbol === btAssetFilter)
                           .map((m, idx) => (
                           <tr key={`${m.month}-${m.symbol}-${idx}`} className="hover:bg-slate-50">
-                            <td className="px-4 py-2 font-bold text-slate-900">{m.month}</td>
+                            <td className="px-4 py-2 font-medium text-slate-900">{m.month}</td>
                             <td className="px-4 py-2">
                               <Badge 
                                 label={m.symbol === 'XAUUSD' ? 'Gold (XAU)' : m.symbol === 'BTCUSDT' ? 'BTC' : 'ETH'} 
@@ -1064,10 +1073,10 @@ export default function Dashboard() {
                               />
                             </td>
                             <td className="px-4 py-2 text-slate-700">{m.trades}</td>
-                            <td className="px-4 py-2 text-emerald-600 font-semibold">{m.wins}</td>
-                            <td className="px-4 py-2 text-rose-600">{m.losses}</td>
+                            <td className="px-4 py-2 text-emerald-700 font-medium">{m.wins}</td>
+                            <td className="px-4 py-2 text-rose-700">{m.losses}</td>
                             <td className="px-4 py-2 text-slate-700">{m.win_rate}%</td>
-                            <td className={`px-4 py-2 font-bold ${m.net_return_pct >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
+                            <td className={`px-4 py-2 font-medium ${m.net_return_pct >= 0 ? 'text-emerald-700' : 'text-rose-700'}`}>
                               {m.net_return_pct >= 0 ? `+${m.net_return_pct}%` : `${m.net_return_pct}%`}
                             </td>
                           </tr>
@@ -1085,8 +1094,8 @@ export default function Dashboard() {
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 px-2">
                 <div className="flex items-center gap-2">
                   <span className="w-2 h-2 rounded-full bg-slate-900" />
-                  <span className="text-xs font-bold uppercase tracking-widest text-slate-900">
-                    Trade Visualizer & Execution Candlesticks
+                  <span className="text-xs font-semibold text-slate-900">
+                    Trade visualizer & candlestick execution
                   </span>
                   <span className="text-xs font-mono text-slate-400">
                     {selectedTrade ? `Selected: #${selectedTrade.trade_num} ${selectedTrade.symbol} (${selectedTrade.direction})` : ''}
@@ -1094,12 +1103,12 @@ export default function Dashboard() {
                 </div>
 
                 {/* View switcher */}
-                <div className="flex bg-slate-200/70 p-1 rounded-xl text-xs font-mono">
+                <div className="flex bg-slate-100 p-0.5 rounded-lg border border-slate-200 text-xs font-mono gap-0.5">
                   <button
                     onClick={() => setChartMode('visualizer')}
-                    className={`px-3 py-1 rounded-lg transition-all flex items-center gap-1.5 ${
+                    className={`h-7 px-3 rounded-md transition-colors flex items-center gap-1.5 ${
                       chartMode === 'visualizer'
-                        ? 'bg-white text-slate-900 font-bold shadow-2xs'
+                        ? 'bg-white text-slate-900 font-semibold shadow-2xs border border-slate-200/80'
                         : 'text-slate-600 hover:text-slate-900'
                     }`}
                   >
@@ -1108,9 +1117,9 @@ export default function Dashboard() {
                   </button>
                   <button
                     onClick={() => setChartMode('tradingview')}
-                    className={`px-3 py-1 rounded-lg transition-all flex items-center gap-1.5 ${
+                    className={`h-7 px-3 rounded-md transition-colors flex items-center gap-1.5 ${
                       chartMode === 'tradingview'
-                        ? 'bg-white text-slate-900 font-bold shadow-2xs'
+                        ? 'bg-white text-slate-900 font-semibold shadow-2xs border border-slate-200/80'
                         : 'text-slate-600 hover:text-slate-900'
                     }`}
                   >
@@ -1139,9 +1148,9 @@ export default function Dashboard() {
               )}
 
               {chartMode === 'tradingview' && (
-                <div className="bg-white rounded-2xl p-4 border border-slate-200 shadow-xs flex flex-col gap-2">
+                <div className="bg-white rounded-xl p-4 border border-slate-200 shadow-xs flex flex-col gap-2">
                   <div className="flex items-center justify-between text-xs font-mono text-slate-500 px-1">
-                    <span>Official TradingView Advanced Chart: {selectedTrade?.symbol || 'BTCUSDT'}</span>
+                    <span>TradingView advanced chart: {selectedTrade?.symbol || 'BTCUSDT'}</span>
                     <span>Asia/Kolkata IST Timezone</span>
                   </div>
                   <TradingViewWidget
@@ -1154,71 +1163,71 @@ export default function Dashboard() {
             </div>
 
             {/* ── All Positions Table with Filtering & Pagination ── */}
-            <div className="bg-white border border-slate-200 rounded-2xl overflow-hidden shadow-xs flex flex-col">
+            <div className="bg-white border border-slate-200 rounded-xl overflow-hidden shadow-xs flex flex-col">
               {/* Table Controls Bar */}
-              <div className="p-4 border-b border-slate-100 flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+              <div className="p-4 border-b border-slate-100 flex flex-col lg:flex-row lg:items-center justify-between gap-3">
               {/* Filter groups */}
-                <div className="flex flex-wrap items-center gap-3">
+                <div className="flex flex-wrap items-center gap-2.5">
                   {/* Asset filter group */}
-                  <div className="flex bg-slate-100 rounded-xl p-1 gap-0.5">
+                  <div className="flex bg-slate-100 rounded-lg p-0.5 border border-slate-200 gap-0.5">
                     {(['ALL', 'XAUUSD', 'BTCUSDT', 'ETHUSDT'] as const).map(sym => (
                       <button
                         key={sym}
                         onClick={() => handleSelectAssetPartition(sym)}
-                        className={`h-7 px-3 rounded-lg text-[11px] font-semibold transition-all ${
+                        className={`h-7 px-2.5 rounded-md text-xs transition-colors ${
                           btAssetFilter === sym
-                            ? 'bg-white text-slate-900 shadow-sm border border-slate-200/80 font-bold'
-                            : 'text-slate-500 hover:text-slate-800 hover:bg-white/60'
+                            ? 'bg-white text-slate-900 shadow-2xs border border-slate-200/80 font-semibold'
+                            : 'text-slate-600 hover:text-slate-900'
                         }`}
                       >
                         {sym === 'ALL'
                           ? `All (${backtestData?.summary?.total_trades ?? 0})`
                           : sym === 'XAUUSD'
-                          ? `🥇 Gold (${backtestData?.gold_summary?.total_trades ?? 0})`
+                          ? `Gold (${backtestData?.gold_summary?.total_trades ?? 0})`
                           : sym === 'BTCUSDT'
-                          ? `₿ BTC (${backtestData?.btc_summary?.total_trades ?? 0})`
-                          : `⟠ ETH (${backtestData?.eth_summary?.total_trades ?? 0})`}
+                          ? `BTC (${backtestData?.btc_summary?.total_trades ?? 0})`
+                          : `ETH (${backtestData?.eth_summary?.total_trades ?? 0})`}
                       </button>
                     ))}
                   </div>
 
                   {/* Divider */}
-                  <span className="w-px h-5 bg-slate-200 hidden sm:block" />
+                  <span className="w-px h-4 bg-slate-200 hidden sm:block" />
 
                   {/* Outcome filter group */}
-                  <div className="flex bg-slate-100 rounded-xl p-1 gap-0.5">
+                  <div className="flex bg-slate-100 rounded-lg p-0.5 border border-slate-200 gap-0.5">
                     {(['ALL', 'WIN', 'LOSS'] as const).map(res => (
                       <button
                         key={res}
                         onClick={() => { setBtResultFilter(res); setBtPage(1); }}
-                        className={`h-7 px-3 rounded-lg text-[11px] font-semibold transition-all ${
+                        className={`h-7 px-2.5 rounded-md text-xs transition-colors ${
                           btResultFilter === res
                             ? res === 'WIN'
-                              ? 'bg-emerald-600 text-white shadow-sm font-bold'
+                              ? 'bg-emerald-700 text-white font-semibold'
                               : res === 'LOSS'
-                                ? 'bg-rose-600 text-white shadow-sm font-bold'
-                                : 'bg-white text-slate-900 shadow-sm border border-slate-200/80 font-bold'
-                            : 'text-slate-500 hover:text-slate-800 hover:bg-white/60'
+                                ? 'bg-rose-700 text-white font-semibold'
+                                : 'bg-white text-slate-900 shadow-2xs border border-slate-200/80 font-semibold'
+                            : 'text-slate-600 hover:text-slate-900'
                         }`}
                       >
-                        {res === 'ALL' ? 'All Results' : res === 'WIN' ? '✓ Wins' : '✕ Losses'}
+                        {res === 'ALL' ? 'All results' : res === 'WIN' ? 'Wins' : 'Losses'}
                       </button>
                     ))}
                   </div>
 
                   {/* Direction filter group */}
-                  <div className="flex bg-slate-100 rounded-xl p-1 gap-0.5">
+                  <div className="flex bg-slate-100 rounded-lg p-0.5 border border-slate-200 gap-0.5">
                     {(['ALL', 'LONG', 'SHORT'] as const).map(dir => (
                       <button
                         key={dir}
                         onClick={() => { setBtDirectionFilter(dir); setBtPage(1); }}
-                        className={`h-7 px-3 rounded-lg text-[11px] font-semibold transition-all ${
+                        className={`h-7 px-2.5 rounded-md text-xs transition-colors ${
                           btDirectionFilter === dir
-                            ? 'bg-white text-slate-900 shadow-sm border border-slate-200/80 font-bold'
-                            : 'text-slate-500 hover:text-slate-800 hover:bg-white/60'
+                            ? 'bg-white text-slate-900 shadow-2xs border border-slate-200/80 font-semibold'
+                            : 'text-slate-600 hover:text-slate-900'
                         }`}
                       >
-                        {dir === 'ALL' ? 'Both' : dir === 'LONG' ? '↑ Long' : '↓ Short'}
+                        {dir === 'ALL' ? 'Both sides' : dir === 'LONG' ? 'Long' : 'Short'}
                       </button>
                     ))}
                   </div>
@@ -1227,17 +1236,17 @@ export default function Dashboard() {
                 {/* Search Input */}
                 <div className="flex items-center gap-3">
                   <div className="relative">
-                    <SearchIcon className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                    <SearchIcon className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
                     <input
                       type="text"
                       placeholder="Search date, price, reason..."
                       value={btSearch}
                       onChange={e => { setBtSearch(e.target.value); setBtPage(1); }}
-                      className="bg-slate-50 border border-slate-200 rounded-xl pl-9 pr-3 py-1.5 text-xs font-mono text-slate-800 placeholder:text-slate-400 focus:outline-none focus:border-slate-400 w-56"
+                      className="bg-slate-50 border border-slate-200 rounded-lg pl-8 pr-3 py-1.5 text-xs font-mono text-slate-800 placeholder:text-slate-400 focus:outline-none focus:border-slate-400 w-56"
                     />
                   </div>
                   <span className="text-[11px] font-mono text-slate-500 whitespace-nowrap">
-                    {filteredBtTrades.length} Trades found
+                    {filteredBtTrades.length} trades found
                   </span>
                 </div>
               </div>
@@ -1246,40 +1255,35 @@ export default function Dashboard() {
               <div className="overflow-x-auto">
                 <table className="w-full border-collapse">
                   <thead>
-                    <tr className="border-b border-slate-100 bg-slate-50/70">
-                      {['#', 'Asset', 'Side', 'Entry (IST)', 'Entry Price', 'Exit (IST)', 'Exit Price', 'Stop Loss', 'Take Profit', 'R:R', 'PnL %', 'PnL ($)', 'Balance', 'Max DD', 'AI Pattern / Reason', 'Result', 'Brain'].map(h => (
-                        <th key={h} className="px-4 py-3 text-left text-[10px] font-bold uppercase tracking-widest text-slate-500 whitespace-nowrap">{h}</th>
+                    <tr className="border-b border-slate-200 bg-slate-50/70">
+                      {['#', 'Asset', 'Side', 'Entry (IST)', 'Entry price', 'Exit (IST)', 'Exit price', 'Stop loss', 'Take profit', 'R:R', 'PnL %', 'PnL ($)', 'Balance', 'Max DD', 'Pattern & setup', 'Result', 'Graph'].map(h => (
+                        <th key={h} className="px-3.5 py-2.5 text-left text-xs font-medium text-slate-500 whitespace-nowrap">{h}</th>
                       ))}
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
                     {loadingBacktest ? (
                       <tr>
-                        <td colSpan={16} className="px-5 py-16 text-center">
+                        <td colSpan={17} className="px-5 py-16 text-center">
                           <div className="flex flex-col items-center gap-3">
-                            <div className="relative w-10 h-10">
-                              <div className="absolute inset-0 rounded-full border-4 border-slate-200" />
-                              <div className="absolute inset-0 rounded-full border-4 border-t-blue-500 animate-spin" />
+                            <div className="relative w-8 h-8">
+                              <div className="absolute inset-0 rounded-full border-2 border-slate-200" />
+                              <div className="absolute inset-0 rounded-full border-2 border-t-slate-800 animate-spin" />
                             </div>
-                            <div className="text-sm font-semibold text-slate-600">Loading backtest data</div>
+                            <div className="text-xs font-medium text-slate-600">Loading backtest data</div>
                             <div className="text-xs text-slate-400">Fetching 169 trades from Nov 2025 → Nov 2026…</div>
                           </div>
                         </td>
                       </tr>
                     ) : backtestError ? (
                       <tr>
-                        <td colSpan={16} className="px-5 py-14 text-center">
+                        <td colSpan={17} className="px-5 py-14 text-center">
                           <div className="flex flex-col items-center gap-3 max-w-sm mx-auto">
-                            <div className="flex items-center justify-center w-12 h-12 rounded-full bg-rose-50 border border-rose-200">
-                              <svg className="w-6 h-6 text-rose-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                                <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
-                              </svg>
-                            </div>
-                            <div className="text-sm font-bold text-rose-700">Failed to Load Backtest</div>
-                            <div className="text-xs text-rose-500 bg-rose-50 border border-rose-200 rounded-lg px-3 py-2 font-mono break-all">{backtestError}</div>
+                            <div className="text-xs font-semibold text-rose-700">Failed to load backtest</div>
+                            <div className="text-xs text-rose-600 bg-rose-50 border border-rose-200 rounded-lg px-3 py-2 font-mono break-all">{backtestError}</div>
                             <button
                               onClick={() => { setBacktestError(null); setLoadingBacktest(true); }}
-                              className="px-4 py-1.5 text-xs font-semibold rounded-lg bg-rose-600 hover:bg-rose-700 text-white transition"
+                              className="px-3.5 py-1.5 text-xs font-medium rounded-lg bg-rose-600 hover:bg-rose-700 text-white transition-colors"
                             >
                               Retry
                             </button>
@@ -1288,15 +1292,10 @@ export default function Dashboard() {
                       </tr>
                     ) : currentBtTrades.length === 0 ? (
                       <tr>
-                        <td colSpan={16} className="px-5 py-14 text-center">
-                          <div className="flex flex-col items-center gap-2.5">
-                            <div className="flex items-center justify-center w-10 h-10 rounded-full bg-slate-100">
-                              <svg className="w-5 h-5 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-                                <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 15.803 7.5 7.5 0 0016.803 15.803z" />
-                              </svg>
-                            </div>
-                            <div className="text-sm font-semibold text-slate-600">No trades found</div>
-                            <div className="text-xs text-slate-400">No trades match the selected filters. Try adjusting asset, direction, or result filters.</div>
+                        <td colSpan={17} className="px-5 py-14 text-center">
+                          <div className="flex flex-col items-center gap-2 max-w-xs mx-auto">
+                            <div className="text-xs font-medium text-slate-600">No trades found</div>
+                            <div className="text-xs text-slate-400">No trades match the selected filters. Adjust asset, direction, or result filters.</div>
                           </div>
                         </td>
                       </tr>
@@ -1311,63 +1310,63 @@ export default function Dashboard() {
                             const el = document.getElementById('chart-visualizer-section');
                             if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
                           }}
-                          className={`cursor-pointer transition-all font-mono text-xs tabular-nums ${
+                          className={`cursor-pointer transition-colors font-mono text-xs tabular-nums ${
                             isSelected
-                              ? 'bg-slate-100 font-semibold border-l-4 border-slate-900'
-                              : 'hover:bg-slate-50'
+                              ? 'bg-slate-50 border-l-2 border-slate-900'
+                              : 'hover:bg-slate-50/70'
                           }`}
                         >
-                          <td className="px-4 py-3 text-slate-500 whitespace-nowrap">
+                          <td className="px-3.5 py-2.5 text-slate-400 whitespace-nowrap">
                             #{t.trade_num}
                           </td>
-                          <td className="px-4 py-3 font-bold text-slate-900 whitespace-nowrap">
+                          <td className="px-3.5 py-2.5 whitespace-nowrap">
                             <Badge 
                               label={t.symbol === 'XAUUSD' ? 'Gold (XAU)' : t.symbol === 'BTCUSDT' ? 'BTC' : 'ETH'} 
                               color={t.symbol === 'XAUUSD' ? 'amber' : t.symbol === 'BTCUSDT' ? 'amber' : 'cyan'} 
                             />
                           </td>
-                          <td className="px-4 py-3">
+                          <td className="px-3.5 py-2.5 whitespace-nowrap">
                             <Badge label={t.direction} color={t.direction === 'LONG' ? 'green' : 'red'} />
                           </td>
-                          <td className="px-4 py-3 text-slate-700 whitespace-nowrap">{t.entry_time_ist || t.entry_time.slice(0, 16)}</td>
-                          <td className="px-4 py-3 text-slate-900 whitespace-nowrap font-medium">
+                          <td className="px-3.5 py-2.5 text-slate-600 whitespace-nowrap">{t.entry_time_ist || t.entry_time.slice(0, 16)}</td>
+                          <td className="px-3.5 py-2.5 text-slate-900 whitespace-nowrap font-medium">
                             ${t.entry_price.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                           </td>
-                          <td className="px-4 py-3 text-slate-500 whitespace-nowrap">{t.exit_time_ist || t.exit_time.slice(0, 16)}</td>
-                          <td className="px-4 py-3 text-slate-800 whitespace-nowrap font-medium">
+                          <td className="px-3.5 py-2.5 text-slate-500 whitespace-nowrap">{t.exit_time_ist || t.exit_time.slice(0, 16)}</td>
+                          <td className="px-3.5 py-2.5 text-slate-800 whitespace-nowrap font-medium">
                             ${t.exit_price.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                           </td>
-                          <td className="px-4 py-3 text-rose-600 whitespace-nowrap">
+                          <td className="px-3.5 py-2.5 text-rose-700 whitespace-nowrap">
                             ${t.stop_loss.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                           </td>
-                          <td className="px-4 py-3 text-emerald-600 whitespace-nowrap">
+                          <td className="px-3.5 py-2.5 text-emerald-700 whitespace-nowrap">
                             ${t.take_profit.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                           </td>
-                          <td className="px-4 py-3 text-slate-400">{t.rr_ratio}</td>
-                          <td className={`px-4 py-3 font-bold whitespace-nowrap ${t.pnl_percent >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
+                          <td className="px-3.5 py-2.5 text-slate-500">{t.rr_ratio}</td>
+                          <td className={`px-3.5 py-2.5 font-semibold whitespace-nowrap ${t.pnl_percent >= 0 ? 'text-emerald-700' : 'text-rose-700'}`}>
                             {t.pnl_percent >= 0 ? `+${t.pnl_percent.toFixed(1)}%` : `${t.pnl_percent.toFixed(1)}%`}
                           </td>
-                          <td className={`px-4 py-3 whitespace-nowrap font-semibold ${t.pnl_dollar >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
+                          <td className={`px-3.5 py-2.5 whitespace-nowrap font-medium ${t.pnl_dollar >= 0 ? 'text-emerald-700' : 'text-rose-700'}`}>
                             {t.pnl_dollar >= 0 ? `+$${t.pnl_dollar.toFixed(0)}` : `-$${Math.abs(t.pnl_dollar).toFixed(0)}`}
                           </td>
-                          <td className="px-4 py-3 text-slate-700 whitespace-nowrap">
+                          <td className="px-3.5 py-2.5 text-slate-700 whitespace-nowrap">
                             ${t.running_balance.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
                           </td>
-                          <td className="px-4 py-3 text-rose-600 font-semibold whitespace-nowrap">
+                          <td className="px-3.5 py-2.5 text-rose-700 font-medium whitespace-nowrap">
                             {t.max_drawdown_pct !== undefined ? `${t.max_drawdown_pct.toFixed(1)}%` : '—'}
                           </td>
-                          <td className="px-4 py-3 whitespace-nowrap">
+                          <td className="px-3.5 py-2.5 whitespace-nowrap">
                             <div className="flex items-center gap-1.5">
                               {t.trade_type ? (
-                                <span className={`px-2 py-0.5 rounded text-[10px] font-mono font-bold border inline-flex items-center gap-1 ${
+                                <span className={`px-1.5 py-0.5 rounded text-[11px] font-mono font-medium border ${
                                   t.trade_type === 'REVERSAL_CHOCH'
-                                    ? 'bg-amber-50 text-amber-900 border-amber-300'
-                                    : 'bg-sky-50 text-sky-900 border-sky-300'
+                                    ? 'bg-amber-50 text-amber-900 border-amber-200'
+                                    : 'bg-sky-50 text-sky-900 border-sky-200'
                                 }`}>
-                                  {t.trade_type === 'REVERSAL_CHOCH' ? '🔄 CHoCH Rev' : '⚡ BOS Cont'}
+                                  {t.trade_type === 'REVERSAL_CHOCH' ? 'CHoCH Reversal' : 'BOS Continuation'}
                                 </span>
                               ) : (
-                                <span className={`px-2 py-0.5 rounded text-[10px] font-mono border ${
+                                <span className={`px-1.5 py-0.5 rounded text-[11px] font-mono border ${
                                   t.result === 'WIN' 
                                     ? 'bg-emerald-50 text-emerald-800 border-emerald-200' 
                                     : 'bg-rose-50 text-rose-800 border-rose-200'
@@ -1376,16 +1375,16 @@ export default function Dashboard() {
                                 </span>
                               )}
                               {t.angle !== undefined && (
-                                <span className="px-1.5 py-0.5 rounded text-[10px] font-mono font-semibold bg-purple-50 text-purple-700 border border-purple-200" title="Impulse Trending Angle (Rejects sideways chop)">
-                                  📐 {t.angle.toFixed(1)}°
+                                <span className="px-1.5 py-0.5 rounded text-[11px] font-mono text-slate-700 bg-slate-100 border border-slate-200" title="Impulse trending angle">
+                                  {t.angle.toFixed(1)}°
                                 </span>
                               )}
                             </div>
                           </td>
-                          <td className="px-4 py-3 whitespace-nowrap">
+                          <td className="px-3.5 py-2.5 whitespace-nowrap">
                             <Badge label={t.result} color={t.result === 'WIN' ? 'green' : 'red'} />
                           </td>
-                          <td className="px-4 py-3 whitespace-nowrap">
+                          <td className="px-3.5 py-2.5 whitespace-nowrap">
                             <button
                               onClick={(e) => {
                                 e.stopPropagation();
@@ -1393,10 +1392,10 @@ export default function Dashboard() {
                                 setActiveTab('graph_rag');
                                 window.scrollTo({ top: 0, behavior: 'smooth' });
                               }}
-                              className="px-2 py-1 rounded-md text-[10px] font-semibold bg-cyan-50 hover:bg-cyan-100 text-cyan-800 border border-cyan-200 transition flex items-center gap-1 shadow-2xs"
+                              className="px-2 py-1 rounded text-xs font-medium bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200 transition-colors"
                               title="Inspect Trade in Knowledge Graph (Trade Brain)"
                             >
-                              <span>🧠 Graph</span>
+                              Graph
                             </button>
                           </td>
                         </tr>
@@ -1410,29 +1409,29 @@ export default function Dashboard() {
               {/* Pagination Controls */}
               <div className="p-4 border-t border-slate-100 bg-slate-50/50 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs font-mono">
                 <span className="text-slate-500">
-                  Showing <strong className="text-slate-900">{Math.min(filteredBtTrades.length, (btPage - 1) * btPageSize + 1)}</strong> to{' '}
-                  <strong className="text-slate-900">{Math.min(filteredBtTrades.length, btPage * btPageSize)}</strong> of{' '}
-                  <strong className="text-slate-900">{filteredBtTrades.length}</strong> trades
+                  Showing <span className="text-slate-900 font-medium">{Math.min(filteredBtTrades.length, (btPage - 1) * btPageSize + 1)}</span> to{' '}
+                  <span className="text-slate-900 font-medium">{Math.min(filteredBtTrades.length, btPage * btPageSize)}</span> of{' '}
+                  <span className="text-slate-900 font-medium">{filteredBtTrades.length}</span> trades
                 </span>
 
                 <div className="flex items-center gap-2">
                   <button
                     onClick={() => setBtPage(p => Math.max(1, p - 1))}
                     disabled={btPage === 1}
-                    className="px-3 py-1.5 rounded-lg border border-slate-200 bg-white text-slate-700 hover:bg-slate-100 disabled:opacity-30 disabled:cursor-not-allowed transition-all flex items-center gap-1 shadow-2xs"
+                    className="px-3 py-1.5 rounded-lg border border-slate-200 bg-white text-slate-700 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors flex items-center gap-1 shadow-2xs"
                   >
                     <ChevronLeftIcon className="w-3.5 h-3.5" />
                     <span>Previous</span>
                   </button>
 
-                  <span className="px-3 py-1 rounded-lg bg-white border border-slate-200 text-slate-700 font-bold shadow-2xs">
+                  <span className="px-3 py-1 rounded-md bg-white border border-slate-200 text-slate-700 font-medium shadow-2xs">
                     {btPage} / {totalBtPages}
                   </span>
 
                   <button
                     onClick={() => setBtPage(p => Math.min(totalBtPages, p + 1))}
                     disabled={btPage >= totalBtPages}
-                    className="px-3 py-1.5 rounded-lg border border-slate-200 bg-white text-slate-700 hover:bg-slate-100 disabled:opacity-30 disabled:cursor-not-allowed transition-all flex items-center gap-1 shadow-2xs"
+                    className="px-3 py-1.5 rounded-lg border border-slate-200 bg-white text-slate-700 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors flex items-center gap-1 shadow-2xs"
                   >
                     <span>Next</span>
                     <ChevronRightIcon className="w-3.5 h-3.5" />
@@ -1470,77 +1469,77 @@ export default function Dashboard() {
             TAB 2: MARKET SCANNER
             ══════════════════════════════════════════════════════════════════ */}
         {activeTab === 'scanner' && (
-          <div className="bg-white border border-slate-200 rounded-2xl overflow-hidden shadow-xs">
-            <div className="px-6 py-4 border-b border-slate-100 bg-slate-50/70 flex items-center justify-between">
-              <span className="text-xs font-bold uppercase tracking-wider text-slate-700 flex items-center gap-2">
+          <div className="bg-white border border-slate-200 rounded-xl overflow-hidden shadow-xs">
+            <div className="px-5 py-3.5 border-b border-slate-100 bg-slate-50/70 flex items-center justify-between">
+              <span className="text-xs font-semibold text-slate-700 flex items-center gap-2">
                 <ActivityIcon className="w-3.5 h-3.5 text-slate-700" />
-                Live AI Market Scanner
+                Live market scanner
               </span>
-              <span className={`text-[10px] font-mono px-2.5 py-1 rounded-full border font-semibold ${status?.is_running ? 'text-emerald-700 border-emerald-200 bg-emerald-50 animate-pulse' : 'text-slate-500 border-slate-200 bg-slate-100'}`}>
-                {status?.is_running ? `Scanning every ${status?.scan_interval}s` : 'Engine Idle'}
+              <span className={`text-[11px] font-mono px-2 py-0.5 rounded-md border font-medium ${status?.is_running ? 'text-emerald-700 border-emerald-200 bg-emerald-50' : 'text-slate-500 border-slate-200 bg-slate-100'}`}>
+                {status?.is_running ? `Scanning every ${status?.scan_interval}s` : 'Engine idle'}
               </span>
             </div>
             <div className="overflow-x-auto">
               <table className="w-full border-collapse">
                 <thead>
-                  <tr className="border-b border-slate-100 bg-slate-50/50">
-                    {['Asset', '1m Price', '15m Trend', 'Break of Structure', 'Fair Value Gap', 'SMC Score', 'Status', 'Action'].map(h => (
-                      <th key={h} className="px-5 py-3 text-left text-[10px] font-bold uppercase tracking-widest text-slate-500">{h}</th>
+                  <tr className="border-b border-slate-200 bg-slate-50/50">
+                    {['Asset', '1m Price', '15m Trend', 'Break of structure', 'Fair value gap', 'SMC score', 'Status', 'Action'].map(h => (
+                      <th key={h} className="px-4 py-2.5 text-left text-xs font-medium text-slate-500 whitespace-nowrap">{h}</th>
                     ))}
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
                   {(!status?.scanner_results || status.scanner_results.length === 0) ? (
                     <tr>
-                      <td colSpan={8} className="px-5 py-12 text-center text-sm font-mono text-slate-400">
+                      <td colSpan={8} className="px-5 py-12 text-center text-xs font-mono text-slate-400">
                         {connected ? 'Start engine to begin scanning markets...' : 'Connect backend to see live scanner data'}
                       </td>
                     </tr>
                   ) : (
                     status.scanner_results.map(row => (
-                      <tr key={row.symbol} className="hover:bg-slate-50 transition-colors group">
-                        <td className="px-5 py-4 font-mono font-bold text-sm text-slate-900">{row.symbol}</td>
-                        <td className="px-5 py-4 font-mono text-sm text-slate-700 tabular-nums">
+                      <tr key={row.symbol} className="hover:bg-slate-50/70 transition-colors">
+                        <td className="px-4 py-3 font-mono font-semibold text-xs text-slate-900">{row.symbol}</td>
+                        <td className="px-4 py-3 font-mono text-xs text-slate-700 tabular-nums">
                           {row.last_price ? `$${row.last_price.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '—'}
                         </td>
-                        <td className="px-5 py-4">
+                        <td className="px-4 py-3">
                           <Badge label={row.trend} color={row.trend === 'BULLISH' ? 'green' : row.trend === 'BEARISH' ? 'red' : 'gray'} />
                         </td>
-                        <td className="px-5 py-4">
+                        <td className="px-4 py-3">
                           {row.sweep_detected
                             ? <Badge label="BOS Confirmed" color="cyan" />
                             : <span className="text-xs text-slate-300">—</span>}
                         </td>
-                        <td className="px-5 py-4">
+                        <td className="px-4 py-3">
                           {row.fvg_type
                             ? <Badge label="Active FVG" color="green" />
                             : <span className="text-xs text-slate-300">—</span>}
                         </td>
-                        <td className="px-5 py-4 w-36">
+                        <td className="px-4 py-3 w-36">
                           <div className="flex items-center gap-2">
                             <div className="flex-1 h-1.5 bg-slate-100 rounded-full overflow-hidden">
                               <div className={`h-full ${row.setup_score >= 70 ? 'bg-emerald-500' : 'bg-slate-400'}`} style={{ width: `${row.setup_score}%` }} />
                             </div>
-                            <span className="text-xs font-mono font-bold text-slate-700">{row.setup_score}</span>
+                            <span className="text-xs font-mono font-medium text-slate-700">{row.setup_score}</span>
                           </div>
                         </td>
-                        <td className="px-5 py-4">
+                        <td className="px-4 py-3">
                           <Badge label={row.status} color={row.status === 'WATCHING' ? 'amber' : 'gray'} />
                         </td>
-                        <td className="px-5 py-4">
+                        <td className="px-4 py-3">
                           {row.setup_score >= 70 ? (
                             <div className="flex items-center gap-1.5">
                               <button
                                 onClick={() => handleManualTrade(row.symbol, 'LONG')}
-                                className="h-7 px-3 text-[11px] font-bold rounded-lg bg-emerald-600 text-white hover:bg-emerald-700 transition-colors flex items-center gap-1"
+                                className="h-7 px-2.5 text-xs font-medium rounded-md bg-emerald-700 text-white hover:bg-emerald-800 transition-colors"
                               >
-                                ↑ Buy
+                                Buy
                               </button>
                               <button
                                 onClick={() => handleManualTrade(row.symbol, 'SHORT')}
-                                className="h-7 px-3 text-[11px] font-bold rounded-lg bg-rose-600 text-white hover:bg-rose-700 transition-colors flex items-center gap-1"
+                                className="h-7 px-2.5 text-xs font-medium rounded-md bg-rose-700 text-white hover:bg-rose-800 transition-colors"
                               >
-                                ↓ Sell
+                                Sell
                               </button>
                             </div>
                           ) : (
@@ -1560,55 +1559,55 @@ export default function Dashboard() {
             TAB 3: OPEN ORDERS
             ══════════════════════════════════════════════════════════════════ */}
         {activeTab === 'open_orders' && (
-          <div className="bg-white border border-slate-200 rounded-2xl overflow-hidden shadow-xs">
-            <div className="px-6 py-4 border-b border-slate-100 bg-slate-50/70 flex items-center justify-between">
-              <span className="text-xs font-bold uppercase tracking-wider text-slate-700 flex items-center gap-2">
+          <div className="bg-white border border-slate-200 rounded-xl overflow-hidden shadow-xs">
+            <div className="px-5 py-3.5 border-b border-slate-100 bg-slate-50/70 flex items-center justify-between">
+              <span className="text-xs font-semibold text-slate-700 flex items-center gap-2">
                 <LayersIcon className="w-3.5 h-3.5 text-slate-700" />
-                Live Pending / Limit Orders (Binance Demo)
+                Pending and limit orders (Binance Demo)
               </span>
-              <span className="text-xs font-mono text-slate-600 bg-slate-100 px-2.5 py-1 rounded-full border border-slate-200">
-                {status?.open_orders?.length ?? 0} Orders in Book
+              <span className="text-xs font-mono text-slate-600 bg-slate-100 px-2 py-0.5 rounded-md border border-slate-200">
+                {status?.open_orders?.length ?? 0} orders in book
               </span>
             </div>
             <div className="overflow-x-auto">
               <table className="w-full border-collapse text-xs font-mono tabular-nums">
                 <thead>
-                  <tr className="border-b border-slate-100 bg-slate-50/50">
-                    {['Time', 'Asset', 'Side', 'Type', 'Target Price', 'Amount', 'Target Value', 'Order ID', 'Action'].map(h => (
-                      <th key={h} className="px-5 py-3 text-left text-[10px] font-bold uppercase tracking-widest text-slate-500">{h}</th>
+                  <tr className="border-b border-slate-200 bg-slate-50/50">
+                    {['Time', 'Asset', 'Side', 'Type', 'Target price', 'Amount', 'Target value', 'Order ID', 'Action'].map(h => (
+                      <th key={h} className="px-4 py-2.5 text-left text-xs font-medium text-slate-500 whitespace-nowrap">{h}</th>
                     ))}
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
                   {(!status?.open_orders || status.open_orders.length === 0) ? (
                     <tr>
-                      <td colSpan={9} className="px-5 py-12 text-center text-sm font-mono text-slate-400">
+                      <td colSpan={9} className="px-5 py-12 text-center text-xs font-mono text-slate-400">
                         No open orders right now. Click &quot;Test Order&quot; or start engine to trigger automated orders.
                       </td>
                     </tr>
                   ) : (
                     status.open_orders.map(o => (
-                      <tr key={o.id} className="hover:bg-slate-50 transition-colors">
-                        <td className="px-5 py-4 text-slate-500">{new Date(o.timestamp).toLocaleTimeString()}</td>
-                        <td className="px-5 py-4 font-bold text-slate-900">{o.symbol}</td>
-                        <td className="px-5 py-4">
+                      <tr key={o.id} className="hover:bg-slate-50/70 transition-colors">
+                        <td className="px-4 py-3 text-slate-500">{new Date(o.timestamp).toLocaleTimeString()}</td>
+                        <td className="px-4 py-3 font-semibold text-slate-900">{o.symbol}</td>
+                        <td className="px-4 py-3">
                           <Badge label={o.side} color={o.side === 'BUY' ? 'green' : 'red'} />
                         </td>
-                        <td className="px-5 py-4">
+                        <td className="px-4 py-3">
                           <Badge label={o.type} color="cyan" />
                         </td>
-                        <td className="px-5 py-4 text-emerald-600 font-semibold">
+                        <td className="px-4 py-3 text-emerald-700 font-medium">
                           ${o.price.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                         </td>
-                        <td className="px-5 py-4 text-slate-800">{o.amount.toFixed(4)}</td>
-                        <td className="px-5 py-4 text-slate-600">${o.cost.toFixed(2)}</td>
-                        <td className="px-5 py-4 text-slate-500">{o.id}</td>
-                        <td className="px-5 py-4">
+                        <td className="px-4 py-3 text-slate-800">{o.amount.toFixed(4)}</td>
+                        <td className="px-4 py-3 text-slate-600">${o.cost.toFixed(2)}</td>
+                        <td className="px-4 py-3 text-slate-500">{o.id}</td>
+                        <td className="px-4 py-3">
                           <button
                             onClick={() => handleCancelOrder(o.id, o.symbol)}
-                            className="h-7 px-3 text-[11px] font-bold rounded-lg bg-rose-600 text-white hover:bg-rose-700 transition-colors"
+                            className="h-7 px-2.5 text-xs font-medium rounded-md bg-rose-600 text-white hover:bg-rose-700 transition-colors"
                           >
-                            ✕ Cancel
+                            Cancel
                           </button>
                         </td>
                       </tr>
@@ -1624,52 +1623,52 @@ export default function Dashboard() {
             TAB 4: TRADE LEDGER
             ══════════════════════════════════════════════════════════════════ */}
         {activeTab === 'trades' && (
-          <div className="bg-white border border-slate-200 rounded-2xl overflow-hidden shadow-xs">
-            <div className="px-6 py-4 border-b border-slate-100 bg-slate-50/70 flex items-center justify-between">
-              <span className="text-xs font-bold uppercase tracking-wider text-slate-700 flex items-center gap-2">
+          <div className="bg-white border border-slate-200 rounded-xl overflow-hidden shadow-xs">
+            <div className="px-5 py-3.5 border-b border-slate-100 bg-slate-50/70 flex items-center justify-between">
+              <span className="text-xs font-semibold text-slate-700 flex items-center gap-2">
                 <BarChart2Icon className="w-3.5 h-3.5 text-slate-700" />
-                Executed Trades — Live Exchange Ledger
+                Exchange trade ledger
               </span>
-              <span className="text-xs font-mono text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded-full border border-emerald-200 font-semibold">
+              <span className="text-xs font-mono text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200 font-medium">
                 Binance Demo Connected
               </span>
             </div>
             <div className="overflow-x-auto">
               <table className="w-full border-collapse text-xs font-mono tabular-nums">
                 <thead>
-                  <tr className="border-b border-slate-100 bg-slate-50/50">
-                    {['Time', 'Asset', 'Side', 'Qty', 'Fill Price', 'Total (USDT)', 'Order ID', 'Status'].map(h => (
-                      <th key={h} className="px-5 py-3 text-left text-[10px] font-bold uppercase tracking-widest text-slate-500">{h}</th>
+                  <tr className="border-b border-slate-200 bg-slate-50/50">
+                    {['Time', 'Asset', 'Side', 'Quantity', 'Fill price', 'Total (USDT)', 'Order ID', 'Status'].map(h => (
+                      <th key={h} className="px-4 py-2.5 text-left text-xs font-medium text-slate-500 whitespace-nowrap">{h}</th>
                     ))}
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
                   {(!status?.trade_history || status.trade_history.length === 0) ? (
                     <tr>
-                      <td colSpan={8} className="px-5 py-12 text-center text-sm font-mono text-slate-400">
+                      <td colSpan={8} className="px-5 py-12 text-center text-xs font-mono text-slate-400">
                         No live trades executed yet in this session.
                       </td>
                     </tr>
                   ) : (
                     status.trade_history.map(t => (
-                      <tr key={t.id} className="hover:bg-slate-50 transition-colors">
-                        <td className="px-5 py-4 text-slate-500">{new Date(t.timestamp).toLocaleTimeString()}</td>
-                        <td className="px-5 py-4 font-bold text-slate-900">{t.symbol}</td>
-                        <td className="px-5 py-4">
+                      <tr key={t.id} className="hover:bg-slate-50/70 transition-colors">
+                        <td className="px-4 py-3 text-slate-500">{new Date(t.timestamp).toLocaleTimeString()}</td>
+                        <td className="px-4 py-3 font-semibold text-slate-900">{t.symbol}</td>
+                        <td className="px-4 py-3">
                           <Badge
                             label={t.direction}
                             color={t.direction === 'BUY' || t.direction === 'LONG' ? 'green' : 'red'}
                           />
                         </td>
-                        <td className="px-5 py-4 text-slate-800">{t.amount ? t.amount.toFixed(4) : '—'}</td>
-                        <td className="px-5 py-4 text-slate-700">
+                        <td className="px-4 py-3 text-slate-800">{t.amount ? t.amount.toFixed(4) : '—'}</td>
+                        <td className="px-4 py-3 text-slate-700">
                           {t.entry_price ? `$${t.entry_price.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '—'}
                         </td>
-                        <td className="px-5 py-4 text-emerald-600 font-semibold">
+                        <td className="px-4 py-3 text-emerald-700 font-medium">
                           {t.cost ? `$${t.cost.toFixed(2)}` : '—'}
                         </td>
-                        <td className="px-5 py-4 text-slate-500">{t.order_id || t.id}</td>
-                        <td className="px-5 py-4">
+                        <td className="px-4 py-3 text-slate-500">{t.order_id || t.id}</td>
+                        <td className="px-4 py-3">
                           <Badge
                             label={t.status}
                             color={t.status === 'EXECUTED' ? 'green' : t.status === 'FAILED' ? 'red' : 'amber'}
