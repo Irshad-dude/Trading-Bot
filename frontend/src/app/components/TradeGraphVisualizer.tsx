@@ -148,6 +148,48 @@ export interface TradeGraphVisualizerProps {
 
 type LayoutMode = 'constellation' | 'target_focus' | 'organic_physics';
 
+// Synchronously calculate curated synapse highlight IDs to prevent chaotic spiderwebs
+function getCuratedHighlightedIds(active: GraphNode | null, links: GraphLink[]): Set<string> | null {
+  if (!active) return null;
+
+  const set = new Set<string>();
+  set.add(active.id);
+
+  // Target Candidate twins
+  if (active.candidate_data?.graph_rag?.top_matches) {
+    active.candidate_data.graph_rag.top_matches.forEach((tw) => {
+      set.add(`TRADE_${tw.trade_num}_${tw.symbol}`);
+    });
+  }
+
+  // Historical Trade twin synapses
+  if (active.twin_trades) {
+    active.twin_trades.forEach((tw) => {
+      set.add(`TRADE_${tw.trade_num}_${tw.symbol}`);
+    });
+  }
+
+  // Curated feature neurons (Session & Pattern - skip universal asset/angle to prevent cluttered web)
+  if (active.features) {
+    active.features.forEach((f) => {
+      if (f.startsWith('Session:') || f.startsWith('Pattern:') || f.startsWith('Risk:')) {
+        set.add(f);
+      }
+    });
+  }
+
+  links.forEach((l) => {
+    const sId = typeof l.source === 'string' ? l.source : l.source.id;
+    const tId = typeof l.target === 'string' ? l.target : l.target.id;
+    if (l.relation === 'SYNAPSE_SIMILARITY' || l.relation === 'CANDIDATE_SIMILARITY') {
+      if (sId === active.id) set.add(tId);
+      if (tId === active.id) set.add(sId);
+    }
+  });
+
+  return set;
+}
+
 export default function TradeGraphVisualizer({
   onNavigateToTrade,
   initialSelectedTradeNum,
@@ -180,19 +222,41 @@ export default function TradeGraphVisualizer({
     scale: 0.88
   });
 
-  // Simulation controls
+  // Simulation & rendering synchronization refs (prevents RAF frame drops and stale closure blinking)
   const [isPaused, setIsPaused] = useState<boolean>(false);
   const alphaRef = useRef<number>(1.0);
   const isPausedRef = useRef<boolean>(false);
   const layoutModeRef = useRef<LayoutMode>('constellation');
+  const hoveredNodeRef = useRef<GraphNode | null>(null);
+  const selectedNodeRef = useRef<GraphNode | null>(null);
+  const highlightedNodeIdsRef = useRef<Set<string> | null>(null);
+  const zoomTransformRef = useRef<{ x: number; y: number; scale: number }>({ x: 0, y: 0, scale: 0.88 });
+  const visibleNodeIdsRef = useRef<Set<string>>(new Set());
+  const hoverTimerRef = useRef<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
-    isPausedRef.current = isPaused;
-  }, [isPaused]);
+    return () => {
+      if (hoverTimerRef.current) {
+        clearTimeout(hoverTimerRef.current);
+      }
+    };
+  }, []);
 
   useEffect(() => {
     layoutModeRef.current = layoutMode;
   }, [layoutMode]);
+
+  useEffect(() => {
+    hoveredNodeRef.current = hoveredNode;
+  }, [hoveredNode]);
+
+  useEffect(() => {
+    selectedNodeRef.current = selectedNode;
+  }, [selectedNode]);
+
+  useEffect(() => {
+    zoomTransformRef.current = zoomTransform;
+  }, [zoomTransform]);
 
   // Dragging & gesture interaction state
   const isDraggingCanvas = useRef<boolean>(false);
@@ -487,36 +551,15 @@ export default function TradeGraphVisualizer({
     return ids;
   }, [nodes, links, filterType, searchQuery]);
 
-  // Active / Highlighted nodes
+  useEffect(() => {
+    visibleNodeIdsRef.current = visibleNodeIds;
+  }, [visibleNodeIds]);
+
+  // Active / Highlighted nodes (Curated meaningful connections without chaotic spiderwebs)
   const highlightedNodeIds = useMemo(() => {
     const active = hoveredNode || selectedNode;
-    if (!active) return null;
-
-    const set = new Set<string>();
-    set.add(active.id);
-
-    if (active.candidate_data?.graph_rag?.top_matches) {
-      active.candidate_data.graph_rag.top_matches.forEach((tw) => {
-        set.add(`TRADE_${tw.trade_num}_${tw.symbol}`);
-      });
-    }
-
-    if (active.features) {
-      active.features.forEach((f) => set.add(f));
-    }
-    if (active.twin_trades) {
-      active.twin_trades.forEach((tw) => {
-        set.add(`TRADE_${tw.trade_num}_${tw.symbol}`);
-      });
-    }
-
-    links.forEach((l) => {
-      const sId = typeof l.source === 'string' ? l.source : l.source.id;
-      const tId = typeof l.target === 'string' ? l.target : l.target.id;
-      if (sId === active.id) set.add(tId);
-      if (tId === active.id) set.add(sId);
-    });
-
+    const set = getCuratedHighlightedIds(active, links);
+    highlightedNodeIdsRef.current = set;
     return set;
   }, [hoveredNode, selectedNode, links]);
 
@@ -528,13 +571,15 @@ export default function TradeGraphVisualizer({
     );
     if (match) {
       setSelectedNode(match);
+      selectedNodeRef.current = match;
+      highlightedNodeIdsRef.current = getCuratedHighlightedIds(match, links);
       setZoomTransform({
         x: -(match.x || 0) * 1.3,
         y: -(match.y || 0) * 1.3,
         scale: 1.3
       });
     }
-  }, [nodes]);
+  }, [nodes, links]);
 
   // Viewport Auto-fit calculation (Safeguarded against NaN or 0-dimensions)
   const fitView = useCallback((padding = 70, targetNodes?: GraphNode[]) => {
@@ -601,12 +646,14 @@ export default function TradeGraphVisualizer({
     const cand = nodes.find((n) => n.node_type === 'candidate');
     if (!cand) return;
     setSelectedNode(cand);
+    selectedNodeRef.current = cand;
+    highlightedNodeIdsRef.current = getCuratedHighlightedIds(cand, links);
     setZoomTransform({
       x: -(cand.x || 0) * 1.05,
       y: -(cand.y || 0) * 1.05,
       scale: 1.05
     });
-  }, [nodes]);
+  }, [nodes, links]);
 
   // 2. High-Precision Layout Transition & Simulation Engine
   useEffect(() => {
@@ -790,12 +837,20 @@ export default function TradeGraphVisualizer({
     ctx.scale(dpr, dpr);
     ctx.clearRect(0, 0, displayW, displayH);
 
+    // Read synchronously from refs to guarantee 60fps frame stability without stale closure flicker
+    const currentSelected = selectedNodeRef.current;
+    const currentHovered = hoveredNodeRef.current;
+    const currentHighlighted = highlightedNodeIdsRef.current;
+    const currentZoom = zoomTransformRef.current;
+    const currentMode = layoutModeRef.current;
+    const currentVisible = visibleNodeIdsRef.current;
+
     // Apply viewport transform (Centered)
-    ctx.translate(displayW / 2 + zoomTransform.x, displayH / 2 + zoomTransform.y);
-    ctx.scale(zoomTransform.scale, zoomTransform.scale);
+    ctx.translate(displayW / 2 + currentZoom.x, displayH / 2 + currentZoom.y);
+    ctx.scale(currentZoom.scale, currentZoom.scale);
 
     // ── Draw Cluster Boundary Ambiances (Constellation Mode) ──
-    if (layoutMode === 'constellation') {
+    if (currentMode === 'constellation') {
       const clusterZones = [
         { cx: -320, cy: -200, r: 135, label: '★ London/NY Overlap (83.3% WR)', color: 'rgba(16, 185, 129, 0.06)', border: 'rgba(16, 185, 129, 0.25)' },
         { cx: 320,  cy: -200, r: 135, label: '★ London Morning (66.7% WR)',   color: 'rgba(6, 182, 212, 0.05)',  border: 'rgba(6, 182, 212, 0.22)' },
@@ -828,14 +883,14 @@ export default function TradeGraphVisualizer({
       const sNode = typeof link.source === 'string' ? nodeMap.get(link.source) : link.source;
       const tNode = typeof link.target === 'string' ? nodeMap.get(link.target) : link.target;
       if (!sNode || !tNode) continue;
-      if (!visibleNodeIds.has(sNode.id) || !visibleNodeIds.has(tNode.id)) continue;
+      if (!currentVisible.has(sNode.id) || !currentVisible.has(tNode.id)) continue;
 
       const isCandidateLink = link.relation === 'CANDIDATE_SIMILARITY';
       const isSynapseSimilarity = link.relation === 'SYNAPSE_SIMILARITY';
       const isSynapseActive =
-        highlightedNodeIds &&
-        highlightedNodeIds.has(sNode.id) &&
-        highlightedNodeIds.has(tNode.id);
+        currentHighlighted &&
+        currentHighlighted.has(sNode.id) &&
+        currentHighlighted.has(tNode.id);
 
       const sx = sNode.x || 0;
       const sy = sNode.y || 0;
@@ -868,8 +923,9 @@ export default function TradeGraphVisualizer({
         ctx.fill();
         ctx.shadowBlur = 0;
       } else if (isSynapseActive) {
+        // Highlighting active connection
         ctx.strokeStyle = isSynapseSimilarity ? '#f59e0b' : '#38bdf8';
-        ctx.lineWidth = 2.0;
+        ctx.lineWidth = isSynapseSimilarity ? 2.2 : 1.6;
         ctx.shadowColor = isSynapseSimilarity ? '#f59e0b' : '#38bdf8';
         ctx.shadowBlur = 8;
         ctx.stroke();
@@ -887,7 +943,7 @@ export default function TradeGraphVisualizer({
           ctx.strokeStyle = 'rgba(245, 158, 11, 0.16)';
           ctx.lineWidth = 1.0;
           ctx.stroke();
-        } else if (link.relation === 'EXHIBITS' && layoutMode === 'organic_physics') {
+        } else if (link.relation === 'EXHIBITS' && currentMode === 'organic_physics') {
           ctx.strokeStyle = 'rgba(148, 163, 184, 0.05)';
           ctx.lineWidth = 0.5;
           ctx.stroke();
@@ -898,20 +954,20 @@ export default function TradeGraphVisualizer({
     // ── Draw Nodes ──
     for (let i = 0; i < nodes.length; i++) {
       const node = nodes[i];
-      if (!visibleNodeIds.has(node.id)) continue;
+      if (!currentVisible.has(node.id)) continue;
 
       const x = node.x || 0;
       const y = node.y || 0;
       const radius = node.radius || 12;
 
-      const isSelected = selectedNode?.id === node.id;
-      const isHovered = hoveredNode?.id === node.id;
-      const isHighlighted = highlightedNodeIds?.has(node.id);
-      const isDimmed = highlightedNodeIds && !isHighlighted;
+      const isSelected = currentSelected?.id === node.id;
+      const isHovered = currentHovered?.id === node.id;
+      const isHighlighted = currentHighlighted?.has(node.id);
+      const isDimmed = currentHighlighted && !isHighlighted;
 
       ctx.save();
       if (isDimmed) {
-        ctx.globalAlpha = 0.20;
+        ctx.globalAlpha = 0.16;
       }
 
       if (node.node_type === 'candidate') {
@@ -1087,21 +1143,21 @@ export default function TradeGraphVisualizer({
     }
 
     // ── Floating HUD Tooltip for Hovered Node ──
-    if (hoveredNode) {
-      const hx = hoveredNode.x || 0;
-      const hy = hoveredNode.y || 0;
-      const r = hoveredNode.radius || 15;
+    if (currentHovered) {
+      const hx = currentHovered.x || 0;
+      const hy = currentHovered.y || 0;
+      const r = currentHovered.radius || 15;
 
       const tipX = hx + r + 12;
       const tipY = hy - 32;
       const tipW = 185;
-      const tipH = hoveredNode.node_type === 'candidate' ? 62 : 56;
+      const tipH = currentHovered.node_type === 'candidate' ? 62 : 56;
 
       ctx.save();
       ctx.shadowColor = 'rgba(0, 0, 0, 0.85)';
       ctx.shadowBlur = 14;
       ctx.fillStyle = 'rgba(12, 16, 29, 0.96)';
-      ctx.strokeStyle = hoveredNode.result === 'WIN' ? '#10b981' : hoveredNode.node_type === 'candidate' ? '#06b6d4' : '#f43f5e';
+      ctx.strokeStyle = currentHovered.result === 'WIN' ? '#10b981' : currentHovered.node_type === 'candidate' ? '#06b6d4' : '#f43f5e';
       ctx.lineWidth = 1.4;
 
       ctx.beginPath();
@@ -1110,51 +1166,51 @@ export default function TradeGraphVisualizer({
       ctx.stroke();
       ctx.shadowBlur = 0;
 
-      if (hoveredNode.node_type === 'candidate') {
+      if (currentHovered.node_type === 'candidate') {
         ctx.fillStyle = '#38bdf8';
         ctx.font = 'bold 11px sans-serif';
         ctx.textAlign = 'left';
-        ctx.fillText(`Target: ${hoveredNode.symbol} ${hoveredNode.direction}`, tipX + 8, tipY + 16);
+        ctx.fillText(`Target: ${currentHovered.symbol} ${currentHovered.direction}`, tipX + 8, tipY + 16);
 
         ctx.fillStyle = '#94a3b8';
         ctx.font = '10px sans-serif';
-        ctx.fillText(`Impulse: ${hoveredNode.angle?.toFixed(1)}° | 1:2 R:R`, tipX + 8, tipY + 33);
+        ctx.fillText(`Impulse: ${currentHovered.angle?.toFixed(1)}° | 1:2 R:R`, tipX + 8, tipY + 33);
 
-        const wr = hoveredNode.neighborhood_win_rate || 0;
+        const wr = currentHovered.neighborhood_win_rate || 0;
         ctx.fillStyle = wr >= 55 ? '#34d399' : wr <= 30 ? '#f87171' : '#fbbf24';
         ctx.font = 'bold 10px monospace';
         ctx.fillText(`RAG Win Rate: ${wr.toFixed(1)}% (5 twins)`, tipX + 8, tipY + 50);
-      } else if (hoveredNode.node_type === 'trade') {
-        const isWin = hoveredNode.result === 'WIN';
+      } else if (currentHovered.node_type === 'trade') {
+        const isWin = currentHovered.result === 'WIN';
         ctx.fillStyle = '#ffffff';
         ctx.font = 'bold 11px sans-serif';
         ctx.textAlign = 'left';
-        ctx.fillText(`Trade #${hoveredNode.trade_num} (${hoveredNode.symbol} ${hoveredNode.direction})`, tipX + 8, tipY + 16);
+        ctx.fillText(`Trade #${currentHovered.trade_num} (${currentHovered.symbol} ${currentHovered.direction})`, tipX + 8, tipY + 16);
 
         ctx.fillStyle = isWin ? '#34d399' : '#f87171';
         ctx.font = 'bold 10px monospace';
-        const pnl = `${hoveredNode.result} ${hoveredNode.pnl_dollar! >= 0 ? '+' : ''}$${hoveredNode.pnl_dollar?.toFixed(1)}`;
-        ctx.fillText(`${pnl}  |  ${hoveredNode.angle?.toFixed(1)}°`, tipX + 8, tipY + 32);
+        const pnl = `${currentHovered.result} ${currentHovered.pnl_dollar! >= 0 ? '+' : ''}$${currentHovered.pnl_dollar?.toFixed(1)}`;
+        ctx.fillText(`${pnl}  |  ${currentHovered.angle?.toFixed(1)}°`, tipX + 8, tipY + 32);
 
-        ctx.fillStyle = hoveredNode.isHighWinCluster ? '#34d399' : hoveredNode.isLosingTrap ? '#f87171' : '#94a3b8';
+        ctx.fillStyle = currentHovered.isHighWinCluster ? '#34d399' : currentHovered.isLosingTrap ? '#f87171' : '#94a3b8';
         ctx.font = '9px monospace';
-        const clusterTag = hoveredNode.isHighWinCluster ? '★ Winning DNA Cluster' : hoveredNode.isLosingTrap ? '⚠ Avoided Trap Setup' : 'Standard SMC';
+        const clusterTag = currentHovered.isHighWinCluster ? '★ Winning DNA Cluster' : currentHovered.isLosingTrap ? '⚠ Avoided Trap Setup' : 'Standard SMC';
         ctx.fillText(clusterTag, tipX + 8, tipY + 47);
       } else {
         ctx.fillStyle = '#cbd5e1';
         ctx.font = 'bold 11px sans-serif';
         ctx.textAlign = 'left';
-        ctx.fillText(hoveredNode.id, tipX + 8, tipY + 20);
+        ctx.fillText(currentHovered.id, tipX + 8, tipY + 20);
         ctx.fillStyle = '#94a3b8';
         ctx.font = '10px sans-serif';
-        ctx.fillText(`${hoveredNode.category || 'Feature'} Neuron`, tipX + 8, tipY + 38);
+        ctx.fillText(`${currentHovered.category || 'Feature'} Neuron`, tipX + 8, tipY + 38);
       }
 
       ctx.restore();
     }
 
     ctx.restore();
-  }, [nodes, links, visibleNodeIds, nodeMap, zoomTransform, selectedNode, hoveredNode, highlightedNodeIds, layoutMode]);
+  }, [nodes, links, nodeMap]);
 
   // Handle Container Resize (Ensures canvas re-measures when switching back to tab)
   useEffect(() => {
@@ -1181,16 +1237,18 @@ export default function TradeGraphVisualizer({
     const mouseX = e.clientX - rect.left;
     const mouseY = e.clientY - rect.top;
 
-    const worldX = (mouseX - canvas.clientWidth / 2 - zoomTransform.x) / zoomTransform.scale;
-    const worldY = (mouseY - canvas.clientHeight / 2 - zoomTransform.y) / zoomTransform.scale;
+    const currentZoom = zoomTransformRef.current;
+    const worldX = (mouseX - canvas.clientWidth / 2 - currentZoom.x) / currentZoom.scale;
+    const worldY = (mouseY - canvas.clientHeight / 2 - currentZoom.y) / currentZoom.scale;
 
     let clicked: GraphNode | null = null;
+    const visible = visibleNodeIdsRef.current;
     for (let i = nodes.length - 1; i >= 0; i--) {
       const n = nodes[i];
-      if (!visibleNodeIds.has(n.id)) continue;
+      if (!visible.has(n.id)) continue;
       const dx = (n.x || 0) - worldX;
       const dy = (n.y || 0) - worldY;
-      const hitR = (n.radius || 15) + 6;
+      const hitR = (n.radius || 15) + 8;
       if (dx * dx + dy * dy <= hitR * hitR) {
         clicked = n;
         break;
@@ -1202,10 +1260,15 @@ export default function TradeGraphVisualizer({
       clicked.fx = clicked.x;
       clicked.fy = clicked.y;
       setSelectedNode(clicked);
+      selectedNodeRef.current = clicked;
+      highlightedNodeIdsRef.current = getCuratedHighlightedIds(clicked, links);
       alphaRef.current = 0.35;
     } else {
+      setSelectedNode(null);
+      selectedNodeRef.current = null;
+      highlightedNodeIdsRef.current = getCuratedHighlightedIds(hoveredNodeRef.current, links);
       isDraggingCanvas.current = true;
-      dragStartPos.current = { x: mouseX - zoomTransform.x, y: mouseY - zoomTransform.y };
+      dragStartPos.current = { x: mouseX - currentZoom.x, y: mouseY - currentZoom.y };
     }
   };
 
@@ -1216,9 +1279,11 @@ export default function TradeGraphVisualizer({
     const mouseX = e.clientX - rect.left;
     const mouseY = e.clientY - rect.top;
 
+    const currentZoom = zoomTransformRef.current;
+
     if (draggedNode.current) {
-      const worldX = (mouseX - canvas.clientWidth / 2 - zoomTransform.x) / zoomTransform.scale;
-      const worldY = (mouseY - canvas.clientHeight / 2 - zoomTransform.y) / zoomTransform.scale;
+      const worldX = (mouseX - canvas.clientWidth / 2 - currentZoom.x) / currentZoom.scale;
+      const worldY = (mouseY - canvas.clientHeight / 2 - currentZoom.y) / currentZoom.scale;
       draggedNode.current.x = worldX;
       draggedNode.current.y = worldY;
       draggedNode.current.fx = worldX;
@@ -1235,23 +1300,63 @@ export default function TradeGraphVisualizer({
       return;
     }
 
-    // Hover detection
-    const worldX = (mouseX - canvas.clientWidth / 2 - zoomTransform.x) / zoomTransform.scale;
-    const worldY = (mouseY - canvas.clientHeight / 2 - zoomTransform.y) / zoomTransform.scale;
+    // Hover detection with sticky hysteresis and debounce
+    const worldX = (mouseX - canvas.clientWidth / 2 - currentZoom.x) / currentZoom.scale;
+    const worldY = (mouseY - canvas.clientHeight / 2 - currentZoom.y) / currentZoom.scale;
 
+    const curHover = hoveredNodeRef.current;
+    const visible = visibleNodeIdsRef.current;
+
+    // Check sticky hysteresis on currently hovered node first (grace buffer)
+    if (curHover && visible.has(curHover.id)) {
+      const hdx = (curHover.x || 0) - worldX;
+      const hdy = (curHover.y || 0) - worldY;
+      const stickyRadius = (curHover.radius || 15) + 16;
+      if (hdx * hdx + hdy * hdy <= stickyRadius * stickyRadius) {
+        // Cursor still safely within sticky bounds
+        if (hoverTimerRef.current) {
+          clearTimeout(hoverTimerRef.current);
+          hoverTimerRef.current = null;
+        }
+        return;
+      }
+    }
+
+    // Hit-test nodes under cursor
     let found: GraphNode | null = null;
     for (let i = nodes.length - 1; i >= 0; i--) {
       const n = nodes[i];
-      if (!visibleNodeIds.has(n.id)) continue;
+      if (!visible.has(n.id)) continue;
       const dx = (n.x || 0) - worldX;
       const dy = (n.y || 0) - worldY;
-      const hitR = (n.radius || 15) + 6;
+      const hitR = (n.radius || 15) + 8;
       if (dx * dx + dy * dy <= hitR * hitR) {
         found = n;
         break;
       }
     }
-    setHoveredNode(found);
+
+    if (found) {
+      if (hoverTimerRef.current) {
+        clearTimeout(hoverTimerRef.current);
+        hoverTimerRef.current = null;
+      }
+      if (hoveredNodeRef.current?.id !== found.id) {
+        hoveredNodeRef.current = found;
+        highlightedNodeIdsRef.current = getCuratedHighlightedIds(found, links);
+        setHoveredNode(found);
+      }
+    } else if (curHover) {
+      // Debounce clearing hover by 200ms so micro-jitter doesn't flicker connections
+      if (!hoverTimerRef.current) {
+        hoverTimerRef.current = setTimeout(() => {
+          hoveredNodeRef.current = null;
+          highlightedNodeIdsRef.current = getCuratedHighlightedIds(selectedNodeRef.current, links);
+          setHoveredNode(null);
+          hoverTimerRef.current = null;
+        }, 200);
+      }
+    }
   };
 
   const handleCanvasMouseUp = () => {
@@ -1261,6 +1366,22 @@ export default function TradeGraphVisualizer({
       draggedNode.current = null;
     }
     isDraggingCanvas.current = false;
+  };
+
+  const handleCanvasMouseLeave = () => {
+    if (hoverTimerRef.current) {
+      clearTimeout(hoverTimerRef.current);
+      hoverTimerRef.current = null;
+    }
+    hoveredNodeRef.current = null;
+    highlightedNodeIdsRef.current = getCuratedHighlightedIds(selectedNodeRef.current, links);
+    setHoveredNode(null);
+    isDraggingCanvas.current = false;
+    if (draggedNode.current) {
+      draggedNode.current.fx = null;
+      draggedNode.current.fy = null;
+      draggedNode.current = null;
+    }
   };
 
   const handleWheel = (e: React.WheelEvent<HTMLCanvasElement>) => {
@@ -1281,6 +1402,8 @@ export default function TradeGraphVisualizer({
     );
     if (match) {
       setSelectedNode(match);
+      selectedNodeRef.current = match;
+      highlightedNodeIdsRef.current = getCuratedHighlightedIds(match, links);
       setZoomTransform({
         x: -(match.x || 0) * 1.15,
         y: -(match.y || 0) * 1.15,
@@ -1392,6 +1515,27 @@ export default function TradeGraphVisualizer({
               ))}
             </div>
 
+            {/* Center: Pinned Trade Pill Indicator */}
+            {selectedNode && (
+              <div className="pointer-events-auto flex items-center bg-cyan-950/95 backdrop-blur-md border border-cyan-500/50 rounded-lg px-2.5 py-1 text-xs text-cyan-200 shadow-md gap-2">
+                <span className="w-2 h-2 rounded-full bg-cyan-400 animate-pulse" />
+                <span className="font-mono font-medium">
+                  🔒 Pinned: {selectedNode.node_type === 'trade' ? `Trade #${selectedNode.trade_num} (${selectedNode.symbol})` : selectedNode.id}
+                </span>
+                <button
+                  onClick={() => {
+                    setSelectedNode(null);
+                    selectedNodeRef.current = null;
+                    highlightedNodeIdsRef.current = getCuratedHighlightedIds(hoveredNodeRef.current, links);
+                  }}
+                  className="text-slate-400 hover:text-white ml-1 text-xs px-1 hover:bg-white/10 rounded cursor-pointer"
+                  title="Unpin / Reset"
+                >
+                  ✕
+                </button>
+              </div>
+            )}
+
             {/* Right: Camera Controls */}
             <div className="pointer-events-auto flex items-center bg-slate-950/90 backdrop-blur-md border border-slate-800 rounded-lg p-0.5 gap-1 shadow-md">
               {candidateSetup && (
@@ -1468,6 +1612,7 @@ export default function TradeGraphVisualizer({
             onMouseDown={handleCanvasMouseDown}
             onMouseMove={handleCanvasMouseMove}
             onMouseUp={handleCanvasMouseUp}
+            onMouseLeave={handleCanvasMouseLeave}
             onWheel={handleWheel}
             className="w-full h-full cursor-grab active:cursor-grabbing block"
           />
@@ -1573,6 +1718,8 @@ export default function TradeGraphVisualizer({
                           );
                           if (target) {
                             setSelectedNode(target);
+                            selectedNodeRef.current = target;
+                            highlightedNodeIdsRef.current = getCuratedHighlightedIds(target, links);
                             setZoomTransform({
                               x: -(target.x || 0) * 1.15,
                               y: -(target.y || 0) * 1.15,
@@ -1704,6 +1851,8 @@ export default function TradeGraphVisualizer({
                         );
                         if (target) {
                           setSelectedNode(target);
+                          selectedNodeRef.current = target;
+                          highlightedNodeIdsRef.current = getCuratedHighlightedIds(target, links);
                           setZoomTransform({
                             x: -(target.x || 0) * 1.15,
                             y: -(target.y || 0) * 1.15,
