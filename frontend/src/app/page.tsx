@@ -274,8 +274,47 @@ export default function Dashboard() {
   const { status, connected, sendControl, sendManualTrade, cancelOrder } = useBackend();
   const [activeTab, setActiveTab] = useState<'scanner' | 'open_orders' | 'trades' | 'backtest' | 'graph_rag'>('backtest');
   const [targetGraphTradeNum, setTargetGraphTradeNum] = useState<number | undefined>(undefined);
+  const [navigatedFromGraph, setNavigatedFromGraph] = useState<boolean>(false);
   const [tradeToast, setTradeToast] = useState<string | null>(null);
   const [utcTime, setUtcTime] = useState('');
+
+  // ── Tab Switching with Browser History & URL Hash Synchronization ──
+  const switchTab = useCallback((tab: 'scanner' | 'open_orders' | 'trades' | 'backtest' | 'graph_rag', tradeNum?: number) => {
+    setActiveTab(tab);
+    if (tradeNum !== undefined) {
+      setTargetGraphTradeNum(tradeNum);
+    }
+    if (typeof window !== 'undefined') {
+      window.history.pushState({ tab, tradeNum }, '', `#${tab}`);
+    }
+  }, []);
+
+  // Synchronize browser Back / Forward buttons with dashboard tab state
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+
+    const initialHash = window.location.hash.replace('#', '');
+    if (initialHash === 'graph_rag' || initialHash === 'backtest' || initialHash === 'scanner' || initialHash === 'trades' || initialHash === 'open_orders') {
+      setActiveTab(initialHash as any);
+    }
+
+    const handlePopState = (e: PopStateEvent) => {
+      if (e.state && e.state.tab) {
+        setActiveTab(e.state.tab);
+        if (e.state.tradeNum !== undefined) {
+          setTargetGraphTradeNum(e.state.tradeNum);
+        }
+      } else {
+        const hash = window.location.hash.replace('#', '');
+        if (hash === 'graph_rag' || hash === 'backtest' || hash === 'scanner' || hash === 'trades' || hash === 'open_orders') {
+          setActiveTab(hash as any);
+        }
+      }
+    };
+
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, []);
 
   // ─── Backtest State ────────────────────────────────────────────────────────
   const [backtestData, setBacktestData] = useState<BacktestData | null>(null);
@@ -704,8 +743,8 @@ export default function Dashboard() {
           ].map(tab => (
             <button
               key={tab.key}
-              onClick={() => setActiveTab(tab.key as any)}
-              className={`h-7 px-3 rounded-md text-xs transition-colors whitespace-nowrap ${
+              onClick={() => switchTab(tab.key as any)}
+              className={`h-7 px-3 rounded-md text-xs transition-colors whitespace-nowrap cursor-pointer ${
                 activeTab === tab.key
                   ? 'bg-white text-slate-900 font-semibold shadow-2xs border border-slate-200/80'
                   : 'text-slate-600 hover:text-slate-900'
@@ -756,8 +795,7 @@ export default function Dashboard() {
         {/* ══════════════════════════════════════════════════════════════════
             TAB 1: SMC BACKTEST (JAN - OCT 2026)
             ══════════════════════════════════════════════════════════════════ */}
-        {activeTab === 'backtest' && (
-          <div className="flex flex-col gap-6">
+        <div className={activeTab === 'backtest' ? 'flex flex-col gap-6' : 'hidden'}>
             
             {/* ── Combined Section: Asset Partitions + High-Level Metrics ── */}
             <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-xs flex flex-col gap-5">
@@ -1315,6 +1353,27 @@ export default function Dashboard() {
                 </div>
               </div>
 
+              {/* Back to Graph Banner when navigated from Graph RAG */}
+              {navigatedFromGraph && selectedTrade && (
+                <div className="bg-slate-900 text-white px-4 py-2.5 rounded-xl border border-slate-800 flex items-center justify-between shadow-xs">
+                  <div className="flex items-center gap-2 text-xs">
+                    <span className="w-2 h-2 rounded-full bg-cyan-400 animate-pulse" />
+                    <span>Inspecting <strong>Trade #{selectedTrade.trade_num} ({selectedTrade.symbol})</strong> from Trading Brain Graph</span>
+                  </div>
+                  <button
+                    onClick={() => {
+                      setTargetGraphTradeNum(selectedTrade.trade_num);
+                      switchTab('graph_rag', selectedTrade.trade_num);
+                      const el = document.getElementById('trade-brain-graph-section');
+                      if (el) el.scrollIntoView({ behavior: 'smooth' });
+                    }}
+                    className="px-3 py-1 bg-cyan-600 hover:bg-cyan-500 text-white rounded-lg text-xs font-medium flex items-center gap-1.5 transition-colors cursor-pointer"
+                  >
+                    <span>← Back to Trading Brain Graph</span>
+                  </button>
+                </div>
+              )}
+
               {/* Render Selected View */}
               {selectedTrade && chartMode === 'visualizer' && (
                 <TradeChartVisualizer
@@ -1327,8 +1386,9 @@ export default function Dashboard() {
                   onClose={() => setSelectedTrade(null)}
                   onViewInGraph={(tradeNum) => {
                     setTargetGraphTradeNum(tradeNum);
-                    setActiveTab('graph_rag');
-                    window.scrollTo({ top: 0, behavior: 'smooth' });
+                    switchTab('graph_rag', tradeNum);
+                    const el = document.getElementById('trade-brain-graph-section');
+                    if (el) el.scrollIntoView({ behavior: 'smooth' });
                   }}
                 />
               )}
@@ -1575,10 +1635,11 @@ export default function Dashboard() {
                               onClick={(e) => {
                                 e.stopPropagation();
                                 setTargetGraphTradeNum(t.trade_num);
-                                setActiveTab('graph_rag');
-                                window.scrollTo({ top: 0, behavior: 'smooth' });
+                                switchTab('graph_rag', t.trade_num);
+                                const el = document.getElementById('trade-brain-graph-section');
+                                if (el) el.scrollIntoView({ behavior: 'smooth' });
                               }}
-                              className="px-2 py-1 rounded text-xs font-medium bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200 transition-colors"
+                              className="px-2.5 py-1 rounded text-xs font-medium bg-cyan-50 hover:bg-cyan-100 text-cyan-800 border border-cyan-200 transition-colors font-mono cursor-pointer shadow-2xs"
                               title="Inspect Trade in Knowledge Graph (Trade Brain)"
                             >
                               Graph
@@ -1627,13 +1688,11 @@ export default function Dashboard() {
             </div>
 
           </div>
-        )}
 
         {/* ══════════════════════════════════════════════════════════════════
             TAB: TRADE BRAIN (GRAPH RAG)
             ══════════════════════════════════════════════════════════════════ */}
-        {activeTab === 'graph_rag' && (
-          <div className="space-y-6">
+        <div className={activeTab === 'graph_rag' ? 'space-y-6' : 'hidden'}>
             {/* Telemetry Header: Scenario Selector & Live Candidate Intelligence */}
             <div className="bg-white border border-slate-200 rounded-xl p-5 shadow-xs flex flex-col gap-4">
               <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3 pb-3 border-b border-slate-100">
@@ -1860,7 +1919,8 @@ export default function Dashboard() {
                     );
                     if (target) {
                       setSelectedTrade(target);
-                      setActiveTab('backtest');
+                      setNavigatedFromGraph(true);
+                      switchTab('backtest', tradeNum);
                       const el = document.getElementById('chart-visualizer-section');
                       if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
                     }
@@ -1868,8 +1928,7 @@ export default function Dashboard() {
                 }}
               />
             </div>
-          </div>
-        )}
+        </div>
 
         {/* ══════════════════════════════════════════════════════════════════
             TAB 2: MARKET SCANNER

@@ -404,7 +404,14 @@ export default function TradeGraphVisualizer({
         const match = rawNodes.find(
           (n) => n.node_type === 'trade' && n.trade_num === initialSelectedTradeNum
         );
-        if (match) setSelectedNode(match);
+        if (match) {
+          setSelectedNode(match);
+          setZoomTransform({
+            x: -(match.x || 0) * 1.3,
+            y: -(match.y || 0) * 1.3,
+            scale: 1.3
+          });
+        }
       }
 
       setIsLoading(false);
@@ -412,7 +419,7 @@ export default function TradeGraphVisualizer({
       setLoadError(err.message || 'Error loading trade knowledge graph');
       setIsLoading(false);
     }
-  }, [initialSelectedTradeNum, candidateSetup]);
+  }, [candidateSetup]);
 
   useEffect(() => {
     loadGraphData();
@@ -513,10 +520,26 @@ export default function TradeGraphVisualizer({
     return set;
   }, [hoveredNode, selectedNode, links]);
 
-  // Viewport Auto-fit calculation
+  // Dedicated Trade Focusing function (Instant 1-click camera zoom to target trade)
+  const focusTrade = useCallback((tradeNum: number) => {
+    if (!tradeNum || nodes.length === 0) return;
+    const match = nodes.find(
+      (n) => n.node_type === 'trade' && n.trade_num === tradeNum
+    );
+    if (match) {
+      setSelectedNode(match);
+      setZoomTransform({
+        x: -(match.x || 0) * 1.3,
+        y: -(match.y || 0) * 1.3,
+        scale: 1.3
+      });
+    }
+  }, [nodes]);
+
+  // Viewport Auto-fit calculation (Safeguarded against NaN or 0-dimensions)
   const fitView = useCallback((padding = 70, targetNodes?: GraphNode[]) => {
     const canvas = canvasRef.current;
-    if (!canvas) return;
+    if (!canvas || canvas.clientWidth < 50 || canvas.clientHeight < 50) return;
 
     const targetList = (targetNodes || nodes).filter((n) => visibleNodeIds.has(n.id));
     if (targetList.length === 0) return;
@@ -539,26 +562,39 @@ export default function TradeGraphVisualizer({
     const spanX = Math.max(maxX - minX, 100);
     const spanY = Math.max(maxY - minY, 100);
 
-    const availableW = canvas.clientWidth - padding * 2;
-    const availableH = canvas.clientHeight - padding * 2;
+    const availableW = Math.max(100, canvas.clientWidth - padding * 2);
+    const availableH = Math.max(100, canvas.clientHeight - padding * 2);
 
     const scale = Math.min(availableW / spanX, availableH / spanY, 1.15);
     const midX = (minX + maxX) / 2;
     const midY = (minY + maxY) / 2;
 
-    setZoomTransform({
-      x: -midX * scale,
-      y: -midY * scale,
-      scale: Math.max(0.45, Math.min(scale, 1.35))
-    });
+    if (!isNaN(scale) && isFinite(scale) && scale > 0) {
+      setZoomTransform({
+        x: -midX * scale,
+        y: -midY * scale,
+        scale: Math.max(0.45, Math.min(scale, 1.35))
+      });
+    }
   }, [nodes, visibleNodeIds]);
 
-  // Re-fit view when nodes load or layout mode changes
+  // Watch for initialSelectedTradeNum changes from parent (e.g. Backtest table "Graph" click)
+  useEffect(() => {
+    if (initialSelectedTradeNum && nodes.length > 0) {
+      focusTrade(initialSelectedTradeNum);
+    }
+  }, [initialSelectedTradeNum, nodes.length, focusTrade]);
+
+  // Re-fit view when nodes load or layout mode changes (Only if no specific trade is targeted)
   useEffect(() => {
     if (nodes.length > 0) {
-      fitView(70);
+      if (initialSelectedTradeNum) {
+        focusTrade(initialSelectedTradeNum);
+      } else {
+        fitView(70);
+      }
     }
-  }, [nodes.length, layoutMode, fitView]);
+  }, [nodes.length, layoutMode, initialSelectedTradeNum, fitView, focusTrade]);
 
   // Focus Candidate setup radar
   const focusCandidate = useCallback(() => {
@@ -741,6 +777,9 @@ export default function TradeGraphVisualizer({
     const dpr = typeof window !== 'undefined' ? window.devicePixelRatio || 1 : 1;
     const displayW = canvas.clientWidth;
     const displayH = canvas.clientHeight;
+
+    // Guard against unmeasured canvas in hidden tabs
+    if (displayW <= 10 || displayH <= 10) return;
 
     if (canvas.width !== displayW * dpr || canvas.height !== displayH * dpr) {
       canvas.width = displayW * dpr;
@@ -993,6 +1032,34 @@ export default function TradeGraphVisualizer({
           ctx.fill();
         }
 
+        // Active Focus Radar Pulse on Selected Trade
+        if (isSelected) {
+          const radarR = radius + 8 + Math.sin(pulseOffset.current * Math.PI * 4) * 3;
+          ctx.beginPath();
+          ctx.arc(x, y, radarR, 0, 2 * Math.PI);
+          ctx.strokeStyle = isWin ? '#34d399' : '#f43f5e';
+          ctx.lineWidth = 2;
+          ctx.stroke();
+
+          // Small crosshair marks on selected node
+          ctx.beginPath();
+          ctx.moveTo(x - radius - 6, y);
+          ctx.lineTo(x - radius - 1, y);
+          ctx.moveTo(x + radius + 1, y);
+          ctx.lineTo(x + radius + 6, y);
+          ctx.moveTo(x, y - radius - 6);
+          ctx.lineTo(x, y - radius - 1);
+          ctx.moveTo(x, y + radius + 1);
+          ctx.lineTo(x, y + radius + 6);
+          ctx.stroke();
+
+          // High-visibility trade title below node
+          ctx.fillStyle = '#ffffff';
+          ctx.font = 'bold 9.5px sans-serif';
+          ctx.textAlign = 'center';
+          ctx.fillText(`Trade #${node.trade_num} (${node.symbol} ${node.direction || ''})`, x, y + radius + 14);
+        }
+
         // Outer Ring
         ctx.beginPath();
         ctx.arc(x, y, radius, 0, 2 * Math.PI);
@@ -1088,6 +1155,23 @@ export default function TradeGraphVisualizer({
 
     ctx.restore();
   }, [nodes, links, visibleNodeIds, nodeMap, zoomTransform, selectedNode, hoveredNode, highlightedNodeIds, layoutMode]);
+
+  // Handle Container Resize (Ensures canvas re-measures when switching back to tab)
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
+
+    const ro = new ResizeObserver((entries) => {
+      for (const entry of entries) {
+        if (entry.contentRect.width > 50 && entry.contentRect.height > 50) {
+          drawCanvas();
+        }
+      }
+    });
+
+    ro.observe(container);
+    return () => ro.disconnect();
+  }, [drawCanvas]);
 
   // 4. Mouse / Touch Interactions
   const handleCanvasMouseDown = (e: React.MouseEvent<HTMLCanvasElement>) => {
