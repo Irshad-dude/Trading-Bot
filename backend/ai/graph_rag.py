@@ -281,6 +281,11 @@ class TradeKnowledgeGraph:
                     "factor": "Short Direction Edge on Precious Metals",
                     "finding": "Gold Short setups achieved 56.5% - 58.8% win rates with rapid liquidations.",
                     "dna_impact": "Bearish displacement after IDM sweep provides fastest target hits."
+                },
+                {
+                    "factor": "AI Skill 4: Unslop UI System",
+                    "finding": "Institutional-grade visual hierarchy with quiet chrome, strict 4px spacing rhythm, and disciplined contrast.",
+                    "dna_impact": "Eliminates cognitive friction and AI visual clutter via heydamir/unslop."
                 }
             ]
         }

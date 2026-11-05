@@ -1423,22 +1423,23 @@ export default function TradeGraphVisualizer({
             </div>
 
             {/* Core Rules: DNA Cards */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className={`grid grid-cols-1 ${winningDNA.core_rules.length > 3 ? 'md:grid-cols-2 lg:grid-cols-4' : 'md:grid-cols-3'} gap-4`}>
               {winningDNA.core_rules.map((rule, idx) => {
-                const icons = ['⚡', '📐', '🕐'];
+                const icons = ['⚡', '📐', '🕐', '🎨'];
                 const colors = [
                   { border: 'border-cyan-500/30', bg: 'bg-cyan-500/5', badge: 'bg-cyan-500/15 text-cyan-400 border-cyan-500/30', impact: 'bg-emerald-500/10 border-emerald-500/20 text-emerald-300' },
                   { border: 'border-amber-500/30', bg: 'bg-amber-500/5', badge: 'bg-amber-500/15 text-amber-400 border-amber-500/30', impact: 'bg-emerald-500/10 border-emerald-500/20 text-emerald-300' },
                   { border: 'border-purple-500/30', bg: 'bg-purple-500/5', badge: 'bg-purple-500/15 text-purple-400 border-purple-500/30', impact: 'bg-emerald-500/10 border-emerald-500/20 text-emerald-300' },
+                  { border: 'border-blue-500/30', bg: 'bg-blue-500/5', badge: 'bg-blue-500/15 text-blue-400 border-blue-500/30', impact: 'bg-blue-500/10 border-blue-500/20 text-blue-300' },
                 ];
-                const c = colors[idx % 3];
+                const c = colors[idx % colors.length];
                 return (
                   <div key={idx} className={`relative border ${c.border} ${c.bg} rounded-xl p-5 flex flex-col gap-3 hover:border-opacity-60 transition-all`}>
                     <div className="flex items-start justify-between">
                       <span className={`text-[11px] font-bold uppercase tracking-widest px-2 py-0.5 rounded-full border ${c.badge}`}>
                         Rule {idx + 1}
                       </span>
-                      <span className="text-2xl">{icons[idx]}</span>
+                      <span className="text-2xl">{icons[idx % icons.length]}</span>
                     </div>
                     <div>
                       <h4 className="text-sm font-extrabold text-white mb-1">{rule.factor}</h4>

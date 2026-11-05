@@ -654,7 +654,7 @@ export default function Dashboard() {
                     }`}
                   >
                     <BrainCircuitIcon className="w-3.5 h-3.5 flex-shrink-0" />
-                    <span>{showAiRules ? 'Hide AI Rules' : 'AI Memory Bank'}</span>
+                    <span>{showAiRules ? 'Hide AI Skills' : 'AI Skills (4 Active)'}</span>
                   </button>
 
                   {/* Jump to Chart Visualizer CTA */}
@@ -989,19 +989,41 @@ export default function Dashboard() {
                   <div className="flex items-center justify-between">
                     <span className="text-xs font-bold uppercase tracking-wider text-slate-700 flex items-center gap-2">
                       <BrainCircuitIcon className="w-4 h-4 text-slate-700" />
-                      Active Machine Learning Rules (817 Trades Evaluated)
+                      Active AI Skills & Architecture Rules (817 Trades Evaluated)
                     </span>
                     <span className="text-xs font-mono text-slate-500">Asia/Kolkata IST (UTC+05:30)</span>
                   </div>
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
                     {[
-                      { id: 'RULE-OPT-01', title: 'Displacement Body Close', desc: 'FVG entries only trigger after full candle body close beyond structural pivot (rejects wick traps).' },
-                      { id: 'RULE-RISK-02', title: 'Session Timing Filter', desc: 'Peak 1:2 R:R completion occurs during London/NY Overlap (18:30 – 22:30 IST).' },
-                      { id: 'RULE-RISK-01', title: 'Liquidity Buffer Cushion', desc: 'Applies 0.25x ATR invalidation buffer beyond swing highs/lows to prevent stop-hunts.' },
+                      { id: 'SKILL-01', title: 'AI Skill 1: Displacement Body Close', desc: 'FVG entries only trigger after full candle body close beyond structural pivot (rejects wick traps).' },
+                      { id: 'SKILL-02', title: 'AI Skill 2: Session Timing Filter', desc: 'Peak 1:2 R:R completion occurs during London/NY Overlap (18:30 – 22:30 IST).' },
+                      { id: 'SKILL-03', title: 'AI Skill 3: Liquidity Buffer Cushion', desc: 'Applies 0.25x ATR invalidation buffer beyond swing highs/lows to prevent stop-hunts.' },
+                      {
+                        id: 'SKILL-04',
+                        title: 'AI Skill 4 for UI: Unslop Design System',
+                        desc: 'Eliminates AI visual slop — cleans purple glows & emoji noise into human-designed 4px layout rhythm and disciplined contrast.',
+                        tag: 'heydamir/unslop',
+                        url: 'https://github.com/heydamir/unslop.git'
+                      },
                     ].map(r => (
-                      <div key={r.id} className="p-3.5 rounded-xl border border-slate-200 bg-slate-50 flex flex-col gap-1">
-                        <span className="text-xs font-bold text-slate-900">{r.title}</span>
-                        <span className="text-xs text-slate-600 leading-relaxed">{r.desc}</span>
+                      <div key={r.id} className="p-3.5 rounded-xl border border-slate-200 bg-slate-50 flex flex-col justify-between gap-2 hover:border-slate-300 transition-colors">
+                        <div className="flex flex-col gap-1">
+                          <div className="flex items-center justify-between gap-1">
+                            <span className="text-xs font-bold text-slate-900">{r.title}</span>
+                            {r.tag && (
+                              <a
+                                href={r.url}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-indigo-50 text-indigo-700 border border-indigo-200 hover:bg-indigo-100 transition-colors flex items-center gap-1 flex-shrink-0"
+                              >
+                                <span>{r.tag}</span>
+                                <span>↗</span>
+                              </a>
+                            )}
+                          </div>
+                          <span className="text-xs text-slate-600 leading-relaxed">{r.desc}</span>
+                        </div>
                       </div>
                     ))}
                   </div>
