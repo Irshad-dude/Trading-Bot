@@ -248,6 +248,8 @@ npm run build
 ### Commit Log on Feature Branch:
 1. `3b9b5df` — `feat(graph-rag): improve graph visualization, telemetry, api sync, and retrieval validation (phase 1)`
 2. `2beb817` — `fix(ui): overhaul graph rag visualizer with constellation layout, retina canvas, and dark terminal side inspector`
+3. `1930e62` — `docs: complete comprehensive Phase 1 documentation for Graph RAG dashboard, visualizer overhaul, and API telemetry`
+4. `c872720` — `fix(nav): resolve back button navigation, persistent tab state, and instant trade focus on graph clicks`
 
 ---
 
