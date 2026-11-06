@@ -849,6 +849,76 @@ export default function TradeGraphVisualizer({
     ctx.translate(displayW / 2 + currentZoom.x, displayH / 2 + currentZoom.y);
     ctx.scale(currentZoom.scale, currentZoom.scale);
 
+    // ── Tactical Quantitative Coordinate Grid & Blueprint Texture ──
+    {
+      const left = (-displayW / 2 - currentZoom.x) / currentZoom.scale;
+      const right = (displayW / 2 - currentZoom.x) / currentZoom.scale;
+      const top = (-displayH / 2 - currentZoom.y) / currentZoom.scale;
+      const bottom = (displayH / 2 - currentZoom.y) / currentZoom.scale;
+
+      ctx.save();
+
+      // 1. Fine Micro Coordinate Grid (Hairline every 100 world units)
+      const gridStep = 100;
+      const startX = Math.floor(left / gridStep) * gridStep;
+      const startY = Math.floor(top / gridStep) * gridStep;
+
+      ctx.strokeStyle = 'rgba(148, 163, 184, 0.038)';
+      ctx.lineWidth = 1 / currentZoom.scale;
+      ctx.beginPath();
+      for (let x = startX; x <= right; x += gridStep) {
+        ctx.moveTo(x, top);
+        ctx.lineTo(x, bottom);
+      }
+      for (let y = startY; y <= bottom; y += gridStep) {
+        ctx.moveTo(left, y);
+        ctx.lineTo(right, y);
+      }
+      ctx.stroke();
+
+      // 2. Tactical Crosshair Ticks (+) at Major Quad Intersections (300 world units)
+      const majorStep = 300;
+      const majorStartX = Math.floor(left / majorStep) * majorStep;
+      const majorStartY = Math.floor(top / majorStep) * majorStep;
+      const tick = 6 / currentZoom.scale;
+
+      ctx.strokeStyle = 'rgba(56, 189, 248, 0.14)';
+      ctx.lineWidth = 1 / currentZoom.scale;
+      ctx.beginPath();
+      for (let mx = majorStartX; mx <= right; mx += majorStep) {
+        for (let my = majorStartY; my <= bottom; my += majorStep) {
+          ctx.moveTo(mx - tick, my);
+          ctx.lineTo(mx + tick, my);
+          ctx.moveTo(mx, my - tick);
+          ctx.lineTo(mx, my + tick);
+        }
+      }
+      ctx.stroke();
+
+      // 3. Faint Center Coordinate Origin Axis (0, 0)
+      ctx.strokeStyle = 'rgba(56, 189, 248, 0.10)';
+      ctx.lineWidth = 1.2 / currentZoom.scale;
+      ctx.beginPath();
+      ctx.moveTo(left, 0);
+      ctx.lineTo(right, 0);
+      ctx.moveTo(0, top);
+      ctx.lineTo(0, bottom);
+      ctx.stroke();
+
+      // 4. Subtle Micro Origin Reticle
+      ctx.beginPath();
+      ctx.arc(0, 0, 16, 0, 2 * Math.PI);
+      ctx.strokeStyle = 'rgba(56, 189, 248, 0.18)';
+      ctx.stroke();
+
+      ctx.fillStyle = 'rgba(148, 163, 184, 0.28)';
+      ctx.font = '8px monospace';
+      ctx.textAlign = 'center';
+      ctx.fillText('0,0 SMC CORE MATRIX', 0, 26);
+
+      ctx.restore();
+    }
+
     // ── Draw Cluster Boundary Ambiances (Constellation Mode) ──
     if (currentMode === 'constellation') {
       const clusterZones = [
@@ -1414,28 +1484,33 @@ export default function TradeGraphVisualizer({
 
   return (
     <div ref={containerRef} className="space-y-4">
-      {/* ── Visualizer Header & KPI Stats ── */}
-      <div className="bg-white border border-slate-200 rounded-xl p-5 shadow-xs flex flex-col gap-4">
-        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3 pb-3 border-b border-slate-100">
+      {/* ── Visualizer Header & KPI Stats (Refined Dark Graphite Workstation) ── */}
+      <div 
+        className="border border-slate-800/80 rounded-xl p-4.5 shadow-md flex flex-col gap-3.5 text-slate-200"
+        style={{
+          background: 'linear-gradient(180deg, #0e1422 0%, #0a0e18 100%)'
+        }}
+      >
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3 pb-3 border-b border-slate-800/70">
           <div>
-            <h1 className="text-base font-bold text-slate-900 flex items-center gap-2">
-              <BrainCircuitIcon className="w-5 h-5 text-cyan-600" />
+            <h1 className="text-sm font-semibold text-slate-100 flex items-center gap-2">
+              <BrainCircuitIcon className="w-4.5 h-4.5 text-cyan-400" />
               <span>Trading Brain Knowledge Graph & Synaptic Memory</span>
             </h1>
-            <p className="text-xs text-slate-500 mt-0.5 max-w-2xl leading-relaxed">
+            <p className="text-xs text-slate-400 mt-0.5 max-w-2xl leading-relaxed">
               169 verified backtested trades mapped into topological winning constellations. Retrieves nearest historical twins to validate candidate probability before trade entry.
             </p>
           </div>
 
           {/* Quick Metrics */}
-          <div className="flex items-center gap-3 text-xs font-mono">
-            <span className="px-2.5 py-1 rounded-md bg-slate-100 text-slate-700 border border-slate-200">
+          <div className="flex items-center gap-2.5 text-xs font-mono">
+            <span className="px-2.5 py-1 rounded-md bg-slate-900/90 text-slate-300 border border-slate-800">
               190 Neurons
             </span>
-            <span className="px-2.5 py-1 rounded-md bg-emerald-50 text-emerald-700 border border-emerald-200">
+            <span className="px-2.5 py-1 rounded-md bg-emerald-950/60 text-emerald-400 border border-emerald-800/60">
               Top Cluster: 83.3% WR
             </span>
-            <span className="px-2.5 py-1 rounded-md bg-rose-50 text-rose-700 border border-rose-200">
+            <span className="px-2.5 py-1 rounded-md bg-rose-950/60 text-rose-400 border border-rose-800/60">
               3 Traps Neutralized
             </span>
           </div>
@@ -1444,7 +1519,7 @@ export default function TradeGraphVisualizer({
         {/* ── Filter Toolbar ── */}
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
           <div className="flex flex-wrap items-center gap-1.5">
-            <span className="text-xs font-medium text-slate-500 mr-1">Filter:</span>
+            <span className="text-xs font-medium text-slate-400 mr-1">Filter:</span>
             {[
               { id: 'all', label: 'All trades (169)' },
               ...(candidateSetup ? [{ id: 'candidate_neighborhood', label: `🎯 ${candidateSetup.symbol} Setup Match` }] : []),
@@ -1458,10 +1533,10 @@ export default function TradeGraphVisualizer({
               <button
                 key={f.id}
                 onClick={() => setFilterType(f.id as any)}
-                className={`h-7 px-2.5 rounded-md text-xs font-medium transition-colors ${
+                className={`h-7 px-2.5 rounded-md text-xs font-medium transition-colors cursor-pointer ${
                   filterType === f.id
-                    ? 'bg-slate-900 text-white font-semibold shadow-2xs'
-                    : 'bg-slate-50 text-slate-600 hover:bg-slate-100 hover:text-slate-900 border border-slate-200/80'
+                    ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 font-semibold shadow-xs'
+                    : 'bg-slate-900/70 text-slate-400 hover:text-slate-200 hover:bg-slate-800/80 border border-slate-800/80'
                 }`}
               >
                 {f.label}
@@ -1476,11 +1551,11 @@ export default function TradeGraphVisualizer({
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               placeholder="Search trade # (e.g. 126)..."
-              className="h-7 px-2.5 text-xs font-mono rounded-md bg-slate-50 border border-slate-200 text-slate-800 placeholder:text-slate-400 focus:outline-none focus:border-slate-400 w-48"
+              className="h-7 px-2.5 text-xs font-mono rounded-md bg-slate-900/90 border border-slate-800 text-slate-200 placeholder:text-slate-500 focus:outline-none focus:border-cyan-500/50 w-48"
             />
             <button
               type="submit"
-              className="h-7 px-3 text-xs font-medium rounded-md bg-slate-900 hover:bg-slate-800 text-white transition-colors"
+              className="h-7 px-3 text-xs font-medium rounded-md bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition-colors cursor-pointer"
             >
               Locate
             </button>
@@ -1491,7 +1566,13 @@ export default function TradeGraphVisualizer({
       {/* ── Main Canvas Viewport & Integrated Dark Side Inspector ── */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
         {/* Canvas Column (2 Cols) */}
-        <div className="lg:col-span-2 bg-[#090d16] border border-slate-800 rounded-xl relative overflow-hidden h-[660px] shadow-sm flex flex-col">
+        <div 
+          className="lg:col-span-2 border border-slate-800/80 rounded-xl relative overflow-hidden h-[660px] shadow-lg flex flex-col"
+          style={{
+            background: 'radial-gradient(ellipse 90% 80% at 50% 50%, #0d1424 0%, #080c16 65%, #050810 100%)',
+            boxShadow: 'inset 0 0 100px rgba(3, 6, 12, 0.85), 0 4px 20px -2px rgba(0, 0, 0, 0.5)'
+          }}
+        >
           {/* Top HUD: Layout Modes & Viewport Controls */}
           <div className="absolute top-3 left-3 right-3 z-20 flex items-center justify-between pointer-events-none">
             {/* Left: Layout Switcher */}
@@ -1619,7 +1700,12 @@ export default function TradeGraphVisualizer({
         </div>
 
         {/* ── Integrated Dark Side Inspector Panel (1 Col) ── */}
-        <div className="bg-[#0c101d] border border-slate-800 rounded-xl p-5 flex flex-col h-[660px] overflow-y-auto text-slate-200 shadow-sm">
+        <div 
+          className="border border-slate-800/80 rounded-xl p-5 flex flex-col h-[660px] overflow-y-auto text-slate-200 shadow-md"
+          style={{
+            background: 'linear-gradient(180deg, #0e1322 0%, #0a0e19 100%)'
+          }}
+        >
           {selectedNode && selectedNode.node_type !== 'candidate' ? (
             /* Historical Trade or Feature Inspector */
             <div className="space-y-4">
