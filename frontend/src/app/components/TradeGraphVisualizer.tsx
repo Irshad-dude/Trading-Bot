@@ -835,7 +835,9 @@ export default function TradeGraphVisualizer({
 
     ctx.save();
     ctx.scale(dpr, dpr);
-    ctx.clearRect(0, 0, displayW, displayH);
+    // Fill canvas background with clean white
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0, 0, displayW, displayH);
 
     // Read synchronously from refs to guarantee 60fps frame stability without stale closure flicker
     const currentSelected = selectedNodeRef.current;
@@ -849,7 +851,7 @@ export default function TradeGraphVisualizer({
     ctx.translate(displayW / 2 + currentZoom.x, displayH / 2 + currentZoom.y);
     ctx.scale(currentZoom.scale, currentZoom.scale);
 
-    // ── Tactical Quantitative Coordinate Grid & Blueprint Texture ──
+    // ── Tactical Quantitative Coordinate Grid & Blueprint Texture (Unslop Light Matrix) ──
     {
       const left = (-displayW / 2 - currentZoom.x) / currentZoom.scale;
       const right = (displayW / 2 - currentZoom.x) / currentZoom.scale;
@@ -858,12 +860,12 @@ export default function TradeGraphVisualizer({
 
       ctx.save();
 
-      // 1. Fine Micro Coordinate Grid (Hairline every 100 world units)
+      // 1. Fine Micro Coordinate Grid (Hairline every 100 world units on clean canvas)
       const gridStep = 100;
       const startX = Math.floor(left / gridStep) * gridStep;
       const startY = Math.floor(top / gridStep) * gridStep;
 
-      ctx.strokeStyle = 'rgba(148, 163, 184, 0.038)';
+      ctx.strokeStyle = 'rgba(15, 23, 42, 0.04)';
       ctx.lineWidth = 1 / currentZoom.scale;
       ctx.beginPath();
       for (let x = startX; x <= right; x += gridStep) {
@@ -882,7 +884,7 @@ export default function TradeGraphVisualizer({
       const majorStartY = Math.floor(top / majorStep) * majorStep;
       const tick = 6 / currentZoom.scale;
 
-      ctx.strokeStyle = 'rgba(56, 189, 248, 0.14)';
+      ctx.strokeStyle = 'rgba(2, 132, 199, 0.22)';
       ctx.lineWidth = 1 / currentZoom.scale;
       ctx.beginPath();
       for (let mx = majorStartX; mx <= right; mx += majorStep) {
@@ -896,7 +898,7 @@ export default function TradeGraphVisualizer({
       ctx.stroke();
 
       // 3. Faint Center Coordinate Origin Axis (0, 0)
-      ctx.strokeStyle = 'rgba(56, 189, 248, 0.10)';
+      ctx.strokeStyle = 'rgba(15, 23, 42, 0.07)';
       ctx.lineWidth = 1.2 / currentZoom.scale;
       ctx.beginPath();
       ctx.moveTo(left, 0);
@@ -908,10 +910,10 @@ export default function TradeGraphVisualizer({
       // 4. Subtle Micro Origin Reticle
       ctx.beginPath();
       ctx.arc(0, 0, 16, 0, 2 * Math.PI);
-      ctx.strokeStyle = 'rgba(56, 189, 248, 0.18)';
+      ctx.strokeStyle = 'rgba(2, 132, 199, 0.28)';
       ctx.stroke();
 
-      ctx.fillStyle = 'rgba(148, 163, 184, 0.28)';
+      ctx.fillStyle = 'rgba(100, 116, 139, 0.65)';
       ctx.font = '8px monospace';
       ctx.textAlign = 'center';
       ctx.fillText('0,0 SMC CORE MATRIX', 0, 26);
@@ -922,10 +924,10 @@ export default function TradeGraphVisualizer({
     // ── Draw Cluster Boundary Ambiances (Constellation Mode) ──
     if (currentMode === 'constellation') {
       const clusterZones = [
-        { cx: -320, cy: -200, r: 135, label: '★ London/NY Overlap (83.3% WR)', color: 'rgba(16, 185, 129, 0.06)', border: 'rgba(16, 185, 129, 0.25)' },
-        { cx: 320,  cy: -200, r: 135, label: '★ London Morning (66.7% WR)',   color: 'rgba(6, 182, 212, 0.05)',  border: 'rgba(6, 182, 212, 0.22)' },
-        { cx: 320,  cy: 220,  r: 130, label: '★ Asian Liquidity (71.4% WR)',  color: 'rgba(168, 85, 247, 0.05)', border: 'rgba(168, 85, 247, 0.22)' },
-        { cx: -320, cy: 220,  r: 130, label: '⚠ Consolidation & Trap Zone',    color: 'rgba(244, 63, 94, 0.05)',  border: 'rgba(244, 63, 94, 0.22)' },
+        { cx: -320, cy: -200, r: 135, label: '★ London/NY Overlap (83.3% WR)', color: 'rgba(16, 185, 129, 0.05)', border: 'rgba(16, 185, 129, 0.35)', text: '#047857' },
+        { cx: 320,  cy: -200, r: 135, label: '★ London Morning (66.7% WR)',   color: 'rgba(2, 132, 199, 0.04)',  border: 'rgba(2, 132, 199, 0.35)', text: '#0369a1' },
+        { cx: 320,  cy: 220,  r: 130, label: '★ Asian Liquidity (71.4% WR)',  color: 'rgba(147, 51, 234, 0.04)', border: 'rgba(147, 51, 234, 0.35)', text: '#7e22ce' },
+        { cx: -320, cy: 220,  r: 130, label: '⚠ Consolidation & Trap Zone',    color: 'rgba(244, 63, 94, 0.04)',  border: 'rgba(244, 63, 94, 0.35)', text: '#be123c' },
       ];
 
       clusterZones.forEach((cz) => {
@@ -939,8 +941,8 @@ export default function TradeGraphVisualizer({
         ctx.stroke();
         ctx.setLineDash([]);
 
-        // Cluster Tag Banner
-        ctx.fillStyle = cz.border;
+        // Cluster Tag Banner (High contrast readable text on white)
+        ctx.fillStyle = cz.text;
         ctx.font = 'bold 9px monospace';
         ctx.textAlign = 'center';
         ctx.fillText(cz.label, cz.cx, cz.cy - cz.r + 14);
@@ -1054,20 +1056,17 @@ export default function TradeGraphVisualizer({
         // Target Body
         ctx.beginPath();
         ctx.arc(x, y, radius, 0, 2 * Math.PI);
-        ctx.fillStyle = '#0891b2';
-        ctx.shadowColor = '#06b6d4';
-        ctx.shadowBlur = 18;
+        ctx.fillStyle = '#0284c7';
         ctx.fill();
-        ctx.shadowBlur = 0;
 
-        // Inner Core
+        // Inner Core (Clean White)
         ctx.beginPath();
-        ctx.arc(x, y, radius - 4.5, 0, 2 * Math.PI);
-        ctx.fillStyle = '#082f49';
+        ctx.arc(x, y, radius - 4, 0, 2 * Math.PI);
+        ctx.fillStyle = '#ffffff';
         ctx.fill();
 
         // Crosshairs
-        ctx.strokeStyle = '#38bdf8';
+        ctx.strokeStyle = '#0284c7';
         ctx.lineWidth = 1.5;
         ctx.beginPath();
         ctx.moveTo(x - radius + 3, y);
@@ -1077,67 +1076,63 @@ export default function TradeGraphVisualizer({
         ctx.stroke();
 
         // Label
-        ctx.fillStyle = '#f0f9ff';
+        ctx.fillStyle = '#0f172a';
         ctx.font = 'bold 9px monospace';
         ctx.textAlign = 'center';
         ctx.fillText('TARGET CANDIDATE', x, y - radius - 9);
 
         ctx.font = 'bold 10px sans-serif';
-        ctx.fillStyle = '#38bdf8';
+        ctx.fillStyle = '#0284c7';
         ctx.fillText(`${node.symbol || ''} ${node.direction || ''}`, x, y + radius + 13);
       } else if (node.node_type === 'feature') {
         // ── Feature / Concept Neuron ──
         const category = node.category || '';
-        let nodeColor = '#818cf8';
-        if (category === 'Session') nodeColor = '#a855f7';
-        if (category === 'Angle') nodeColor = '#06b6d4';
-        if (category === 'Pattern') nodeColor = '#eab308';
-        if (category === 'Asset') nodeColor = '#ec4899';
-        if (category === 'Risk') nodeColor = '#10b981';
+        let nodeColor = '#6366f1';
+        if (category === 'Session') nodeColor = '#9333ea';
+        if (category === 'Angle') nodeColor = '#0284c7';
+        if (category === 'Pattern') nodeColor = '#d97706';
+        if (category === 'Asset') nodeColor = '#db2777';
+        if (category === 'Risk') nodeColor = '#059669';
 
         if (isSelected || isHovered) {
           ctx.beginPath();
           ctx.arc(x, y, radius + 6, 0, 2 * Math.PI);
-          ctx.fillStyle = 'rgba(255, 255, 255, 0.2)';
+          ctx.fillStyle = 'rgba(2, 132, 199, 0.15)';
           ctx.fill();
         }
 
         ctx.beginPath();
         ctx.arc(x, y, radius, 0, 2 * Math.PI);
         ctx.fillStyle = nodeColor;
-        ctx.shadowColor = nodeColor;
-        ctx.shadowBlur = isSelected || isHovered ? 16 : 8;
         ctx.fill();
-        ctx.shadowBlur = 0;
 
         ctx.beginPath();
-        ctx.arc(x, y, radius - 4, 0, 2 * Math.PI);
-        ctx.fillStyle = '#0f172a';
+        ctx.arc(x, y, radius - 3.5, 0, 2 * Math.PI);
+        ctx.fillStyle = '#ffffff';
         ctx.fill();
 
         const labelText = node.id.split(':')[1]?.trim() || node.id;
-        ctx.fillStyle = '#f8fafc';
+        ctx.fillStyle = nodeColor;
         ctx.font = 'bold 8.5px monospace';
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
         ctx.fillText(labelText.slice(0, 9), x, y);
 
         if (isSelected || isHovered) {
-          ctx.font = '9px sans-serif';
-          ctx.fillStyle = '#cbd5e1';
+          ctx.font = 'bold 9px sans-serif';
+          ctx.fillStyle = '#0f172a';
           ctx.fillText(labelText, x, y + radius + 11);
         }
       } else {
         // ── Historical Trade Neuron ──
         const isWin = node.result === 'WIN';
         const baseColor = isWin ? '#10b981' : '#f43f5e';
-        const glowColor = isWin ? 'rgba(16, 185, 129, 0.8)' : 'rgba(244, 63, 94, 0.8)';
 
         // High-Win Cluster Ring or Trap Ring
         if (node.isHighWinCluster) {
           ctx.beginPath();
           ctx.arc(x, y, radius + 4, 0, 2 * Math.PI);
-          ctx.strokeStyle = 'rgba(52, 211, 153, 0.85)';
+          ctx.strokeStyle = 'rgba(16, 185, 129, 0.85)';
           ctx.lineWidth = 1.8;
           ctx.stroke();
         } else if (node.isLosingTrap) {
@@ -1153,8 +1148,8 @@ export default function TradeGraphVisualizer({
         // Selection / Hover Halo
         if (isSelected || isHovered) {
           ctx.beginPath();
-          ctx.arc(x, y, radius + 7, 0, 2 * Math.PI);
-          ctx.fillStyle = isWin ? 'rgba(16, 185, 129, 0.3)' : 'rgba(244, 63, 94, 0.3)';
+          ctx.arc(x, y, radius + 6, 0, 2 * Math.PI);
+          ctx.fillStyle = isWin ? 'rgba(16, 185, 129, 0.2)' : 'rgba(244, 63, 94, 0.2)';
           ctx.fill();
         }
 
@@ -1163,7 +1158,7 @@ export default function TradeGraphVisualizer({
           const radarR = radius + 8 + Math.sin(pulseOffset.current * Math.PI * 4) * 3;
           ctx.beginPath();
           ctx.arc(x, y, radarR, 0, 2 * Math.PI);
-          ctx.strokeStyle = isWin ? '#34d399' : '#f43f5e';
+          ctx.strokeStyle = isWin ? '#059669' : '#dc2626';
           ctx.lineWidth = 2;
           ctx.stroke();
 
@@ -1180,7 +1175,7 @@ export default function TradeGraphVisualizer({
           ctx.stroke();
 
           // High-visibility trade title below node
-          ctx.fillStyle = '#ffffff';
+          ctx.fillStyle = '#0f172a';
           ctx.font = 'bold 9.5px sans-serif';
           ctx.textAlign = 'center';
           ctx.fillText(`Trade #${node.trade_num} (${node.symbol} ${node.direction || ''})`, x, y + radius + 14);
@@ -1190,19 +1185,16 @@ export default function TradeGraphVisualizer({
         ctx.beginPath();
         ctx.arc(x, y, radius, 0, 2 * Math.PI);
         ctx.fillStyle = baseColor;
-        ctx.shadowColor = glowColor;
-        ctx.shadowBlur = isSelected || isHovered ? 16 : 6;
         ctx.fill();
-        ctx.shadowBlur = 0;
 
-        // Inner Circle
+        // Inner Circle (Clean White)
         ctx.beginPath();
         ctx.arc(x, y, radius - 2.5, 0, 2 * Math.PI);
-        ctx.fillStyle = '#090d16';
+        ctx.fillStyle = '#ffffff';
         ctx.fill();
 
         // Trade number inside node
-        ctx.fillStyle = isWin ? '#34d399' : '#f87171';
+        ctx.fillStyle = isWin ? '#047857' : '#be123c';
         ctx.font = 'bold 8.5px monospace';
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
@@ -1212,7 +1204,7 @@ export default function TradeGraphVisualizer({
       ctx.restore();
     }
 
-    // ── Floating HUD Tooltip for Hovered Node ──
+    // ── Floating HUD Tooltip for Hovered Node (Clean Light Unslop Card) ──
     if (currentHovered) {
       const hx = currentHovered.x || 0;
       const hy = currentHovered.y || 0;
@@ -1224,11 +1216,11 @@ export default function TradeGraphVisualizer({
       const tipH = currentHovered.node_type === 'candidate' ? 62 : 56;
 
       ctx.save();
-      ctx.shadowColor = 'rgba(0, 0, 0, 0.85)';
+      ctx.shadowColor = 'rgba(15, 23, 42, 0.12)';
       ctx.shadowBlur = 14;
-      ctx.fillStyle = 'rgba(12, 16, 29, 0.96)';
-      ctx.strokeStyle = currentHovered.result === 'WIN' ? '#10b981' : currentHovered.node_type === 'candidate' ? '#06b6d4' : '#f43f5e';
-      ctx.lineWidth = 1.4;
+      ctx.fillStyle = '#ffffff';
+      ctx.strokeStyle = currentHovered.result === 'WIN' ? '#10b981' : currentHovered.node_type === 'candidate' ? '#0284c7' : '#f43f5e';
+      ctx.lineWidth = 1.2;
 
       ctx.beginPath();
       ctx.roundRect(tipX, tipY, tipW, tipH, 6);
@@ -1237,41 +1229,41 @@ export default function TradeGraphVisualizer({
       ctx.shadowBlur = 0;
 
       if (currentHovered.node_type === 'candidate') {
-        ctx.fillStyle = '#38bdf8';
+        ctx.fillStyle = '#0284c7';
         ctx.font = 'bold 11px sans-serif';
         ctx.textAlign = 'left';
         ctx.fillText(`Target: ${currentHovered.symbol} ${currentHovered.direction}`, tipX + 8, tipY + 16);
 
-        ctx.fillStyle = '#94a3b8';
+        ctx.fillStyle = '#64748b';
         ctx.font = '10px sans-serif';
         ctx.fillText(`Impulse: ${currentHovered.angle?.toFixed(1)}° | 1:2 R:R`, tipX + 8, tipY + 33);
 
         const wr = currentHovered.neighborhood_win_rate || 0;
-        ctx.fillStyle = wr >= 55 ? '#34d399' : wr <= 30 ? '#f87171' : '#fbbf24';
+        ctx.fillStyle = wr >= 55 ? '#047857' : wr <= 30 ? '#be123c' : '#b45309';
         ctx.font = 'bold 10px monospace';
         ctx.fillText(`RAG Win Rate: ${wr.toFixed(1)}% (5 twins)`, tipX + 8, tipY + 50);
       } else if (currentHovered.node_type === 'trade') {
         const isWin = currentHovered.result === 'WIN';
-        ctx.fillStyle = '#ffffff';
+        ctx.fillStyle = '#0f172a';
         ctx.font = 'bold 11px sans-serif';
         ctx.textAlign = 'left';
         ctx.fillText(`Trade #${currentHovered.trade_num} (${currentHovered.symbol} ${currentHovered.direction})`, tipX + 8, tipY + 16);
 
-        ctx.fillStyle = isWin ? '#34d399' : '#f87171';
+        ctx.fillStyle = isWin ? '#047857' : '#be123c';
         ctx.font = 'bold 10px monospace';
         const pnl = `${currentHovered.result} ${currentHovered.pnl_dollar! >= 0 ? '+' : ''}$${currentHovered.pnl_dollar?.toFixed(1)}`;
         ctx.fillText(`${pnl}  |  ${currentHovered.angle?.toFixed(1)}°`, tipX + 8, tipY + 32);
 
-        ctx.fillStyle = currentHovered.isHighWinCluster ? '#34d399' : currentHovered.isLosingTrap ? '#f87171' : '#94a3b8';
+        ctx.fillStyle = currentHovered.isHighWinCluster ? '#047857' : currentHovered.isLosingTrap ? '#be123c' : '#64748b';
         ctx.font = '9px monospace';
         const clusterTag = currentHovered.isHighWinCluster ? '★ Winning DNA Cluster' : currentHovered.isLosingTrap ? '⚠ Avoided Trap Setup' : 'Standard SMC';
         ctx.fillText(clusterTag, tipX + 8, tipY + 47);
       } else {
-        ctx.fillStyle = '#cbd5e1';
+        ctx.fillStyle = '#0f172a';
         ctx.font = 'bold 11px sans-serif';
         ctx.textAlign = 'left';
         ctx.fillText(currentHovered.id, tipX + 8, tipY + 20);
-        ctx.fillStyle = '#94a3b8';
+        ctx.fillStyle = '#64748b';
         ctx.font = '10px sans-serif';
         ctx.fillText(`${currentHovered.category || 'Feature'} Neuron`, tipX + 8, tipY + 38);
       }
@@ -1484,33 +1476,28 @@ export default function TradeGraphVisualizer({
 
   return (
     <div ref={containerRef} className="space-y-4">
-      {/* ── Visualizer Header & KPI Stats (Refined Dark Graphite Workstation) ── */}
-      <div 
-        className="border border-slate-800/80 rounded-xl p-4.5 shadow-md flex flex-col gap-3.5 text-slate-200"
-        style={{
-          background: 'linear-gradient(180deg, #0e1422 0%, #0a0e18 100%)'
-        }}
-      >
-        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3 pb-3 border-b border-slate-800/70">
+      {/* ── Visualizer Header & KPI Stats (Clean Unslop White Workstation) ── */}
+      <div className="bg-white border border-slate-200 rounded-xl p-4.5 shadow-xs flex flex-col gap-3.5 text-slate-900">
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3 pb-3 border-b border-slate-100">
           <div>
-            <h1 className="text-sm font-semibold text-slate-100 flex items-center gap-2">
-              <BrainCircuitIcon className="w-4.5 h-4.5 text-cyan-400" />
+            <h1 className="text-sm font-semibold text-slate-900 flex items-center gap-2">
+              <BrainCircuitIcon className="w-4.5 h-4.5 text-sky-600" />
               <span>Trading Brain Knowledge Graph & Synaptic Memory</span>
             </h1>
-            <p className="text-xs text-slate-400 mt-0.5 max-w-2xl leading-relaxed">
+            <p className="text-xs text-slate-500 mt-0.5 max-w-2xl leading-relaxed">
               169 verified backtested trades mapped into topological winning constellations. Retrieves nearest historical twins to validate candidate probability before trade entry.
             </p>
           </div>
 
           {/* Quick Metrics */}
-          <div className="flex items-center gap-2.5 text-xs font-mono">
-            <span className="px-2.5 py-1 rounded-md bg-slate-900/90 text-slate-300 border border-slate-800">
+          <div className="flex items-center gap-2 text-xs font-mono">
+            <span className="px-2.5 py-1 rounded-md bg-slate-100 text-slate-700 border border-slate-200">
               190 Neurons
             </span>
-            <span className="px-2.5 py-1 rounded-md bg-emerald-950/60 text-emerald-400 border border-emerald-800/60">
+            <span className="px-2.5 py-1 rounded-md bg-emerald-50 text-emerald-800 border border-emerald-200 font-medium">
               Top Cluster: 83.3% WR
             </span>
-            <span className="px-2.5 py-1 rounded-md bg-rose-950/60 text-rose-400 border border-rose-800/60">
+            <span className="px-2.5 py-1 rounded-md bg-rose-50 text-rose-800 border border-rose-200 font-medium">
               3 Traps Neutralized
             </span>
           </div>
@@ -1519,7 +1506,7 @@ export default function TradeGraphVisualizer({
         {/* ── Filter Toolbar ── */}
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
           <div className="flex flex-wrap items-center gap-1.5">
-            <span className="text-xs font-medium text-slate-400 mr-1">Filter:</span>
+            <span className="text-xs font-medium text-slate-500 mr-1">Filter:</span>
             {[
               { id: 'all', label: 'All trades (169)' },
               ...(candidateSetup ? [{ id: 'candidate_neighborhood', label: `🎯 ${candidateSetup.symbol} Setup Match` }] : []),
@@ -1535,8 +1522,8 @@ export default function TradeGraphVisualizer({
                 onClick={() => setFilterType(f.id as any)}
                 className={`h-7 px-2.5 rounded-md text-xs font-medium transition-colors cursor-pointer ${
                   filterType === f.id
-                    ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 font-semibold shadow-xs'
-                    : 'bg-slate-900/70 text-slate-400 hover:text-slate-200 hover:bg-slate-800/80 border border-slate-800/80'
+                    ? 'bg-slate-900 text-white font-medium shadow-xs'
+                    : 'bg-slate-50 text-slate-600 hover:text-slate-900 hover:bg-slate-100 border border-slate-200/80'
                 }`}
               >
                 {f.label}
@@ -1551,11 +1538,11 @@ export default function TradeGraphVisualizer({
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               placeholder="Search trade # (e.g. 126)..."
-              className="h-7 px-2.5 text-xs font-mono rounded-md bg-slate-900/90 border border-slate-800 text-slate-200 placeholder:text-slate-500 focus:outline-none focus:border-cyan-500/50 w-48"
+              className="h-7 px-2.5 text-xs font-mono rounded-md bg-slate-50 border border-slate-200 text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-slate-400 w-48 shadow-2xs"
             />
             <button
               type="submit"
-              className="h-7 px-3 text-xs font-medium rounded-md bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition-colors cursor-pointer"
+              className="h-7 px-3 text-xs font-medium rounded-md bg-slate-900 hover:bg-slate-800 text-white transition-colors cursor-pointer shadow-xs"
             >
               Locate
             </button>
@@ -1563,20 +1550,16 @@ export default function TradeGraphVisualizer({
         </div>
       </div>
 
-      {/* ── Main Canvas Viewport & Integrated Dark Side Inspector ── */}
+      {/* ── Main Canvas Viewport & Integrated Unslop White Side Inspector ── */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
         {/* Canvas Column (2 Cols) */}
         <div 
-          className="lg:col-span-2 border border-slate-800/80 rounded-xl relative overflow-hidden h-[660px] shadow-lg flex flex-col"
-          style={{
-            background: 'radial-gradient(ellipse 90% 80% at 50% 50%, #0d1424 0%, #080c16 65%, #050810 100%)',
-            boxShadow: 'inset 0 0 100px rgba(3, 6, 12, 0.85), 0 4px 20px -2px rgba(0, 0, 0, 0.5)'
-          }}
+          className="lg:col-span-2 border border-slate-200 rounded-xl relative overflow-hidden h-[660px] shadow-xs flex flex-col bg-white"
         >
           {/* Top HUD: Layout Modes & Viewport Controls */}
           <div className="absolute top-3 left-3 right-3 z-20 flex items-center justify-between pointer-events-none">
             {/* Left: Layout Switcher */}
-            <div className="pointer-events-auto flex items-center bg-slate-950/90 backdrop-blur-md border border-slate-800 rounded-lg p-0.5 gap-0.5 shadow-md">
+            <div className="pointer-events-auto flex items-center bg-white/95 backdrop-blur-md border border-slate-200 rounded-lg p-0.5 gap-0.5 shadow-xs">
               {[
                 { id: 'constellation', label: '🌌 Constellations' },
                 { id: 'target_focus', label: '🎯 Target Focus' },
@@ -1587,8 +1570,8 @@ export default function TradeGraphVisualizer({
                   onClick={() => setLayoutMode(m.id as LayoutMode)}
                   className={`h-6 px-2.5 rounded text-[11px] font-mono transition-colors ${
                     layoutMode === m.id
-                      ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/30 font-semibold'
-                      : 'text-slate-400 hover:text-slate-200'
+                      ? 'bg-slate-900 text-white font-medium shadow-2xs'
+                      : 'text-slate-600 hover:text-slate-900'
                   }`}
                 >
                   {m.label}
@@ -1598,8 +1581,8 @@ export default function TradeGraphVisualizer({
 
             {/* Center: Pinned Trade Pill Indicator */}
             {selectedNode && (
-              <div className="pointer-events-auto flex items-center bg-cyan-950/95 backdrop-blur-md border border-cyan-500/50 rounded-lg px-2.5 py-1 text-xs text-cyan-200 shadow-md gap-2">
-                <span className="w-2 h-2 rounded-full bg-cyan-400 animate-pulse" />
+              <div className="pointer-events-auto flex items-center bg-sky-50/95 backdrop-blur-md border border-sky-300 rounded-lg px-2.5 py-1 text-xs text-sky-900 shadow-xs gap-2">
+                <span className="w-2 h-2 rounded-full bg-sky-600 animate-pulse" />
                 <span className="font-mono font-medium">
                   🔒 Pinned: {selectedNode.node_type === 'trade' ? `Trade #${selectedNode.trade_num} (${selectedNode.symbol})` : selectedNode.id}
                 </span>
@@ -1609,7 +1592,7 @@ export default function TradeGraphVisualizer({
                     selectedNodeRef.current = null;
                     highlightedNodeIdsRef.current = getCuratedHighlightedIds(hoveredNodeRef.current, links);
                   }}
-                  className="text-slate-400 hover:text-white ml-1 text-xs px-1 hover:bg-white/10 rounded cursor-pointer"
+                  className="text-slate-400 hover:text-slate-800 ml-1 text-xs px-1 hover:bg-black/5 rounded cursor-pointer"
                   title="Unpin / Reset"
                 >
                   ✕
@@ -1618,35 +1601,35 @@ export default function TradeGraphVisualizer({
             )}
 
             {/* Right: Camera Controls */}
-            <div className="pointer-events-auto flex items-center bg-slate-950/90 backdrop-blur-md border border-slate-800 rounded-lg p-0.5 gap-1 shadow-md">
+            <div className="pointer-events-auto flex items-center bg-white/95 backdrop-blur-md border border-slate-200 rounded-lg p-0.5 gap-1 shadow-xs">
               {candidateSetup && (
                 <button
                   onClick={focusCandidate}
-                  className="h-6 px-2 rounded text-[11px] font-mono bg-cyan-600/30 hover:bg-cyan-600/40 text-cyan-300 border border-cyan-500/40 flex items-center gap-1 transition-colors"
+                  className="h-6 px-2 rounded text-[11px] font-mono bg-sky-100 hover:bg-sky-200 text-sky-900 border border-sky-300 flex items-center gap-1 transition-colors"
                   title="Focus Candidate Setup"
                 >
-                  <TargetIcon className="w-3 h-3" />
+                  <TargetIcon className="w-3 h-3 text-sky-700" />
                   <span>Target</span>
                 </button>
               )}
               <button
                 onClick={() => fitView(60)}
-                className="h-6 px-2 rounded text-[11px] font-mono text-slate-300 hover:bg-slate-800 transition-colors"
+                className="h-6 px-2 rounded text-[11px] font-mono text-slate-700 hover:bg-slate-100 transition-colors"
                 title="Fit View"
               >
                 Fit All
               </button>
-              <div className="w-px h-3.5 bg-slate-800" />
+              <div className="w-px h-3.5 bg-slate-200" />
               <button
                 onClick={() => setZoomTransform((prev) => ({ ...prev, scale: Math.min(2.5, prev.scale * 1.18) }))}
-                className="w-6 h-6 flex items-center justify-center text-slate-300 hover:bg-slate-800 rounded text-xs font-bold"
+                className="w-6 h-6 flex items-center justify-center text-slate-700 hover:bg-slate-100 rounded text-xs font-bold"
                 title="Zoom In"
               >
                 +
               </button>
               <button
                 onClick={() => setZoomTransform((prev) => ({ ...prev, scale: Math.max(0.35, prev.scale * 0.82) }))}
-                className="w-6 h-6 flex items-center justify-center text-slate-300 hover:bg-slate-800 rounded text-xs font-bold"
+                className="w-6 h-6 flex items-center justify-center text-slate-700 hover:bg-slate-100 rounded text-xs font-bold"
                 title="Zoom Out"
               >
                 -
@@ -1654,7 +1637,7 @@ export default function TradeGraphVisualizer({
               <button
                 onClick={() => setIsPaused(!isPaused)}
                 className={`h-6 px-2 rounded text-[11px] font-mono transition-colors ${
-                  isPaused ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30' : 'text-slate-400 hover:bg-slate-800'
+                  isPaused ? 'bg-amber-100 text-amber-900 border border-amber-300' : 'text-slate-600 hover:bg-slate-100'
                 }`}
                 title="Pause/Play motion"
               >
@@ -1664,7 +1647,7 @@ export default function TradeGraphVisualizer({
           </div>
 
           {/* Bottom Legend Pill Bar */}
-          <div className="absolute bottom-3 left-3 z-10 bg-slate-950/90 backdrop-blur-md border border-slate-800/80 rounded-md px-3 py-1.5 flex flex-wrap items-center gap-3 text-[11px] text-slate-400 pointer-events-none">
+          <div className="absolute bottom-3 left-3 z-10 bg-white/95 backdrop-blur-md border border-slate-200 rounded-md px-3 py-1.5 flex flex-wrap items-center gap-3 text-[11px] text-slate-600 shadow-xs pointer-events-none">
             <div className="flex items-center gap-1.5">
               <span className="w-2 h-2 rounded-full bg-emerald-500" />
               <span>Win Trade (104)</span>
@@ -1674,15 +1657,15 @@ export default function TradeGraphVisualizer({
               <span>Loss Trade (65)</span>
             </div>
             <div className="flex items-center gap-1.5">
-              <span className="w-2 h-2 rounded-full bg-cyan-400" />
+              <span className="w-2 h-2 rounded-full bg-sky-600" />
               <span>Target Candidate</span>
             </div>
             <div className="flex items-center gap-1.5">
-              <span className="w-2 h-2 rounded-full border border-emerald-400" />
+              <span className="w-2 h-2 rounded-full border border-emerald-500" />
               <span>Winning DNA (WR ≥ 55%)</span>
             </div>
             <div className="flex items-center gap-1.5">
-              <span className="w-2 h-2 rounded-full border border-dashed border-rose-400" />
+              <span className="w-2 h-2 rounded-full border border-dashed border-rose-500" />
               <span>Avoided Trap</span>
             </div>
           </div>
@@ -1699,21 +1682,18 @@ export default function TradeGraphVisualizer({
           />
         </div>
 
-        {/* ── Integrated Dark Side Inspector Panel (1 Col) ── */}
+        {/* ── Integrated Unslop White Side Inspector Panel (1 Col) ── */}
         <div 
-          className="border border-slate-800/80 rounded-xl p-5 flex flex-col h-[660px] overflow-y-auto text-slate-200 shadow-md"
-          style={{
-            background: 'linear-gradient(180deg, #0e1322 0%, #0a0e19 100%)'
-          }}
+          className="bg-white border border-slate-200 rounded-xl p-5 flex flex-col h-[660px] overflow-y-auto text-slate-900 shadow-xs"
         >
           {selectedNode && selectedNode.node_type !== 'candidate' ? (
             /* Historical Trade or Feature Inspector */
             <div className="space-y-4">
-              <div className="flex items-center justify-between pb-3 border-b border-slate-800">
+              <div className="flex items-center justify-between pb-3 border-b border-slate-100">
                 <span className={`text-[10px] font-mono px-2 py-0.5 rounded border ${
                   selectedNode.node_type === 'trade'
-                    ? 'bg-sky-950/80 text-sky-400 border-sky-800'
-                    : 'bg-purple-950/80 text-purple-400 border-purple-800'
+                    ? 'bg-sky-50 text-sky-800 border-sky-200'
+                    : 'bg-purple-50 text-purple-800 border-purple-200'
                 }`}>
                   {selectedNode.node_type === 'trade'
                     ? `Trade #${selectedNode.trade_num}`
@@ -1722,8 +1702,8 @@ export default function TradeGraphVisualizer({
                 {selectedNode.result && (
                   <span className={`text-xs font-mono font-bold px-2 py-0.5 rounded border ${
                     selectedNode.result === 'WIN'
-                      ? 'bg-emerald-950/80 text-emerald-400 border-emerald-800'
-                      : 'bg-rose-950/80 text-rose-400 border-rose-800'
+                      ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
+                      : 'bg-rose-50 text-rose-800 border-rose-200'
                   }`}>
                     {selectedNode.result} {selectedNode.pnl_dollar !== undefined ? `(${selectedNode.pnl_dollar >= 0 ? '+' : ''}$${selectedNode.pnl_dollar.toFixed(0)})` : ''}
                   </span>
@@ -1732,7 +1712,7 @@ export default function TradeGraphVisualizer({
                 {candidateSetup && (
                   <button
                     onClick={() => focusCandidate()}
-                    className="text-[11px] font-mono text-cyan-400 hover:text-cyan-300 cursor-pointer"
+                    className="text-[11px] font-mono text-sky-600 hover:text-sky-700 font-medium cursor-pointer"
                   >
                     ← Target
                   </button>
@@ -1740,38 +1720,38 @@ export default function TradeGraphVisualizer({
               </div>
 
               <div>
-                <h2 className="text-base font-bold text-white flex items-center gap-2">
+                <h2 className="text-base font-bold text-slate-900 flex items-center gap-2">
                   <span>{selectedNode.symbol || selectedNode.id}</span>
                   {selectedNode.direction && (
-                    <span className={`text-xs font-mono px-1.5 py-0.5 rounded ${
-                      selectedNode.direction === 'LONG' ? 'bg-emerald-900/60 text-emerald-300' : 'bg-rose-900/60 text-rose-300'
+                    <span className={`text-xs font-mono px-1.5 py-0.5 rounded border ${
+                      selectedNode.direction === 'LONG' ? 'bg-emerald-50 text-emerald-800 border-emerald-200' : 'bg-rose-50 text-rose-800 border-rose-200'
                     }`}>
                       {selectedNode.direction}
                     </span>
                   )}
                 </h2>
-                <p className="text-xs text-slate-400 mt-1">
+                <p className="text-xs text-slate-500 mt-1">
                   {selectedNode.setup_reason || selectedNode.neural_explanation || 'Pattern detected in 15M execution.'}
                 </p>
               </div>
 
               {selectedNode.node_type === 'trade' && (
                 <div className="grid grid-cols-2 gap-2 text-xs font-mono tabular-nums">
-                  <div className="p-2.5 rounded-lg bg-slate-900/70 border border-slate-800">
+                  <div className="p-2.5 rounded-lg bg-slate-50 border border-slate-200/80">
                     <span className="text-[10px] text-slate-500 block">Entry Price</span>
-                    <span className="text-white font-medium">${selectedNode.entry_price?.toLocaleString()}</span>
+                    <span className="text-slate-900 font-medium">${selectedNode.entry_price?.toLocaleString()}</span>
                   </div>
-                  <div className="p-2.5 rounded-lg bg-slate-900/70 border border-slate-800">
+                  <div className="p-2.5 rounded-lg bg-slate-50 border border-slate-200/80">
                     <span className="text-[10px] text-slate-500 block">Exit Price</span>
-                    <span className="text-white font-medium">${selectedNode.exit_price?.toLocaleString()}</span>
+                    <span className="text-slate-900 font-medium">${selectedNode.exit_price?.toLocaleString()}</span>
                   </div>
-                  <div className="p-2.5 rounded-lg bg-slate-900/70 border border-slate-800">
+                  <div className="p-2.5 rounded-lg bg-slate-50 border border-slate-200/80">
                     <span className="text-[10px] text-slate-500 block">Stop Loss (C1)</span>
-                    <span className="text-rose-400 font-medium">${selectedNode.stop_loss?.toLocaleString()}</span>
+                    <span className="text-rose-700 font-medium">${selectedNode.stop_loss?.toLocaleString()}</span>
                   </div>
-                  <div className="p-2.5 rounded-lg bg-slate-900/70 border border-slate-800">
+                  <div className="p-2.5 rounded-lg bg-slate-50 border border-slate-200/80">
                     <span className="text-[10px] text-slate-500 block">Take Profit (1:2)</span>
-                    <span className="text-emerald-400 font-medium">${selectedNode.take_profit?.toLocaleString()}</span>
+                    <span className="text-emerald-700 font-medium">${selectedNode.take_profit?.toLocaleString()}</span>
                   </div>
                 </div>
               )}
@@ -1779,10 +1759,10 @@ export default function TradeGraphVisualizer({
               {/* Connected Feature Tags */}
               {selectedNode.features && (
                 <div>
-                  <h3 className="text-xs font-semibold text-slate-300 mb-1.5">Structural Features</h3>
+                  <h3 className="text-xs font-semibold text-slate-800 mb-1.5">Structural Features</h3>
                   <div className="flex flex-wrap gap-1">
                     {selectedNode.features.map((f, i) => (
-                      <span key={i} className="text-[10px] font-mono px-2 py-0.5 rounded bg-slate-900 text-slate-300 border border-slate-800">
+                      <span key={i} className="text-[10px] font-mono px-2 py-0.5 rounded bg-slate-100 text-slate-700 border border-slate-200">
                         {f.split(':').pop()?.trim() || f}
                       </span>
                     ))}
@@ -1793,7 +1773,7 @@ export default function TradeGraphVisualizer({
               {/* Historical Twins */}
               {selectedNode.twin_trades && selectedNode.twin_trades.length > 0 && (
                 <div>
-                  <h3 className="text-xs font-semibold text-slate-300 mb-1.5">Twin Historical Precedents</h3>
+                  <h3 className="text-xs font-semibold text-slate-800 mb-1.5">Twin Historical Precedents</h3>
                   <div className="space-y-1.5 max-h-48 overflow-y-auto pr-1">
                     {selectedNode.twin_trades.map((tw, idx) => (
                       <div
@@ -1813,14 +1793,14 @@ export default function TradeGraphVisualizer({
                             });
                           }
                         }}
-                        className="p-2 rounded bg-slate-900/80 hover:bg-slate-800 border border-slate-800 cursor-pointer flex items-center justify-between text-xs transition-colors"
+                        className="p-2 rounded bg-slate-50 hover:bg-slate-100 border border-slate-200 cursor-pointer flex items-center justify-between text-xs transition-colors"
                       >
-                        <span className="font-mono text-slate-200">#{tw.trade_num} {tw.symbol}</span>
+                        <span className="font-mono text-slate-800">#{tw.trade_num} {tw.symbol}</span>
                         <div className="flex items-center gap-2">
-                          <span className={`text-[10px] font-mono font-bold ${tw.result === 'WIN' ? 'text-emerald-400' : 'text-rose-400'}`}>
+                          <span className={`text-[10px] font-mono font-bold ${tw.result === 'WIN' ? 'text-emerald-700' : 'text-rose-700'}`}>
                             {tw.result}
                           </span>
-                          <span className="text-[10px] font-mono text-cyan-400">
+                          <span className="text-[10px] font-mono text-sky-700 font-semibold">
                             {(tw.similarity_score * 100).toFixed(0)}%
                           </span>
                         </div>
@@ -1834,7 +1814,7 @@ export default function TradeGraphVisualizer({
               {selectedNode.node_type === 'trade' && onNavigateToTrade && (
                 <button
                   onClick={() => onNavigateToTrade(selectedNode.trade_num!, selectedNode.symbol!)}
-                  className="w-full mt-3 h-8 px-4 rounded-lg bg-cyan-600 hover:bg-cyan-500 text-white font-medium text-xs flex items-center justify-center gap-1.5 transition-colors shadow-sm"
+                  className="w-full mt-3 h-8 px-4 rounded-lg bg-slate-900 hover:bg-slate-800 text-white font-medium text-xs flex items-center justify-center gap-1.5 transition-colors shadow-xs"
                 >
                   <span>Inspect in Candlestick Chart</span>
                   <ChevronRightIcon className="w-3.5 h-3.5" />
@@ -1844,87 +1824,87 @@ export default function TradeGraphVisualizer({
           ) : (
             /* Default: Candidate Setup Intelligence & Graph RAG Dossier */
             <div className="space-y-4">
-              <div className="flex items-center justify-between pb-3 border-b border-slate-800">
+              <div className="flex items-center justify-between pb-3 border-b border-slate-100">
                 <div className="flex items-center gap-2">
-                  <span className="w-2 h-2 rounded-full bg-cyan-400 animate-pulse" />
-                  <span className="text-xs font-mono font-bold text-cyan-400 tracking-wide uppercase">
+                  <span className="w-2 h-2 rounded-full bg-sky-600 animate-pulse" />
+                  <span className="text-xs font-mono font-bold text-sky-800 tracking-wide uppercase">
                     Target Setup Dossier
                   </span>
                 </div>
                 <span className={`text-[10px] font-mono font-bold px-2 py-0.5 rounded border ${
                   candidateSetup?.graph_rag?.cluster_classification === 'WINNING_DNA_CLUSTER'
-                    ? 'bg-emerald-950/90 text-emerald-300 border-emerald-800'
-                    : 'bg-cyan-950/90 text-cyan-300 border-cyan-800'
+                    ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
+                    : 'bg-sky-50 text-sky-800 border-sky-200'
                 }`}>
                   {candidateSetup?.graph_rag?.cluster_classification || 'LIVE SCANNER'}
                 </span>
               </div>
 
               <div>
-                <h2 className="text-lg font-bold text-white flex items-center gap-2">
+                <h2 className="text-lg font-bold text-slate-900 flex items-center gap-2">
                   <span>{candidateSetup?.symbol || 'XAUUSD'}</span>
-                  <span className={`text-xs font-mono px-2 py-0.5 rounded font-bold ${
+                  <span className={`text-xs font-mono px-2 py-0.5 rounded font-bold border ${
                     candidateSetup?.direction === 'LONG'
-                      ? 'bg-emerald-900/60 text-emerald-300 border border-emerald-800'
-                      : 'bg-rose-900/60 text-rose-300 border border-rose-800'
+                      ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
+                      : 'bg-rose-50 text-rose-800 border-rose-200'
                   }`}>
                     {candidateSetup?.direction || 'LONG'}
                   </span>
                 </h2>
-                <p className="text-xs text-slate-400 mt-1 leading-relaxed">
+                <p className="text-xs text-slate-500 mt-1 leading-relaxed">
                   {candidateSetup?.setup_reason || 'Chain-of-CHoCH Continuation with valid 40°–45° impulse angle.'}
                 </p>
               </div>
 
               {/* RAG Telemetry Stat Cards */}
               <div className="grid grid-cols-2 gap-2 text-xs font-mono tabular-nums">
-                <div className="p-2.5 rounded-lg bg-slate-900/80 border border-slate-800">
-                  <span className="text-[10px] text-slate-400 block">Neighborhood WR</span>
+                <div className="p-2.5 rounded-lg bg-slate-50 border border-slate-200/80">
+                  <span className="text-[10px] text-slate-500 block">Neighborhood WR</span>
                   <span className={`text-sm font-bold ${
                     (candidateSetup?.graph_rag?.neighborhood_win_rate || 0) >= 55
-                      ? 'text-emerald-400'
-                      : 'text-amber-400'
+                      ? 'text-emerald-700'
+                      : 'text-amber-700'
                   }`}>
                     {candidateSetup?.graph_rag?.neighborhood_win_rate?.toFixed(1) || '80.0'}%
                   </span>
-                  <span className="text-[9px] text-slate-500 block mt-0.5">
+                  <span className="text-[9px] text-slate-400 block mt-0.5">
                     {candidateSetup?.graph_rag?.sample_size || 5} twin setups
                   </span>
                 </div>
 
-                <div className="p-2.5 rounded-lg bg-slate-900/80 border border-slate-800">
-                  <span className="text-[10px] text-slate-400 block">Expected Return</span>
-                  <span className="text-sm font-bold text-emerald-400">
+                <div className="p-2.5 rounded-lg bg-slate-50 border border-slate-200/80">
+                  <span className="text-[10px] text-slate-500 block">Expected Return</span>
+                  <span className="text-sm font-bold text-emerald-700">
                     {candidateSetup?.graph_rag?.avg_pnl_dollar !== undefined
                       ? `${candidateSetup.graph_rag.avg_pnl_dollar >= 0 ? '+' : ''}$${candidateSetup.graph_rag.avg_pnl_dollar.toFixed(1)}`
                       : '+$184.20'}
                   </span>
-                  <span className="text-[9px] text-slate-500 block mt-0.5">Historical average</span>
+                  <span className="text-[9px] text-slate-400 block mt-0.5">Historical average</span>
                 </div>
 
-                <div className="p-2.5 rounded-lg bg-slate-900/80 border border-slate-800">
-                  <span className="text-[10px] text-slate-400 block">Impulse Angle</span>
-                  <span className="text-sm font-bold text-cyan-400">
+                <div className="p-2.5 rounded-lg bg-slate-50 border border-slate-200/80">
+                  <span className="text-[10px] text-slate-500 block">Impulse Angle</span>
+                  <span className="text-sm font-bold text-sky-700">
                     {candidateSetup?.angle ? `${candidateSetup.angle.toFixed(1)}°` : '42.0°'}
                   </span>
-                  <span className="text-[9px] text-slate-500 block mt-0.5">Golden Impulse</span>
+                  <span className="text-[9px] text-slate-400 block mt-0.5">Golden Impulse</span>
                 </div>
 
-                <div className="p-2.5 rounded-lg bg-slate-900/80 border border-slate-800">
-                  <span className="text-[10px] text-slate-400 block">Strict R:R</span>
-                  <span className="text-sm font-bold text-white">1:2.0</span>
-                  <span className="text-[9px] text-slate-500 block mt-0.5">Rule #8 SL & #9 TP</span>
+                <div className="p-2.5 rounded-lg bg-slate-50 border border-slate-200/80">
+                  <span className="text-[10px] text-slate-500 block">Strict R:R</span>
+                  <span className="text-sm font-bold text-slate-900">1:2.0</span>
+                  <span className="text-[9px] text-slate-400 block mt-0.5">Rule #8 SL & #9 TP</span>
                 </div>
               </div>
 
               {/* Top Retrieved Historical Twins List */}
               <div>
-                <div className="flex items-center justify-between text-xs font-semibold text-slate-300 mb-2">
+                <div className="flex items-center justify-between text-xs font-semibold text-slate-800 mb-2">
                   <span className="flex items-center gap-1.5">
-                    <SparklesIcon className="w-3.5 h-3.5 text-amber-400" />
+                    <SparklesIcon className="w-3.5 h-3.5 text-amber-500" />
                     Top Retrieved Twins ({candidateSetup?.graph_rag?.top_matches?.length || 0})
                   </span>
-                  <span className="text-[10px] font-mono text-slate-500">Click to locate</span>
+                  <span className="text-[10px] font-mono text-slate-400">Click to locate</span>
                 </div>
 
                 <div className="space-y-1.5 max-h-60 overflow-y-auto pr-1">
@@ -1946,15 +1926,15 @@ export default function TradeGraphVisualizer({
                           });
                         }
                       }}
-                      className="p-2.5 rounded-lg bg-slate-900/70 hover:bg-slate-800 border border-slate-800/90 cursor-pointer transition-colors"
+                      className="p-2.5 rounded-lg bg-slate-50 hover:bg-slate-100/80 border border-slate-200 cursor-pointer transition-colors"
                     >
                       <div className="flex items-center justify-between text-xs mb-1">
-                        <span className="font-mono font-medium text-white flex items-center gap-1.5">
+                        <span className="font-mono font-medium text-slate-900 flex items-center gap-1.5">
                           #{tw.trade_num} {tw.symbol}
-                          <span className="text-[10px] text-slate-400 font-sans">({tw.direction})</span>
+                          <span className="text-[10px] text-slate-500 font-sans">({tw.direction})</span>
                         </span>
-                        <span className={`text-[10px] font-mono font-bold px-1.5 py-0.2 rounded ${
-                          tw.result === 'WIN' ? 'bg-emerald-950 text-emerald-400' : 'bg-rose-950 text-rose-400'
+                        <span className={`text-[10px] font-mono font-bold px-1.5 py-0.2 rounded border ${
+                          tw.result === 'WIN' ? 'bg-emerald-50 text-emerald-800 border-emerald-200' : 'bg-rose-50 text-rose-800 border-rose-200'
                         }`}>
                           {tw.result} {tw.pnl_dollar >= 0 ? `+$${tw.pnl_dollar.toFixed(0)}` : `-$${Math.abs(tw.pnl_dollar).toFixed(0)}`}
                         </span>
@@ -1962,19 +1942,19 @@ export default function TradeGraphVisualizer({
 
                       {/* Similarity Bar */}
                       <div className="flex items-center gap-2">
-                        <div className="flex-1 bg-slate-800 h-1.5 rounded-full overflow-hidden">
+                        <div className="flex-1 bg-slate-200 h-1.5 rounded-full overflow-hidden">
                           <div
-                            className="h-full rounded-full bg-cyan-500"
+                            className="h-full rounded-full bg-sky-600"
                             style={{ width: `${Math.min(100, tw.similarity_score * 100)}%` }}
                           />
                         </div>
-                        <span className="text-[10px] font-mono text-cyan-300 font-bold">
+                        <span className="text-[10px] font-mono text-sky-800 font-bold">
                           {(tw.similarity_score * 100).toFixed(0)}%
                         </span>
                       </div>
 
                       {tw.common_features && tw.common_features.length > 0 && (
-                        <div className="text-[9px] font-mono text-slate-400 mt-1 truncate">
+                        <div className="text-[9px] font-mono text-slate-500 mt-1 truncate">
                           {tw.common_features.slice(0, 3).map((f) => f.split(':').pop()?.trim()).join(' · ')}
                         </div>
                       )}
@@ -1984,7 +1964,7 @@ export default function TradeGraphVisualizer({
               </div>
 
               {/* Quick instructions */}
-              <div className="p-3 rounded-lg bg-slate-900/40 border border-slate-800/60 text-[11px] text-slate-400 leading-relaxed">
+              <div className="p-3 rounded-lg bg-slate-50 border border-slate-200 text-[11px] text-slate-600 leading-relaxed">
                 Click any twin trade above to auto-center its neuron in the network, or select any node directly on the canvas to inspect its historical outcome.
               </div>
             </div>

@@ -1693,30 +1693,25 @@ export default function Dashboard() {
             TAB: TRADE BRAIN (GRAPH RAG)
             ══════════════════════════════════════════════════════════════════ */}
         <div className={activeTab === 'graph_rag' ? 'space-y-6' : 'hidden'}>
-            {/* Telemetry Header: Scenario Selector & Live Candidate Intelligence (Institutional Dark Terminal) */}
-            <div 
-              className="border border-slate-800/80 rounded-xl p-5 shadow-md flex flex-col gap-4 text-slate-200"
-              style={{
-                background: 'linear-gradient(180deg, #0e1422 0%, #0a0e18 100%)'
-              }}
-            >
-              <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3 pb-3 border-b border-slate-800/70">
+            {/* Telemetry Header: Scenario Selector & Live Candidate Intelligence (Clean Unslop White Terminal) */}
+            <div className="bg-white border border-slate-200 rounded-xl p-5 shadow-xs flex flex-col gap-4 text-slate-900">
+              <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3 pb-3 border-b border-slate-100">
                 <div className="flex items-center gap-2.5">
-                  <div className="flex items-center justify-center w-8 h-8 rounded-lg bg-cyan-950/60 border border-cyan-800/60 text-cyan-400">
+                  <div className="flex items-center justify-center w-8 h-8 rounded-lg bg-sky-50 border border-sky-200 text-sky-700">
                     <TargetIcon className="w-4 h-4" />
                   </div>
                   <div>
-                    <h2 className="text-sm font-semibold text-slate-100 flex items-center gap-2">
+                    <h2 className="text-sm font-semibold text-slate-900 flex items-center gap-2">
                       <span>Candidate Setup & Graph RAG Telemetry</span>
                       <span className={`text-[10px] font-mono px-2 py-0.5 rounded border font-medium ${
                         candidateSetup?.is_live_candidate
-                          ? 'bg-emerald-950/80 text-emerald-300 border-emerald-800/80'
-                          : 'bg-cyan-950/80 text-cyan-300 border-cyan-800/80'
+                          ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
+                          : 'bg-sky-50 text-sky-800 border-sky-200'
                       }`}>
                         {candidateSetup?.is_live_candidate ? 'Live Scanner Setup' : 'Benchmark Evaluation'}
                       </span>
                     </h2>
-                    <p className="text-xs text-slate-400 mt-0.5">
+                    <p className="text-xs text-slate-500 mt-0.5">
                       Nearest-neighbor memory retrieval comparing current market conditions against 169 historical setups.
                     </p>
                   </div>
@@ -1724,7 +1719,7 @@ export default function Dashboard() {
 
                 {/* Scenario Selector Pills */}
                 <div className="flex flex-wrap items-center gap-1.5">
-                  <span className="text-[11px] font-medium text-slate-400 mr-1">Scenario:</span>
+                  <span className="text-[11px] font-medium text-slate-500 mr-1">Scenario:</span>
                   {benchmarkScenarios.map((sc) => (
                     <button
                       key={sc.key}
@@ -1732,8 +1727,8 @@ export default function Dashboard() {
                       disabled={loadingCandidate}
                       className={`h-7 px-2.5 rounded-md text-xs font-medium transition-colors cursor-pointer ${
                         selectedScenarioKey === sc.key
-                          ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 font-semibold shadow-xs'
-                          : 'bg-slate-900/70 text-slate-400 hover:text-slate-200 hover:bg-slate-800/80 border border-slate-800/80'
+                          ? 'bg-slate-900 text-white font-medium shadow-xs'
+                          : 'bg-slate-50 text-slate-600 hover:text-slate-900 hover:bg-slate-100 border border-slate-200/80'
                       }`}
                       title={sc.desc}
                     >
@@ -1745,18 +1740,18 @@ export default function Dashboard() {
 
               {/* Candidate Telemetry Metrics Bar */}
               {candidateSetup && (
-                <div className="grid grid-cols-2 md:grid-cols-5 gap-3 p-3.5 bg-slate-900/60 rounded-xl border border-slate-800/80 tabular-nums">
+                <div className="grid grid-cols-2 md:grid-cols-5 gap-3 p-3.5 bg-slate-50 rounded-xl border border-slate-200/80 tabular-nums">
                   <div className="text-center">
-                    <div className="text-lg font-semibold font-mono tracking-tight text-white flex items-center justify-center gap-1.5">
+                    <div className="text-lg font-semibold font-mono tracking-tight text-slate-900 flex items-center justify-center gap-1.5">
                       <span>{candidateSetup.symbol}</span>
-                      <span className={`text-xs px-1.5 py-0.5 rounded font-bold ${
-                        candidateSetup.direction === 'LONG' ? 'bg-emerald-950/90 text-emerald-300 border border-emerald-800' : 'bg-rose-950/90 text-rose-300 border border-rose-800'
+                      <span className={`text-xs px-1.5 py-0.5 rounded font-bold border ${
+                        candidateSetup.direction === 'LONG' ? 'bg-emerald-50 text-emerald-800 border-emerald-200' : 'bg-rose-50 text-rose-800 border-rose-200'
                       }`}>
                         {candidateSetup.direction}
                       </span>
                     </div>
-                    <div className="text-[11px] text-slate-400 font-medium mt-0.5">Candidate Asset</div>
-                    <div className="text-[10px] text-slate-500 font-mono">
+                    <div className="text-[11px] text-slate-500 font-medium mt-0.5">Candidate Asset</div>
+                    <div className="text-[10px] text-slate-400 font-mono">
                       {candidateSetup.angle ? `${candidateSetup.angle.toFixed(1)}° Impulse` : '40°–45° Angle'}
                     </div>
                   </div>
@@ -1764,53 +1759,53 @@ export default function Dashboard() {
                   <div className="text-center">
                     <div className={`text-lg font-semibold font-mono tracking-tight ${
                       (candidateSetup.graph_rag?.neighborhood_win_rate || 0) >= 55
-                        ? 'text-emerald-400'
+                        ? 'text-emerald-700'
                         : (candidateSetup.graph_rag?.neighborhood_win_rate || 0) <= 30
-                        ? 'text-rose-400'
-                        : 'text-amber-400'
+                        ? 'text-rose-700'
+                        : 'text-amber-700'
                     }`}>
                       {candidateSetup.graph_rag?.neighborhood_win_rate !== undefined
                         ? `${candidateSetup.graph_rag.neighborhood_win_rate.toFixed(1)}%`
                         : 'N/A'}
                     </div>
-                    <div className="text-[11px] text-slate-400 font-medium mt-0.5">Neighborhood Win Rate</div>
-                    <div className="text-[10px] text-slate-500 font-mono">
+                    <div className="text-[11px] text-slate-500 font-medium mt-0.5">Neighborhood Win Rate</div>
+                    <div className="text-[10px] text-slate-400 font-mono">
                       {candidateSetup.graph_rag?.sample_size ? `${candidateSetup.graph_rag.sample_size} twin setups` : 'Sample size'}
                     </div>
                   </div>
 
                   <div className="text-center">
-                    <div className="text-lg font-semibold font-mono tracking-tight text-emerald-400">
+                    <div className="text-lg font-semibold font-mono tracking-tight text-emerald-700">
                       {candidateSetup.graph_rag?.avg_pnl_dollar !== undefined
                         ? `${candidateSetup.graph_rag.avg_pnl_dollar >= 0 ? '+' : ''}\$${candidateSetup.graph_rag.avg_pnl_dollar.toFixed(2)}`
                         : '+$142.50'}
                     </div>
-                    <div className="text-[11px] text-slate-400 font-medium mt-0.5">Avg Historical Return</div>
-                    <div className="text-[10px] text-slate-500 font-mono">Per similar trade</div>
+                    <div className="text-[11px] text-slate-500 font-medium mt-0.5">Avg Historical Return</div>
+                    <div className="text-[10px] text-slate-400 font-mono">Per similar trade</div>
                   </div>
 
                   <div className="text-center">
-                    <div className="text-sm font-semibold font-mono tracking-tight text-white truncate px-1">
+                    <div className="text-sm font-semibold font-mono tracking-tight text-slate-900 truncate px-1">
                       {candidateSetup.graph_rag?.cluster_classification === 'WINNING_DNA_CLUSTER' ? (
-                        <span className="text-emerald-400 font-bold">★ Winning DNA</span>
+                        <span className="text-emerald-700 font-bold">★ Winning DNA</span>
                       ) : candidateSetup.graph_rag?.cluster_classification === 'LOSING_TRAP' ? (
-                        <span className="text-rose-400 font-bold">⚠ Losing Trap</span>
+                        <span className="text-rose-700 font-bold">⚠ Losing Trap</span>
                       ) : candidateSetup.graph_rag?.cluster_classification === 'INSUFFICIENT_DATA' ? (
-                        <span className="text-amber-400 font-bold">Insufficient Data</span>
+                        <span className="text-amber-700 font-bold">Insufficient Data</span>
                       ) : (
-                        <span className="text-slate-300">Balanced SMC</span>
+                        <span className="text-slate-700">Balanced SMC</span>
                       )}
                     </div>
-                    <div className="text-[11px] text-slate-400 font-medium mt-0.5">Cluster Status</div>
-                    <div className="text-[10px] text-slate-500 font-mono">Structural tier</div>
+                    <div className="text-[11px] text-slate-500 font-medium mt-0.5">Cluster Status</div>
+                    <div className="text-[10px] text-slate-400 font-mono">Structural tier</div>
                   </div>
 
                   <div className="text-center">
-                    <div className="text-lg font-semibold font-mono tracking-tight text-white">
-                      1:2.0 <span className="text-xs text-slate-400 font-normal">R:R</span>
+                    <div className="text-lg font-semibold font-mono tracking-tight text-slate-900">
+                      1:2.0 <span className="text-xs text-slate-500 font-normal">R:R</span>
                     </div>
-                    <div className="text-[11px] text-slate-400 font-medium mt-0.5">Strict Risk / Reward</div>
-                    <div className="text-[10px] text-slate-500 font-mono">Rule #8 C1 SL & Rule #9 TP</div>
+                    <div className="text-[11px] text-slate-500 font-medium mt-0.5">Strict Risk / Reward</div>
+                    <div className="text-[10px] text-slate-400 font-mono">Rule #8 C1 SL & Rule #9 TP</div>
                   </div>
                 </div>
               )}
@@ -1818,9 +1813,9 @@ export default function Dashboard() {
               {/* Retrieved Historical Precedents Table */}
               {candidateSetup?.graph_rag?.top_matches && candidateSetup.graph_rag.top_matches.length > 0 && (
                 <div className="overflow-x-auto">
-                  <div className="text-xs font-semibold text-slate-200 mb-2 flex items-center justify-between">
+                  <div className="text-xs font-semibold text-slate-800 mb-2 flex items-center justify-between">
                     <span className="flex items-center gap-1.5">
-                      <SparklesIcon className="w-3.5 h-3.5 text-amber-400" />
+                      <SparklesIcon className="w-3.5 h-3.5 text-amber-500" />
                       Retrieved Historical Precedents (Ranked by Jaccard Similarity Score)
                     </span>
                     <span className="text-[11px] text-slate-500 font-mono">
@@ -1829,39 +1824,39 @@ export default function Dashboard() {
                   </div>
                   <table className="w-full border-collapse text-xs">
                     <thead>
-                      <tr className="border-b border-slate-800 bg-slate-900/80">
-                        <th className="px-3 py-2 text-left text-[11px] font-medium text-slate-400">Trade ID</th>
-                        <th className="px-3 py-2 text-left text-[11px] font-medium text-slate-400">Outcome</th>
-                        <th className="px-3 py-2 text-left text-[11px] font-medium text-slate-400">Similarity</th>
-                        <th className="px-3 py-2 text-left text-[11px] font-medium text-slate-400">Matched Structural Features</th>
-                        <th className="px-3 py-2 text-right text-[11px] font-medium text-slate-400">P&L ($)</th>
-                        <th className="px-3 py-2 text-center text-[11px] font-medium text-slate-400">R:R</th>
-                        <th className="px-3 py-2 text-left text-[11px] font-medium text-slate-400">Risk Tier</th>
-                        <th className="px-3 py-2 text-center text-[11px] font-medium text-slate-400">Action</th>
+                      <tr className="border-b border-slate-200 bg-slate-50">
+                        <th className="px-3 py-2 text-left text-[11px] font-medium text-slate-500">Trade ID</th>
+                        <th className="px-3 py-2 text-left text-[11px] font-medium text-slate-500">Outcome</th>
+                        <th className="px-3 py-2 text-left text-[11px] font-medium text-slate-500">Similarity</th>
+                        <th className="px-3 py-2 text-left text-[11px] font-medium text-slate-500">Matched Structural Features</th>
+                        <th className="px-3 py-2 text-right text-[11px] font-medium text-slate-500">P&L ($)</th>
+                        <th className="px-3 py-2 text-center text-[11px] font-medium text-slate-500">R:R</th>
+                        <th className="px-3 py-2 text-left text-[11px] font-medium text-slate-500">Risk Tier</th>
+                        <th className="px-3 py-2 text-center text-[11px] font-medium text-slate-500">Action</th>
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-slate-800/60">
+                    <tbody className="divide-y divide-slate-100">
                       {candidateSetup.graph_rag.top_matches.map((m, idx) => (
-                        <tr key={idx} className="hover:bg-slate-900/60 transition-colors">
-                          <td className="px-3 py-2 font-mono font-medium text-slate-200 whitespace-nowrap">
+                        <tr key={idx} className="hover:bg-slate-50/80 transition-colors">
+                          <td className="px-3 py-2 font-mono font-medium text-slate-900 whitespace-nowrap">
                             #{m.trade_num} {m.symbol} <span className="text-slate-500 font-sans">({m.direction})</span>
                           </td>
                           <td className="px-3 py-2 whitespace-nowrap">
                             <span className={`text-[10px] font-mono font-medium px-2 py-0.5 rounded border ${
-                              m.result === 'WIN' ? 'bg-emerald-950/80 text-emerald-400 border-emerald-800' : 'bg-rose-950/80 text-rose-400 border-rose-800'
+                              m.result === 'WIN' ? 'bg-emerald-50 text-emerald-800 border-emerald-200' : 'bg-rose-50 text-rose-800 border-rose-200'
                             }`}>
                               {m.result}
                             </span>
                           </td>
                           <td className="px-3 py-2 whitespace-nowrap">
                             <div className="flex items-center gap-2">
-                              <div className="w-16 bg-slate-800 h-1.5 rounded-full overflow-hidden">
+                              <div className="w-16 bg-slate-200 h-1.5 rounded-full overflow-hidden">
                                 <div
-                                  className="h-full rounded-full bg-cyan-500"
+                                  className="h-full rounded-full bg-sky-600"
                                   style={{ width: `${Math.min(100, m.similarity_score * 100)}%` }}
                                 />
                               </div>
-                              <span className="font-mono text-[11px] font-semibold text-slate-300">
+                              <span className="font-mono text-[11px] font-semibold text-sky-800">
                                 {(m.similarity_score * 100).toFixed(0)}%
                               </span>
                             </div>
@@ -1869,21 +1864,21 @@ export default function Dashboard() {
                           <td className="px-3 py-2">
                             <div className="flex flex-wrap gap-1">
                               {(m.common_features || []).map((feat, fi) => (
-                                <span key={fi} className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-slate-900 text-slate-300 border border-slate-800">
+                                <span key={fi} className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-slate-100 text-slate-700 border border-slate-200">
                                   {feat.split(':').pop()?.trim() || feat}
                                 </span>
                               ))}
                             </div>
                           </td>
                           <td className={`px-3 py-2 text-right font-mono font-semibold whitespace-nowrap ${
-                            m.pnl_dollar >= 0 ? 'text-emerald-400' : 'text-rose-400'
+                            m.pnl_dollar >= 0 ? 'text-emerald-700' : 'text-rose-700'
                           }`}>
                             {m.pnl_dollar >= 0 ? '+' : ''}${m.pnl_dollar.toFixed(2)}
                           </td>
-                          <td className="px-3 py-2 text-center font-mono text-slate-400 whitespace-nowrap">
+                          <td className="px-3 py-2 text-center font-mono text-slate-500 whitespace-nowrap">
                             {m.rr_ratio || '1:2'}
                           </td>
-                          <td className="px-3 py-2 font-mono text-[11px] text-slate-500 whitespace-nowrap">
+                          <td className="px-3 py-2 font-mono text-[11px] text-slate-600 whitespace-nowrap">
                             {m.risk_tier ? m.risk_tier.split(':').pop()?.trim() : 'Medium SL'}
                           </td>
                           <td className="px-3 py-2 text-center whitespace-nowrap">
@@ -1893,7 +1888,7 @@ export default function Dashboard() {
                                 const el = document.getElementById('trade-brain-graph-section');
                                 if (el) el.scrollIntoView({ behavior: 'smooth' });
                               }}
-                              className="px-2 py-0.5 rounded text-[11px] font-medium bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition-colors cursor-pointer"
+                              className="px-2 py-0.5 rounded text-[11px] font-medium bg-white hover:bg-slate-50 text-slate-800 border border-slate-200 transition-colors cursor-pointer shadow-2xs"
                             >
                               Focus Node
                             </button>
@@ -1906,9 +1901,9 @@ export default function Dashboard() {
               )}
 
               {/* Telemetry Disclaimer */}
-              <div className="pt-2 text-[11px] text-slate-500 font-mono flex items-center justify-between border-t border-slate-800/70">
+              <div className="pt-2 text-[11px] text-slate-400 font-mono flex items-center justify-between border-t border-slate-100">
                 <span>* Graph RAG analysis reflects historical backtested similarities across 169 verified setups. Past performance does not guarantee future results.</span>
-                <span className="text-slate-500">Method: Discrete Jaccard Intersection</span>
+                <span className="text-slate-400">Method: Discrete Jaccard Intersection</span>
               </div>
             </div>
 
