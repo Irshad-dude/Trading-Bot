@@ -9,10 +9,11 @@ class SMCEngine:
     YOUR PERSONAL SMC/ICT STRATEGY — v1.4  (Irshad's Exact Rulebook)
     ─────────────────────────────────────────────────────────────────────────
 
-    COMPLETE 5-STEP PIPELINE (All on 15-Minute Timeframe):
+    COMPLETE 5-STEP PIPELINE (4H Macro Bias + 15M Execution):
 
-    STEP 1 — 15M TREND BIAS
-        • Read market structure on the 15M chart (with 50 EMA & Swing Points).
+    STEP 1 — 4H MACRO TREND BIAS
+        • Read market structure on the 4H chart.
+        • 15M is used for IDM, BOS, FVG, retracement and entry confirmation.
         • Bullish  → sequence of Higher Highs (HH) + Higher Lows (HL)
         • Bearish  → sequence of Lower Lows  (LL) + Lower Highs (LH)
 
@@ -264,77 +265,92 @@ class SMCEngine:
         scan_window: int = 3,
     ) -> Optional[Dict[str, Any]]:
         """
-        YOUR EXACT RULE:
-        When price breaks the Break of Structure (BOS), examine the immediate FIRST THREE CANDLES
-        that break through the BOS level.
-        Bullish FVG: Candle 1 High < Candle 3 Low (Candle 2 is the displacement candle).
-        Bearish FVG: Candle 1 Low > Candle 3 High (Candle 2 is the displacement candle).
+        EXACT BOS-BASED FVG RULE:
 
-        If the first 3 breakout candles do NOT form an FVG gap, the setup is immediately REJECTED.
-        No trade can be opened anywhere else.
+        B = BOS-confirming candle index.
 
-        SL will be set strictly to Candle 1's extreme (First candle of the FVG pattern, zero buffer):
-          Bearish: SL = C1.high
-          Bullish: SL = C1.low
+        WAIT until B+1 is fully closed before evaluating either pattern.
+
+        First attempt:
+            C1 = B-1, C2 = B, C3 = B+1
+
+        If the first pattern fails, second attempt:
+            C1 = B-2, C2 = B-1, C3 = B
+
+        No older, entirely pre-BOS pattern is allowed.
+
+        Preserve the existing FVG formulas, C2 displacement validation,
+        and C1-based stop-loss assignments.
         """
-        start = max(2, bos_index - 1)
-        end   = min(len(df), bos_index + scan_window)
+        # B+1 must exist in the supplied closed-candle dataframe.
+        # Otherwise, wait; do not evaluate the fallback prematurely.
+        if bos_index < 2 or bos_index + 1 >= len(df):
+            return None
 
-        for i in range(start, end):
+        # Check the primary pattern first, then the one-step backward pattern.
+        candidate_c3_indices = [bos_index + 1, bos_index]
+
+        for i in candidate_c3_indices:
             c1 = df.iloc[i - 2]
-            c2 = df.iloc[i - 1]   # ← Displacement / zigzag candle
+            c2 = df.iloc[i - 1]
             c3 = df.iloc[i]
 
-            c1_high  = float(c1["high"])
-            c1_low   = float(c1["low"])
-            c2_open  = float(c2["open"])
+            c1_high = float(c1["high"])
+            c1_low = float(c1["low"])
+            c2_open = float(c2["open"])
             c2_close = float(c2["close"])
-            c2_high  = float(c2["high"])
-            c2_low   = float(c2["low"])
-            c2_body  = abs(c2_close - c2_open)
+            c2_high = float(c2["high"])
+            c2_low = float(c2["low"])
+            c2_body = abs(c2_close - c2_open)
             c2_range = c2_high - c2_low
 
-            # C2 must have a real body (not a doji) — body ≥ 30% of its range
+            # Preserve C2 displacement requirement: body >= 30% of range.
             if c2_range == 0 or (c2_body / c2_range) < 0.30:
                 continue
 
             if direction == "BEARISH":
-                # Gap condition: C1.low > C3.high
-                if float(c1["low"]) > float(c3["high"]):
-                    # Zigzag: C2 must be a bearish displacement candle
-                    if c2_close < c2_open:
-                        return {
-                            "top":      float(c1["low"]),
-                            "bottom":   float(c3["high"]),
-                            "midpoint": float((float(c1["low"]) + float(c3["high"])) / 2),
-                            "sl_price": c1_high,   # SL = C1 high (First candle high - Rule #8)
-                            "c1_high":  c1_high,
-                            "c1_low":   c1_low,
-                            "c2_high":  c2_high,
-                            "c2_low":   c2_low,
-                            "index":    i,
-                            "type":     "BEARISH",
-                        }
+                # Bearish FVG: C1.low > C3.high; C2 must be bearish.
+                if (
+                    float(c1["low"]) > float(c3["high"])
+                    and c2_close < c2_open
+                ):
+                    return {
+                        "top": float(c1["low"]),
+                        "bottom": float(c3["high"]),
+                        "midpoint": float(
+                            (float(c1["low"]) + float(c3["high"])) / 2
+                        ),
+                        "sl_price": c1_high,
+                        "c1_high": c1_high,
+                        "c1_low": c1_low,
+                        "c2_high": c2_high,
+                        "c2_low": c2_low,
+                        "index": i,
+                        "type": "BEARISH",
+                    }
 
             else:  # BULLISH
-                # Gap condition: C1.high < C3.low
-                if float(c1["high"]) < float(c3["low"]):
-                    # Zigzag: C2 must be a bullish displacement candle
-                    if c2_close > c2_open:
-                        return {
-                            "top":      float(c3["low"]),
-                            "bottom":   float(c1["high"]),
-                            "midpoint": float((float(c3["low"]) + float(c1["high"])) / 2),
-                            "sl_price": c1_low,    # SL = C1 low (First candle low - Rule #8)
-                            "c1_high":  c1_high,
-                            "c1_low":   c1_low,
-                            "c2_high":  c2_high,
-                            "c2_low":   c2_low,
-                            "index":    i,
-                            "type":     "BULLISH",
-                        }
+                # Bullish FVG: C1.high < C3.low; C2 must be bullish.
+                if (
+                    float(c1["high"]) < float(c3["low"])
+                    and c2_close > c2_open
+                ):
+                    return {
+                        "top": float(c3["low"]),
+                        "bottom": float(c1["high"]),
+                        "midpoint": float(
+                            (float(c3["low"]) + float(c1["high"])) / 2
+                        ),
+                        "sl_price": c1_low,
+                        "c1_high": c1_high,
+                        "c1_low": c1_low,
+                        "c2_high": c2_high,
+                        "c2_low": c2_low,
+                        "index": i,
+                        "type": "BULLISH",
+                    }
 
-        return None  # No valid zigzag FVG found → REJECT setup
+        return None
 
     # ─── STEP 4b: FVG TOUCH CHECK ────────────────────────────────────────────
     def is_fvg_touched(
@@ -483,8 +499,8 @@ class SMCEngine:
         df_15m = df_15m.reset_index(drop=True)
         atr    = self.calculate_atr(df_15m)
 
-        # ── STEP 1: 15M Trend Bias ───────────────────────────────────────────
-        trend = self.determine_macro_trend(df_15m if len(df_15m) >= 30 else df_4h)
+        # ── STEP 1: 4H Authoritative Macro Bias ─────────────────────────────
+        trend = self.determine_macro_trend(df_4h)
 
         # ── Work on 15M for the tactical pipeline ─────────────────────────────
         swing_highs, swing_lows = self._find_swings(df_15m)

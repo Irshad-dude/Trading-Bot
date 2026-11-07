@@ -23,6 +23,24 @@ class DataFetcher:
             logger.warning(f"[DATA] CCXT Binance init failed: {e}")
             self.exchange = None
 
+    def _filter_closed_candles(
+        self, df: pd.DataFrame, timeframe: str
+    ) -> pd.DataFrame:
+        """Keep only candles whose full timeframe has elapsed."""
+        if df.empty:
+            return df
+
+        duration = pd.Timedelta(timeframe)
+        now_utc = pd.Timestamp.now(tz="UTC")
+
+        candle_times = pd.DatetimeIndex(df.index)
+        if candle_times.tz is None:
+            candle_times = candle_times.tz_localize("UTC")
+        else:
+            candle_times = candle_times.tz_convert("UTC")
+
+        return df.loc[candle_times + duration <= now_utc]
+
     def _normalize_crypto_symbol(self, symbol: str) -> str:
         s = symbol.upper().replace("/", "").replace("-", "")
         if s.endswith("USDT"):
@@ -31,7 +49,13 @@ class DataFetcher:
             return f"{s[:-4]}/USDC"
         return f"{s}/USDT"
 
-    def get_market_data(self, symbol: str, timeframe: str = "1m", limit: int = 100) -> pd.DataFrame:
+    def get_market_data(
+        self,
+        symbol: str,
+        timeframe: str = "1m",
+        limit: int = 100,
+        closed_only: bool = False,
+    ) -> pd.DataFrame:
         """
         Fetches OHLCV candles (1m, 15m, etc.)
         """
@@ -48,7 +72,10 @@ class DataFetcher:
                     df["timestamp"] = pd.to_datetime(df["timestamp"], unit="ms")
                     df = df.set_index("timestamp")
                     df = df.rename(columns={"volume": "tick_volume"})
-                    return df.dropna()
+                    df = df.dropna()
+                    if closed_only:
+                        df = self._filter_closed_candles(df, timeframe)
+                    return df
             except Exception as e:
                 logger.debug(f"[DATA] CCXT fetch error for {symbol} {timeframe}: {e}, falling back to yfinance")
 
@@ -76,8 +103,10 @@ class DataFetcher:
 
             df.columns = [c.lower() for c in df.columns]
             df = df.rename(columns={"volume": "tick_volume"})
-            df = df.dropna()
-            return df.tail(limit)
+            df = df.dropna().tail(limit)
+            if closed_only:
+                df = self._filter_closed_candles(df, timeframe)
+            return df
         except Exception as e:
             logger.error(f"[DATA] yfinance fetch error {symbol} {timeframe}: {e}")
             return pd.DataFrame()

@@ -55,7 +55,7 @@ async def autonomous_trading_loop():
 
                 # ── 1. Fetch Data ─────────────────────────────────────────
                 df_4h  = fetcher.get_market_data(symbol, timeframe="4h",  limit=100)
-                df_15m = fetcher.get_market_data(symbol, timeframe="15m", limit=200)
+                df_15m = fetcher.get_market_data(symbol, timeframe="15m", limit=200, closed_only=True)
                 df_1m  = fetcher.get_market_data(symbol, timeframe="1m",  limit=150)
 
                 if df_15m.empty or df_4h.empty:
