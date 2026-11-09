@@ -17,15 +17,30 @@ export async function GET() {
     const fileContents = fs.readFileSync(filePath, 'utf8');
     const raw = JSON.parse(fileContents);
 
-    // Reshape: the JSON has summary: { XAUUSD: {...}, BTCUSDT: {...} }
-    // Frontend expects: gold_summary, btc_summary, eth_summary, summary (combined)
+    // If already pre-formatted with dedicated summary objects
+    if (raw.gold_summary || raw.btc_summary || raw.us30_summary || (raw.summary && raw.summary.total_trades !== undefined)) {
+      return NextResponse.json({
+        summary: raw.summary || null,
+        gold_summary: raw.gold_summary || null,
+        btc_summary: raw.btc_summary || null,
+        us30_summary: raw.us30_summary || null,
+        eth_summary: raw.eth_summary || null,
+        monthly_breakdown: raw.monthly_breakdown || [],
+        trades: raw.trades || [],
+        ai_memory_summary: raw.ai_memory_summary || null,
+      });
+    }
+
+    // Fallback reshape: the legacy JSON had summary: { XAUUSD: {...}, BTCUSDT: {...} }
+    // Frontend expects: gold_summary, btc_summary, us30_summary, eth_summary, summary (combined)
     const summaryMap = raw.summary || {};
-    const goldSummary = summaryMap['XAUUSD'] || null;
-    const btcSummary = summaryMap['BTCUSDT'] || null;
-    const ethSummary = summaryMap['ETHUSDT'] || null;
+    const goldSummary = summaryMap['XAUUSD'] || raw.gold_summary || null;
+    const btcSummary = summaryMap['BTCUSDT'] || raw.btc_summary || null;
+    const us30Summary = summaryMap['US30'] || raw.us30_summary || null;
+    const ethSummary = summaryMap['ETHUSDT'] || raw.eth_summary || null;
 
     // Build combined summary
-    const allSummaries = [goldSummary, btcSummary, ethSummary].filter(Boolean) as any[];
+    const allSummaries = [goldSummary, btcSummary, us30Summary, ethSummary].filter(Boolean) as any[];
     let combinedSummary = null;
     if (allSummaries.length > 0) {
       const totalTrades = allSummaries.reduce((s, a) => s + (a.total_trades || 0), 0);
@@ -55,6 +70,7 @@ export async function GET() {
     const monthlyBreakdown = [
       ...(goldSummary?.monthly_breakdown || []),
       ...(btcSummary?.monthly_breakdown || []),
+      ...(us30Summary?.monthly_breakdown || []),
       ...(ethSummary?.monthly_breakdown || []),
     ];
 
@@ -62,9 +78,11 @@ export async function GET() {
       summary: combinedSummary,
       gold_summary: goldSummary,
       btc_summary: btcSummary,
+      us30_summary: us30Summary,
       eth_summary: ethSummary,
-      monthly_breakdown: monthlyBreakdown,
+      monthly_breakdown: raw.monthly_breakdown || monthlyBreakdown,
       trades: raw.trades || [],
+      ai_memory_summary: raw.ai_memory_summary || null,
     };
 
     return NextResponse.json(data);
