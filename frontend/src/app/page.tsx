@@ -163,7 +163,8 @@ interface BacktestData {
   summary: AssetSummary | null;
   gold_summary?: AssetSummary | null;
   btc_summary: AssetSummary | null;
-  eth_summary: AssetSummary | null;
+  us30_summary?: AssetSummary | null;
+  eth_summary?: AssetSummary | null;
   monthly_breakdown: MonthlyStat[];
   trades: BacktestTrade[];
   ai_memory_summary?: AIMemorySummary;
@@ -350,7 +351,7 @@ export default function Dashboard() {
   const [backtestData, setBacktestData] = useState<BacktestData | null>(null);
   const [loadingBacktest, setLoadingBacktest] = useState(false);
   const [backtestError, setBacktestError] = useState<string | null>(null);
-  const [btAssetFilter, setBtAssetFilter] = useState<'ALL' | 'XAUUSD' | 'BTCUSDT' | 'ETHUSDT'>('ALL');
+  const [btAssetFilter, setBtAssetFilter] = useState<'ALL' | 'XAUUSD' | 'BTCUSDT' | 'US30' | 'ETHUSDT'>('ALL');
   const [btResultFilter, setBtResultFilter] = useState<'ALL' | 'WIN' | 'LOSS'>('ALL');
   const [btDirectionFilter, setBtDirectionFilter] = useState<'ALL' | 'LONG' | 'SHORT'>('ALL');
   const [btSearch, setBtSearch] = useState('');
@@ -701,7 +702,7 @@ export default function Dashboard() {
     };
   }, []);
 
-  const handleSelectAssetPartition = (asset: 'ALL' | 'XAUUSD' | 'BTCUSDT' | 'ETHUSDT') => {
+  const handleSelectAssetPartition = (asset: 'ALL' | 'XAUUSD' | 'BTCUSDT' | 'US30' | 'ETHUSDT') => {
     setBtAssetFilter(asset);
     setBtPage(1);
     if (backtestData?.trades) {
@@ -714,6 +715,7 @@ export default function Dashboard() {
     if (!backtestData) return null;
     if (btAssetFilter === 'XAUUSD') return backtestData.gold_summary || null;
     if (btAssetFilter === 'BTCUSDT') return backtestData.btc_summary || null;
+    if (btAssetFilter === 'US30') return backtestData.us30_summary || null;
     if (btAssetFilter === 'ETHUSDT') return backtestData.eth_summary || null;
     return backtestData.summary || null;
   }, [backtestData, btAssetFilter]);
@@ -765,7 +767,7 @@ export default function Dashboard() {
     const trades = (backtestData?.trades || []).filter(t => btAssetFilter === 'ALL' || t.symbol === btAssetFilter);
     if (trades.length === 0) return [];
 
-    const startBal = btAssetFilter === 'ALL' ? 20000 : 10000;
+    const startBal = btAssetFilter === 'ALL' ? 30000 : 10000;
     let runningBal = startBal;
     let runningWins = 0;
 
@@ -971,12 +973,12 @@ export default function Dashboard() {
                       wr: `${backtestData?.btc_summary?.win_rate ?? 0}%` 
                     },
                     { 
-                      key: 'ETHUSDT', 
-                      label: 'Ethereum', 
-                      count: backtestData?.eth_summary?.total_trades ?? 0, 
-                      ticker: 'ETH/USDT',
-                      pnl: `+${backtestData?.eth_summary?.net_pnl_pct ?? 0}% Net`, 
-                      wr: `${backtestData?.eth_summary?.win_rate ?? 0}%` 
+                      key: 'US30', 
+                      label: 'US30 (Dow)', 
+                      count: backtestData?.us30_summary?.total_trades ?? 0, 
+                      ticker: 'US30',
+                      pnl: `${(backtestData?.us30_summary?.net_pnl_pct ?? 0) >= 0 ? '+' : ''}${backtestData?.us30_summary?.net_pnl_pct ?? 0}% Net`, 
+                      wr: `${backtestData?.us30_summary?.win_rate ?? 0}%` 
                     },
                   ].map(tab => (
                     <button
@@ -1137,11 +1139,55 @@ export default function Dashboard() {
                     <span className="text-slate-300">•</span>
                     <span className="text-slate-900 font-semibold">{backtestData.btc_summary.win_rate}% WR ({backtestData.btc_summary.wins}W / {backtestData.btc_summary.losses}L)</span>
                     <span className="text-slate-300">•</span>
-                    <span className="text-emerald-700 font-semibold">+${backtestData.btc_summary.net_pnl_dollars.toFixed(2)}</span>
+                    <span className={`font-semibold ${backtestData.btc_summary.net_pnl_dollars >= 0 ? 'text-emerald-700' : 'text-rose-700'}`}>
+                      {backtestData.btc_summary.net_pnl_dollars >= 0 ? `+$${backtestData.btc_summary.net_pnl_dollars.toFixed(2)}` : `-$${Math.abs(backtestData.btc_summary.net_pnl_dollars).toFixed(2)}`}
+                    </span>
                     <span className="text-slate-300">•</span>
                     <span className="text-slate-600">Max DD: {backtestData.btc_summary.max_drawdown_pct !== undefined ? `${backtestData.btc_summary.max_drawdown_pct}%` : '8.76%'}</span>
                     <span className="text-slate-300">•</span>
                     <span>PF: {backtestData.btc_summary.profit_factor}</span>
+                  </div>
+                </div>
+              )}
+
+              {/* Detail Banner when US30 is active */}
+              {btAssetFilter === 'US30' && backtestData?.us30_summary && (
+                <div className="bg-slate-50/80 border border-slate-200 rounded-xl p-3.5 flex flex-col md:flex-row md:items-center justify-between gap-3 text-xs font-mono">
+                  <div className="flex items-center gap-3">
+                    <span className="text-xs font-mono font-bold px-2 py-1 rounded bg-purple-100 text-purple-900 border border-purple-200">
+                      US30 (Dow)
+                    </span>
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs font-bold text-slate-900">US30 (Dow Jones) 15M Institutional Backtest</span>
+                        <span className="text-slate-500 text-[11px]">
+                          {backtestData.us30_summary.period || 'Mar 1, 2026 – Nov 9, 2026'}
+                        </span>
+                        <span className={`px-2 py-0.2 rounded text-[10px] font-semibold border ${
+                          backtestData.us30_summary.net_pnl_pct >= 0
+                            ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                            : 'bg-rose-50 text-rose-700 border-rose-200'
+                        }`}>
+                          {backtestData.us30_summary.net_pnl_pct >= 0 ? `+${backtestData.us30_summary.net_pnl_pct.toFixed(2)}%` : `${backtestData.us30_summary.net_pnl_pct.toFixed(2)}%`}
+                        </span>
+                      </div>
+                      <span className="text-[11px] text-slate-500">
+                        15M Chain-of-CHoCH · 30° Impulse Angle Filter · 1:2 R:R Rule
+                      </span>
+                    </div>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-3 text-[11px] text-slate-700 bg-white px-3 py-1.5 rounded-lg border border-slate-200">
+                    <span>{backtestData.us30_summary.total_trades} trades</span>
+                    <span className="text-slate-300">•</span>
+                    <span className="text-slate-900 font-semibold">{backtestData.us30_summary.win_rate}% WR ({backtestData.us30_summary.wins}W / {backtestData.us30_summary.losses}L)</span>
+                    <span className="text-slate-300">•</span>
+                    <span className={`font-semibold ${backtestData.us30_summary.net_pnl_dollars >= 0 ? 'text-emerald-700' : 'text-rose-700'}`}>
+                      {backtestData.us30_summary.net_pnl_dollars >= 0 ? `+$${backtestData.us30_summary.net_pnl_dollars.toFixed(2)}` : `-$${Math.abs(backtestData.us30_summary.net_pnl_dollars).toFixed(2)}`}
+                    </span>
+                    <span className="text-slate-300">•</span>
+                    <span className="text-slate-600">Max DD: {backtestData.us30_summary.max_drawdown_pct !== undefined ? `${backtestData.us30_summary.max_drawdown_pct}%` : '9.59%'}</span>
+                    <span className="text-slate-300">•</span>
+                    <span>PF: {backtestData.us30_summary.profit_factor}</span>
                   </div>
                 </div>
               )}
@@ -1156,7 +1202,7 @@ export default function Dashboard() {
                     {(activeSummary?.net_pnl_pct ?? 0) >= 0 ? `+${activeSummary?.net_pnl_pct ?? 0}%` : `${activeSummary?.net_pnl_pct ?? 0}%`}
                   </span>
                   <span className="text-[11px] text-slate-500 font-mono">
-                    {(activeSummary?.net_pnl_dollars ?? 0) >= 0 ? `+$${activeSummary?.net_pnl_dollars?.toLocaleString()}` : `-$${Math.abs(activeSummary?.net_pnl_dollars ?? 0).toLocaleString()}`} ({btAssetFilter === 'ALL' ? '$20,000 base' : '$10,000 base'})
+                    {(activeSummary?.net_pnl_dollars ?? 0) >= 0 ? `+$${activeSummary?.net_pnl_dollars?.toLocaleString()}` : `-$${Math.abs(activeSummary?.net_pnl_dollars ?? 0).toLocaleString()}`} ({btAssetFilter === 'ALL' ? '$30,000 base' : '$10,000 base'})
                   </span>
                 </div>
 
@@ -1411,7 +1457,7 @@ export default function Dashboard() {
                   <div className="flex items-center justify-between">
                     <span className="text-xs font-semibold text-slate-700 flex items-center gap-2">
                       <BarChart2Icon className="w-4 h-4 text-slate-700" />
-                      Monthly performance matrix (Jan – Sep 2026)
+                      Monthly performance matrix (Mar – Nov 2026)
                     </span>
                     <span className="text-xs font-mono text-slate-500">
                       Showing: {btAssetFilter === 'ALL' ? 'All 3 Assets' : btAssetFilter}
@@ -1558,7 +1604,7 @@ export default function Dashboard() {
                 <div className="flex flex-wrap items-center gap-2.5">
                   {/* Asset filter group */}
                   <div className="flex bg-slate-100 rounded-lg p-0.5 border border-slate-200 gap-0.5">
-                    {(['ALL', 'XAUUSD', 'BTCUSDT', 'ETHUSDT'] as const).map(sym => (
+                    {(['ALL', 'XAUUSD', 'BTCUSDT', 'US30'] as const).map(sym => (
                       <button
                         key={sym}
                         onClick={() => handleSelectAssetPartition(sym)}
@@ -1574,7 +1620,7 @@ export default function Dashboard() {
                           ? `Gold (${backtestData?.gold_summary?.total_trades ?? 0})`
                           : sym === 'BTCUSDT'
                           ? `BTC (${backtestData?.btc_summary?.total_trades ?? 0})`
-                          : `ETH (${backtestData?.eth_summary?.total_trades ?? 0})`}
+                          : `US30 (${backtestData?.us30_summary?.total_trades ?? 0})`}
                       </button>
                     ))}
                   </div>

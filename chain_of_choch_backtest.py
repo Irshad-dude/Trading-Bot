@@ -135,7 +135,7 @@ def run_chain_of_choch(
                 trade_record = {
                     "trade_num": trade_num,
                     "symbol": symbol,
-                    "asset_name": "Gold (XAU/USD)" if "XAU" in symbol or "PAXG" in symbol else "Bitcoin (BTC/USDT)",
+                    "asset_name": "Gold (XAU/USD)" if ("XAU" in symbol or "PAXG" in symbol) else ("US30 (Dow Jones)" if ("US30" in symbol or "DJI" in symbol or "YM" in symbol) else "Bitcoin (BTC/USDT)"),
                     "timeframe": "15m",
                     "trade_type": pos['type'],
                     "direction": pos['direction'],
@@ -621,7 +621,7 @@ def run_chain_of_choch(
     continuations = len([t for t in trades if t['trade_type'] == 'CONTINUATION_BOS'])
 
     summary = {
-        "name": f"{'Gold (XAU/USD)' if 'XAU' in symbol or 'PAXG' in symbol else 'Bitcoin (BTC/USDT)'} [15M Trending SMC · Nov 2025 – Nov 2026]",
+        "name": f"{'Gold (XAU/USD)' if ('XAU' in symbol or 'PAXG' in symbol) else ('US30 (Dow Jones)' if ('US30' in symbol or 'DJI' in symbol or 'YM' in symbol) else 'Bitcoin (BTC/USDT)')} [15M Trending SMC · Mar 2026 – Nov 2026]",
         "symbol": symbol,
         "period": f"{start_date} - {end_date[:10]}",
         "total_trades": total,
