@@ -162,5 +162,103 @@ class TestMacroTimeframeAuthority(unittest.TestCase):
         self.assertEqual(result["direction"], "BEARISH")
 
 
+class TestIDMRetracementSequence(unittest.TestCase):
+    def setUp(self):
+        self.engine = SMCEngine()
+
+    def make_df(self, rows):
+        return pd.DataFrame(
+            rows, columns=["open", "high", "low", "close"]
+        ).astype(float)
+
+    def test_bearish_requires_retracement_before_idm_break(self):
+        df = self.make_df([
+            [95, 96, 90, 92],    # LL
+            [94, 100, 93, 98],   # IDM high
+            [98, 99, 94, 95],    # bearish retracement
+            [97, 101, 96, 99],   # wick breaks IDM; candle closes below IDM
+        ])
+
+        result = self.engine.find_inducement(
+            df, "BEARISH", [(1, 100)], [(0, 90)]
+        )
+
+        self.assertIsNotNone(result)
+        self.assertEqual(result["swept_idx"], 3)
+        self.assertEqual(result["anchor_price"], 90)
+
+    def test_bearish_rejects_idm_break_without_retracement(self):
+        df = self.make_df([
+            [95, 96, 90, 92],
+            [94, 100, 93, 98],
+            [98, 101, 96, 100],  # IDM breaks immediately
+        ])
+
+        result = self.engine.find_inducement(
+            df, "BEARISH", [(1, 100)], [(0, 90)]
+        )
+
+        self.assertIsNone(result)
+
+    def test_bearish_rejects_setup_if_ll_breaks_before_idm(self):
+        df = self.make_df([
+            [95, 96, 90, 92],
+            [94, 100, 93, 98],
+            [98, 99, 94, 95],   # retracement
+            [95, 97, 89, 90],   # LL breaks first
+            [97, 101, 95, 100],
+        ])
+
+        result = self.engine.find_inducement(
+            df, "BEARISH", [(1, 100)], [(0, 90)]
+        )
+
+        self.assertIsNone(result)
+
+    def test_bullish_requires_retracement_before_idm_break(self):
+        df = self.make_df([
+            [105, 110, 104, 108],  # HH
+            [106, 107, 100, 102],  # IDM low
+            [102, 106, 101, 105],  # bullish retracement
+            [104, 105, 99, 100],   # wick breaks IDM; closes above IDM
+        ])
+
+        result = self.engine.find_inducement(
+            df, "BULLISH", [(0, 110)], [(1, 100)]
+        )
+
+        self.assertIsNotNone(result)
+        self.assertEqual(result["swept_idx"], 3)
+        self.assertEqual(result["anchor_price"], 110)
+
+    def test_bullish_rejects_idm_break_without_retracement(self):
+        df = self.make_df([
+            [105, 110, 104, 108],
+            [106, 107, 100, 102],
+            [101, 105, 99, 100],  # IDM breaks immediately
+        ])
+
+        result = self.engine.find_inducement(
+            df, "BULLISH", [(0, 110)], [(1, 100)]
+        )
+
+        self.assertIsNone(result)
+
+    def test_bullish_rejects_setup_if_hh_breaks_before_idm(self):
+        df = self.make_df([
+            [105, 110, 104, 108],
+            [106, 107, 100, 102],
+            [102, 106, 101, 105],  # retracement
+            [109, 111, 105, 110],   # HH breaks first
+            [104, 105, 99, 100],
+        ])
+
+        result = self.engine.find_inducement(
+            df, "BULLISH", [(0, 110)], [(1, 100)]
+        )
+
+        self.assertIsNone(result)
+
+
 if __name__ == "__main__":
     unittest.main()

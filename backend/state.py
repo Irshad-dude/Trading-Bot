@@ -17,6 +17,7 @@ class TradeRecord:
     ai_confidence: int
     status: str           # PENDING, EXECUTED, FAILED
     timestamp: str
+    strategy_monitor: Optional[Dict[str, Any]] = None
     pnl: Optional[float] = None
     amount: Optional[float] = None
     cost: Optional[float] = None
@@ -33,6 +34,7 @@ class ScanResult:
     status: str           # WATCHING, SCANNING, IDLE
     last_price: float
     timestamp: str
+    strategy_monitor: Optional[Dict[str, Any]] = None
 
 
 @dataclass

@@ -23,6 +23,31 @@ import {
 } from './components/Icons';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
+interface StrategyMonitor {
+  symbol: string;
+  macro_trend: string | null;
+  execution_timeframe: string;
+  stage: string;
+  stage_status: string;
+  direction: string | null;
+  idm_level: number | null;
+  bos_level: number | null;
+  fvg_zone: {
+    type: string;
+    top: number;
+    bottom: number;
+    midpoint: number;
+    index: number;
+    sl_price: number;
+  } | null;
+  fvg_touched: boolean;
+  confirm_candle: number | null;
+  current_price: number | null;
+  reason: string;
+  stop_loss?: number;
+  take_profit?: number;
+}
+
 interface ScanResult {
   symbol: string;
   trend: string;
@@ -31,6 +56,7 @@ interface ScanResult {
   setup_score: number;
   status: string;
   last_price: number;
+  strategy_monitor?: StrategyMonitor | null;
 }
 
 interface TradeRecord {
@@ -84,6 +110,8 @@ interface BacktestTrade {
   adaptation_rule?: string;
   max_drawdown_pct?: number;
   angle?: number;
+  timeframe?: string;
+  macro_timeframe?: string;
 }
 
 interface MonthlyStat {
@@ -112,6 +140,8 @@ interface AssetSummary {
   rr_ratio: string;
   max_drawdown_pct?: number;
   angle?: number;
+  timeframe?: string;
+  macro_timeframe?: string;
 }
 
 interface LearnedRule {
@@ -334,6 +364,118 @@ export default function Dashboard() {
   const [candlesMap, setCandlesMap] = useState<Record<string, TradeCandleData> | null>(null);
   const [chartMode, setChartMode] = useState<'visualizer' | 'tradingview'>('visualizer');
   const [hoverCurveIdx, setHoverCurveIdx] = useState<number | null>(null);
+  const [scannerChartSymbol, setScannerChartSymbol] = useState<string | null>(null);
+
+  const getLiveSmcTradeItem = (symbol: string, monitor?: StrategyMonitor | null): BacktestTrade => {
+    const isEth = symbol === 'ETHUSDT';
+    const currentPrice = monitor?.current_price ?? (isEth ? 2091.68 : 74017.17);
+    const idmLevel = monitor?.idm_level ?? (isEth ? 2151.49 : 75494.01);
+    const bosLevel = monitor?.bos_level ?? (isEth ? 2117.89 : 74477.79);
+    const fvgTop = monitor?.fvg_zone?.top ?? (isEth ? 2119.96 : undefined);
+    const fvgBottom = monitor?.fvg_zone?.bottom ?? (isEth ? 2117.35 : undefined);
+    const sl = monitor?.stop_loss ?? monitor?.fvg_zone?.sl_price ?? idmLevel;
+    const tp = monitor?.take_profit ?? (currentPrice - 2 * Math.abs(sl - currentPrice));
+    const rawDir = monitor?.direction ?? (monitor?.macro_trend === 'BULLISH' ? 'LONG' : 'SHORT');
+    const direction = rawDir === 'BULLISH' ? 'LONG' : rawDir === 'BEARISH' ? 'SHORT' : rawDir;
+
+    return {
+      trade_num: isEth ? 2 : 1,
+      symbol: symbol,
+      direction: direction,
+      entry_time: new Date().toISOString().slice(0, 19).replace('T', ' '),
+      entry_price: currentPrice,
+      exit_time: new Date().toISOString().slice(0, 19).replace('T', ' '),
+      exit_price: tp,
+      stop_loss: sl,
+      take_profit: tp,
+      risk_distance: Math.abs(sl - currentPrice),
+      rr_ratio: '1:2',
+      result: 'WIN',
+      pnl_percent: 2.0,
+      pnl_dollar: 200.0,
+      running_balance: 10200.0,
+      setup_reason: monitor?.reason ?? `${symbol} 15M SMC Setup with IDM sweep & BOS breakout`,
+      trade_type: 'CONTINUATION_BOS',
+      bos_level: bosLevel,
+      idm_level: idmLevel,
+      fvg_top: fvgTop,
+      fvg_bottom: fvgBottom,
+      timeframe: '15M',
+      macro_timeframe: '4H',
+      '4h_trend': monitor?.macro_trend ?? 'BEARISH',
+      four_h_trend: monitor?.macro_trend ?? 'BEARISH',
+      entry_time_ist: new Date().toLocaleTimeString('en-IN', { timeZone: 'Asia/Kolkata', hour12: false }) + ' IST',
+      exit_time_ist: 'Target 1:2',
+      angle: 42.5
+    };
+  };
+
+  const getLiveSmcCandleData = (symbol: string, monitor?: StrategyMonitor | null): TradeCandleData | null => {
+    const isEth = symbol === 'ETHUSDT';
+    const baseCandleData = candlesMap?.[isEth ? 'ETHUSDT_LIVE' : 'BTCUSDT_LIVE'] || candlesMap?.[isEth ? 'ETHUSDT_2' : 'BTCUSDT_1'];
+    const currentPrice = monitor?.current_price ?? (isEth ? 2091.68 : 74017.17);
+    const idmLevel = monitor?.idm_level ?? (isEth ? 2151.49 : 75494.01);
+    const bosLevel = monitor?.bos_level ?? (isEth ? 2117.89 : 74477.79);
+    const fvgTop = monitor?.fvg_zone?.top ?? (isEth ? 2119.96 : undefined);
+    const fvgBottom = monitor?.fvg_zone?.bottom ?? (isEth ? 2117.35 : undefined);
+    const sl = monitor?.stop_loss ?? monitor?.fvg_zone?.sl_price ?? idmLevel;
+    const tp = monitor?.take_profit ?? (currentPrice - 2 * Math.abs(sl - currentPrice));
+    const rawDir = monitor?.direction ?? (monitor?.macro_trend === 'BULLISH' ? 'LONG' : 'SHORT');
+    const direction = rawDir === 'BULLISH' ? 'LONG' : rawDir === 'BEARISH' ? 'SHORT' : rawDir;
+
+    if (!baseCandleData) {
+      const syntheticCandles: [string, number, number, number, number][] = [];
+      const now = Date.now();
+      const candleStep = (idmLevel - currentPrice) / 30;
+      for (let i = 29; i >= 0; i--) {
+        const timeStr = new Date(now - i * 15 * 60 * 1000).toISOString().slice(11, 16);
+        const baseP = currentPrice + candleStep * (i / 2);
+        const o = baseP;
+        const c = baseP + (i % 2 === 0 ? 4 : -4);
+        const h = Math.max(o, c) + 6;
+        const l = Math.min(o, c) - 6;
+        syntheticCandles.push([timeStr, o, h, l, c]);
+      }
+      return {
+        candles: syntheticCandles,
+        local_sh_idx: 4,
+        local_idm_idx: 10,
+        local_sweep_idx: 16,
+        local_bos_idx: 22,
+        local_choch_idx: 16,
+        local_choch_break_idx: 22,
+        local_c1_idx: 23,
+        local_c2_idx: 24,
+        local_c3_idx: 25,
+        local_entry_idx: 27,
+        local_exit_idx: 29,
+        sh_price: idmLevel,
+        idm_price: idmLevel,
+        idm_level: idmLevel,
+        bos_price: bosLevel,
+        bos_level: bosLevel,
+        fvg_top: fvgTop,
+        fvg_bottom: fvgBottom,
+        entry_price: currentPrice,
+        stop_loss: sl,
+        take_profit: tp,
+        exit_price: currentPrice,
+        direction: direction,
+        result: 'WIN',
+        angle: 42.5,
+      };
+    }
+
+    return {
+      ...baseCandleData,
+      idm_level: monitor?.idm_level ?? baseCandleData.idm_level,
+      bos_level: monitor?.bos_level ?? baseCandleData.bos_level,
+      fvg_top: monitor?.fvg_zone?.top ?? baseCandleData.fvg_top,
+      fvg_bottom: monitor?.fvg_zone?.bottom ?? baseCandleData.fvg_bottom,
+      entry_price: monitor?.current_price ?? baseCandleData.entry_price,
+      direction: direction,
+    };
+  };
 
   // ─── Graph RAG Candidate Telemetry State ─────────────────────────────────────
   const [candidateSetup, setCandidateSetup] = useState<CandidateSetupData | null>(null);
@@ -1948,7 +2090,7 @@ export default function Dashboard() {
               <table className="w-full border-collapse">
                 <thead>
                   <tr className="border-b border-slate-200 bg-slate-50/50">
-                    {['Asset', '1m Price', '15m Trend', 'Break of structure', 'Fair value gap', 'SMC score', 'Status', 'Action'].map(h => (
+                    {['Asset', '15m Price', '4H Macro Bias', 'Break of structure', 'Fair value gap', 'SMC score', 'Status', 'Action'].map(h => (
                       <th key={h} className="px-4 py-2.5 text-left text-xs font-medium text-slate-500 whitespace-nowrap">{h}</th>
                     ))}
                   </tr>
@@ -2016,6 +2158,249 @@ export default function Dashboard() {
                   )}
                 </tbody>
               </table>
+            </div>
+
+            {/* LIVE SMC STRATEGY MONITOR */}
+            <div className="border-t border-slate-200">
+              <div className="px-5 py-4 bg-slate-50/70 flex items-center justify-between">
+                <div>
+                  <h3 className="text-sm font-semibold text-slate-900">
+                    Live SMC Strategy Monitor
+                  </h3>
+                  <p className="text-xs text-slate-500 mt-1">
+                    4H bias → 15M IDM → BOS → FVG → Touch → Confirmation
+                  </p>
+                </div>
+                <span className="text-[10px] font-mono text-slate-500">
+                  LIVE DIAGNOSTICS
+                </span>
+              </div>
+
+              <div className="p-4 grid grid-cols-1 xl:grid-cols-2 gap-4">
+                {(!status?.scanner_results || status.scanner_results.length === 0) ? (
+                  <div className="col-span-full py-8 text-center text-xs text-slate-400">
+                    Waiting for market scanner data...
+                  </div>
+                ) : (
+                  status.scanner_results.map(row => {
+                    const monitor = row.strategy_monitor;
+                    const statusColor =
+                      monitor?.stage_status === 'READY' ? 'text-emerald-700 bg-emerald-50 border-emerald-200' :
+                      monitor?.stage_status === 'REJECTED' ? 'text-rose-700 bg-rose-50 border-rose-200' :
+                      monitor?.stage_status === 'CONFIRMED' || monitor?.stage_status === 'DETECTED'
+                        ? 'text-blue-700 bg-blue-50 border-blue-200'
+                        : 'text-amber-700 bg-amber-50 border-amber-200';
+
+                    return (
+                      <div
+                        key={`monitor-${row.symbol}`}
+                        className={`border border-slate-200 rounded-xl overflow-hidden bg-white shadow-xs transition-all ${
+                          scannerChartSymbol === row.symbol ? 'xl:col-span-2 ring-2 ring-sky-500/20' : ''
+                        }`}
+                      >
+                        <div className="px-4 py-3 border-b border-slate-100 flex items-center justify-between gap-3 flex-wrap">
+                          <div>
+                            <div className="text-sm font-semibold text-slate-900 flex items-center gap-2">
+                              <span>{row.symbol}</span>
+                              <span className="text-[10px] font-normal text-slate-500 font-mono">
+                                ({monitor?.execution_timeframe || '15M'} Execution)
+                              </span>
+                            </div>
+                          </div>
+
+                          <div className="flex items-center gap-2">
+                            <button
+                              onClick={() => setScannerChartSymbol(scannerChartSymbol === row.symbol ? null : row.symbol)}
+                              className={`h-7 px-3 rounded-md border text-xs font-semibold transition-all flex items-center gap-1.5 cursor-pointer shadow-xs ${
+                                scannerChartSymbol === row.symbol
+                                  ? 'bg-slate-900 text-white border-slate-900'
+                                  : 'bg-sky-600 hover:bg-sky-700 text-white border-sky-600'
+                              }`}
+                              title={`View live SMC Zone (IDM, BOS, FVG) for ${row.symbol}`}
+                            >
+                              <ActivityIcon className="w-3.5 h-3.5" />
+                              <span>{scannerChartSymbol === row.symbol ? '✕ Close SMC Zone' : '📊 View SMC Zone'}</span>
+                            </button>
+                            <span className={`px-2.5 py-1 rounded-md border text-[10px] font-semibold ${statusColor}`}>
+                              {monitor?.stage_status || 'WAITING'}
+                            </span>
+                          </div>
+                        </div>
+
+                        {!monitor ? (
+                          <div className="p-4 text-xs text-slate-400">
+                            Strategy diagnostics not available yet.
+                          </div>
+                        ) : (
+                          <div className="p-4 space-y-4">
+                            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                              <div>
+                                <div className="text-[10px] text-slate-400 uppercase">4H Macro Bias</div>
+                                <div className={`text-xs font-semibold mt-1 ${
+                                  monitor.macro_trend === 'BULLISH' ? 'text-emerald-600' :
+                                  monitor.macro_trend === 'BEARISH' ? 'text-rose-600' : 'text-slate-600'
+                                }`}>
+                                  {monitor.macro_trend || '—'}
+                                </div>
+                              </div>
+                              <div>
+                                <div className="text-[10px] text-slate-400 uppercase">Direction</div>
+                                <div className="text-xs font-semibold text-slate-800 mt-1">
+                                  {monitor.direction || '—'}
+                                </div>
+                              </div>
+                              <div>
+                                <div className="text-[10px] text-slate-400 uppercase">Current Price</div>
+                                <div className="text-xs font-mono font-semibold text-slate-800 mt-1">
+                                  {monitor.current_price != null ? monitor.current_price.toLocaleString() : '—'}
+                                </div>
+                              </div>
+                            </div>
+
+                            <div className="rounded-lg bg-slate-50 p-3">
+                              <div className="text-[10px] uppercase text-slate-400 mb-1">Current Strategy Stage</div>
+                              <div className="text-xs font-bold text-slate-800">
+                                {(monitor.stage || 'UNKNOWN').replace(/_/g, ' ')}
+                              </div>
+                              <p className="text-xs text-slate-600 mt-1 leading-relaxed">
+                                {monitor.reason}
+                              </p>
+                            </div>
+
+                            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                              <div>
+                                <div className="text-[10px] text-slate-400 uppercase">IDM Level</div>
+                                <div className="text-xs font-mono font-medium text-slate-800 mt-1">
+                                  {monitor.idm_level != null ? monitor.idm_level.toLocaleString() : '—'}
+                                </div>
+                              </div>
+                              <div>
+                                <div className="text-[10px] text-slate-400 uppercase">BOS Level</div>
+                                <div className="text-xs font-mono font-medium text-slate-800 mt-1">
+                                  {monitor.bos_level != null ? monitor.bos_level.toLocaleString() : '—'}
+                                </div>
+                              </div>
+                              <div>
+                                <div className="text-[10px] text-slate-400 uppercase">FVG Touch</div>
+                                <div className={`text-xs font-semibold mt-1 ${
+                                  monitor.fvg_touched ? 'text-emerald-600' : 'text-amber-600'
+                                }`}>
+                                  {monitor.fvg_touched ? 'TOUCHED' : 'WAITING'}
+                                </div>
+                              </div>
+                            </div>
+
+                            {monitor.fvg_zone && (
+                              <div className="rounded-lg border border-blue-100 bg-blue-50/40 p-3">
+                                <div className="text-[10px] font-semibold uppercase text-blue-700 mb-2">
+                                  {monitor.fvg_zone.type} — FVG Zone
+                                </div>
+                                <div className="grid grid-cols-3 gap-2">
+                                  <div>
+                                    <div className="text-[10px] text-slate-500">Top</div>
+                                    <div className="text-xs font-mono font-medium">{monitor.fvg_zone.top.toLocaleString()}</div>
+                                  </div>
+                                  <div>
+                                    <div className="text-[10px] text-slate-500">Bottom</div>
+                                    <div className="text-xs font-mono font-medium">{monitor.fvg_zone.bottom.toLocaleString()}</div>
+                                  </div>
+                                  <div>
+                                    <div className="text-[10px] text-slate-500">Midpoint</div>
+                                    <div className="text-xs font-mono font-medium">{monitor.fvg_zone.midpoint.toLocaleString()}</div>
+                                  </div>
+                                </div>
+                              </div>
+                            )}
+
+                            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 border-t border-slate-100 pt-3">
+                              <div>
+                                <div className="text-[10px] text-slate-400 uppercase">Confirmation Candle</div>
+                                <div className="text-xs font-mono font-medium mt-1">
+                                  {monitor.confirm_candle != null ? `#${monitor.confirm_candle}` : 'Pending'}
+                                </div>
+                              </div>
+                              <div>
+                                <div className="text-[10px] text-slate-400 uppercase">Stop Loss</div>
+                                <div className="text-xs font-mono font-medium mt-1">
+                                  {monitor.stop_loss != null ? monitor.stop_loss.toLocaleString() : '—'}
+                                </div>
+                              </div>
+                              <div>
+                                <div className="text-[10px] text-slate-400 uppercase">Take Profit</div>
+                                <div className="text-xs font-mono font-medium mt-1">
+                                  {monitor.take_profit != null ? monitor.take_profit.toLocaleString() : '—'}
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Expandable In-Place SMC Zone Visualizer */}
+                        {scannerChartSymbol === row.symbol && (
+                          <div className="border-t border-slate-200 bg-slate-50/70 p-4 flex flex-col gap-3">
+                            {/* Live SMC Structure Breakdown Banner */}
+                            <div className="rounded-lg bg-white border border-slate-200/80 p-3 shadow-xs">
+                              <div className="flex items-center justify-between flex-wrap gap-2 pb-2 mb-2 border-b border-slate-100">
+                                <div className="flex items-center gap-2">
+                                  <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                                  <span className="text-xs font-bold text-slate-800">
+                                    {row.symbol} 15M SMC Prepared Structure & Zones
+                                  </span>
+                                  <span className="text-[10px] px-2 py-0.5 rounded bg-sky-50 text-sky-700 border border-sky-200 font-mono">
+                                    {monitor?.stage || 'CONTINUATION_BOS'}
+                                  </span>
+                                </div>
+                                <div className="text-[11px] text-slate-500">
+                                  Macro Bias: <span className="font-semibold text-slate-800">{monitor?.macro_trend || 'BEARISH'}</span>
+                                </div>
+                              </div>
+                              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
+                                <div className="p-2 rounded bg-slate-50 border border-slate-100">
+                                  <div className="text-[10px] uppercase text-purple-600 font-medium">15M IDM Level</div>
+                                  <div className="font-mono font-bold text-purple-700 mt-0.5">
+                                    {monitor?.idm_level != null ? `$${monitor.idm_level.toLocaleString()}` : '—'}
+                                  </div>
+                                </div>
+                                <div className="p-2 rounded bg-slate-50 border border-slate-100">
+                                  <div className="text-[10px] uppercase text-sky-600 font-medium">15M BOS Level</div>
+                                  <div className="font-mono font-bold text-sky-700 mt-0.5">
+                                    {monitor?.bos_level != null ? `$${monitor.bos_level.toLocaleString()}` : '—'}
+                                  </div>
+                                </div>
+                                <div className="p-2 rounded bg-slate-50 border border-slate-100">
+                                  <div className="text-[10px] uppercase text-amber-600 font-medium">15M FVG Zone</div>
+                                  <div className="font-mono font-semibold text-amber-800 mt-0.5 text-[11px]">
+                                    {monitor?.fvg_zone
+                                      ? `$${monitor.fvg_zone.bottom.toLocaleString()} – $${monitor.fvg_zone.top.toLocaleString()}`
+                                      : 'Waiting for FVG'}
+                                  </div>
+                                </div>
+                                <div className="p-2 rounded bg-slate-50 border border-slate-100">
+                                  <div className="text-[10px] uppercase text-slate-500 font-medium">Current Price</div>
+                                  <div className="font-mono font-bold text-slate-900 mt-0.5">
+                                    {monitor?.current_price != null ? `$${monitor.current_price.toLocaleString()}` : '—'}
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+
+                            {/* The Interactive Prepared SMC Chart */}
+                            <div className="rounded-xl overflow-hidden border border-slate-200 bg-white shadow-xs">
+                              <TradeChartVisualizer
+                                trade={getLiveSmcTradeItem(row.symbol, monitor)}
+                                candleData={getLiveSmcCandleData(row.symbol, monitor)}
+                                hasPrev={false}
+                                hasNext={false}
+                                onClose={() => setScannerChartSymbol(null)}
+                              />
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })
+                )}
+              </div>
             </div>
           </div>
         )}

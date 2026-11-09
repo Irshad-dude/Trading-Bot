@@ -157,17 +157,27 @@ class SMCEngine:
 
                 idm_swept = False
                 broke_ll_early = False
+                retracement_seen = False
                 swept_idx = -1
+
                 for b in range(idm_idx + 1, len(df)):
                     c = df.iloc[b]
-                    if not idm_swept:
-                        if c["low"] < ll_p:
-                            broke_ll_early = True
-                            break
-                        if c["high"] >= idm_p:
-                            idm_swept = True
-                            swept_idx = b
-                    else:
+
+                    # Original LL must remain intact.
+                    if c["low"] < ll_p:
+                        broke_ll_early = True
+                        break
+
+                    # First require a completed bearish retracement candle.
+                    if not retracement_seen:
+                        if c["close"] < c["open"]:
+                            retracement_seen = True
+                        continue
+
+                    # Only a later candle can confirm the IDM break.
+                    if c["high"] >= idm_p:
+                        idm_swept = True
+                        swept_idx = b
                         break
                 if idm_swept and not broke_ll_early:
                     return {
@@ -189,17 +199,27 @@ class SMCEngine:
 
                 idm_swept = False
                 broke_hh_early = False
+                retracement_seen = False
                 swept_idx = -1
+
                 for b in range(idm_idx + 1, len(df)):
                     c = df.iloc[b]
-                    if not idm_swept:
-                        if c["high"] > hh_p:
-                            broke_hh_early = True
-                            break
-                        if c["low"] <= idm_p:
-                            idm_swept = True
-                            swept_idx = b
-                    else:
+
+                    # Original HH must remain intact.
+                    if c["high"] > hh_p:
+                        broke_hh_early = True
+                        break
+
+                    # First require a completed bullish retracement candle.
+                    if not retracement_seen:
+                        if c["close"] > c["open"]:
+                            retracement_seen = True
+                        continue
+
+                    # Only a later candle can confirm the IDM break.
+                    if c["low"] <= idm_p:
+                        idm_swept = True
+                        swept_idx = b
                         break
                 if idm_swept and not broke_hh_early:
                     return {
@@ -476,6 +496,168 @@ class SMCEngine:
                              "top": float(c1["low"]), "bottom": float(c3["high"]),
                              "midpoint": float((c1["low"] + c3["high"]) / 2)})
         return fvgs
+
+    # ─── DASHBOARD DIAGNOSTICS (does not execute or modify trades) ────────────
+    def diagnose_setup(
+        self,
+        symbol: str,
+        df_4h: pd.DataFrame,
+        df_15m: pd.DataFrame,
+    ) -> Dict[str, Any]:
+        """
+        Reports the furthest stage reached by the existing SMC strategy.
+        Uses the same detection methods as scan_for_setups().
+        This method is for dashboard visibility only.
+        """
+        result: Dict[str, Any] = {
+            "symbol": symbol,
+            "macro_trend": None,
+            "execution_timeframe": "15M",
+            "stage": "INSUFFICIENT_DATA",
+            "stage_status": "WAITING",
+            "direction": None,
+            "idm_level": None,
+            "bos_level": None,
+            "fvg_zone": None,
+            "fvg_touched": False,
+            "confirm_candle": None,
+            "current_price": None,
+            "reason": "Waiting for sufficient 4H and closed 15M candle data.",
+        }
+
+        if df_4h.empty or df_15m.empty or len(df_4h) < 30 or len(df_15m) < 20:
+            return result
+
+        df_4h = df_4h.reset_index(drop=True)
+        df_15m = df_15m.reset_index(drop=True)
+        result["current_price"] = float(df_15m["close"].iloc[-1])
+
+        trend = self.determine_macro_trend(df_4h)
+        result["macro_trend"] = trend
+        result["stage"] = "4H_BIAS"
+        result["stage_status"] = "DETECTED"
+        result["reason"] = f"4H macro bias detected: {trend}."
+
+        swing_highs, swing_lows = self._find_swings(df_15m)
+        if not swing_highs or not swing_lows:
+            result["stage"] = "15M_SWINGS"
+            result["stage_status"] = "WAITING"
+            result["reason"] = "Waiting for valid 15M swing highs and lows."
+            return result
+
+        inducement = self.find_inducement(
+            df_15m, trend, swing_highs, swing_lows
+        )
+        if not inducement:
+            result["stage"] = "15M_IDM"
+            result["stage_status"] = "WAITING"
+            result["reason"] = "4H bias detected; waiting for a valid 15M inducement sweep."
+            return result
+
+        direction = inducement["direction"]
+        result["direction"] = direction
+        result["idm_level"] = float(inducement["idm_price"])
+        result["stage"] = "15M_IDM"
+        result["stage_status"] = "CONFIRMED"
+        result["reason"] = f"{direction} inducement sweep confirmed."
+
+        bos = self.find_bos(
+            df_15m, trend, inducement, swing_highs, swing_lows
+        )
+        if not bos:
+            result["stage"] = "15M_BOS"
+            result["stage_status"] = "WAITING"
+            result["reason"] = "IDM swept; waiting for a candle close beyond the structural anchor."
+            return result
+
+        direction = bos["direction"]
+        result["direction"] = direction
+        result["bos_level"] = float(bos["anchor_price"])
+        result["stage"] = "15M_BOS"
+        result["stage_status"] = "CONFIRMED"
+        result["reason"] = f"{direction} BOS confirmed by candle close."
+
+        fvg = self.find_fvg_after_bos(
+            df_15m, bos["bos_index"], direction
+        )
+        if not fvg:
+            result["stage"] = "15M_FVG"
+            result["stage_status"] = "WAITING"
+            result["reason"] = "BOS confirmed; waiting for a valid BOS-based FVG."
+            return result
+
+        result["fvg_zone"] = {
+            "type": fvg["type"],
+            "top": float(fvg["top"]),
+            "bottom": float(fvg["bottom"]),
+            "midpoint": float(fvg["midpoint"]),
+            "index": int(fvg["index"]),
+            "sl_price": float(fvg["sl_price"]),
+        }
+        result["stage"] = "15M_FVG"
+        result["stage_status"] = "DETECTED"
+        result["reason"] = "Valid BOS-based FVG detected."
+
+        touched = self.is_fvg_touched(df_15m, fvg)
+        result["fvg_touched"] = bool(touched)
+        if not touched:
+            result["stage"] = "FVG_TOUCH"
+            result["stage_status"] = "WAITING"
+            result["reason"] = "FVG detected; waiting for price to return to the zone."
+            return result
+
+        result["stage"] = "FVG_TOUCH"
+        result["stage_status"] = "CONFIRMED"
+        result["reason"] = "Price has entered the FVG zone."
+
+        confirm_idx = self.find_entry_confirmation(
+            df_15m, fvg, direction
+        )
+        if confirm_idx is None:
+            result["stage"] = "ENTRY_CONFIRMATION"
+            result["stage_status"] = "WAITING"
+            result["reason"] = "FVG touched; waiting for a valid confirmation candle."
+            return result
+
+        result["confirm_candle"] = int(confirm_idx)
+        result["stage"] = "ENTRY_CONFIRMATION"
+        result["stage_status"] = "CONFIRMED"
+
+        atr = self.calculate_atr(df_15m)
+        confirm_candle = df_15m.iloc[confirm_idx]
+        body_size = abs(
+            float(confirm_candle["close"]) - float(confirm_candle["open"])
+        )
+        if atr > 0 and body_size > 3 * atr:
+            result["stage"] = "TRADE_VALIDATION"
+            result["stage_status"] = "REJECTED"
+            result["reason"] = "Confirmation candle rejected by the excessive-momentum filter."
+            return result
+
+        current_price = float(df_15m["close"].iloc[-1])
+        if direction == "BEARISH":
+            sl = float(fvg.get("sl_price", fvg.get("c1_high", fvg["c2_high"])))
+            risk_dist = sl - current_price
+        else:
+            sl = float(fvg.get("sl_price", fvg.get("c1_low", fvg["c2_low"])))
+            risk_dist = current_price - sl
+
+        if risk_dist <= 0:
+            result["stage"] = "TRADE_VALIDATION"
+            result["stage_status"] = "REJECTED"
+            result["reason"] = "Current price has crossed the strategy stop-loss level."
+            return result
+
+        result["stage"] = "TRADE_VALIDATION"
+        result["stage_status"] = "READY"
+        result["stop_loss"] = round(sl, 2)
+        result["take_profit"] = round(
+            current_price + 2 * risk_dist if direction == "BULLISH"
+            else current_price - 2 * risk_dist,
+            2,
+        )
+        result["reason"] = "All SMC strategy stages passed. Candidate is ready for existing AI and risk validation."
+        return result
 
     # ─── MASTER PIPELINE: scan_for_setups ─────────────────────────────────────
     def scan_for_setups(
