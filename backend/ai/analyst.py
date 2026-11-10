@@ -23,16 +23,18 @@ class AIAnalyst:
         self.llm = None
         self.kg = TradeKnowledgeGraph()
         if _GENAI_AVAILABLE and config.GEMINI_API_KEY:
-            try:
-                self.llm = ChatGoogleGenerativeAI(
-                    model="gemini-2.0-flash",
-                    google_api_key=config.GEMINI_API_KEY,
-                    temperature=0.0,
-                    max_output_tokens=300,
-                )
-                logger.info("[AI] Gemini 2.0 Flash initialized successfully.")
-            except Exception as e:
-                logger.warning(f"[AI] Gemini init failed: {e}. Running in bypass mode.")
+            for model_name in ["gemini-3.5-flash-lite", "gemini-3.1-flash-lite", "gemini-3.8-flash"]:
+                try:
+                    self.llm = ChatGoogleGenerativeAI(
+                        model=model_name,
+                        google_api_key=config.GEMINI_API_KEY,
+                        temperature=0.0,
+                        max_output_tokens=300,
+                    )
+                    logger.info(f"[AI] Gemini model '{model_name}' initialized successfully.")
+                    break
+                except Exception as e:
+                    logger.warning(f"[AI] Gemini init with {model_name} failed: {e}")
         else:
             logger.warning("[AI] No Gemini API key. AI validation powered by deterministic Graph RAG.")
 
@@ -95,7 +97,23 @@ class AIAnalyst:
 
         try:
             response = self.llm.invoke(prompt)
-            text = response.content.strip().replace("```json", "").replace("```", "")
+            content = response.content
+            if isinstance(content, list):
+                text = "".join([part.get("text", "") if isinstance(part, dict) else str(part) for part in content])
+            else:
+                text = str(content)
+
+            text = text.strip()
+            if "```json" in text:
+                text = text.split("```json", 1)[1].split("```", 1)[0].strip()
+            elif "```" in text:
+                text = text.split("```", 1)[1].split("```", 1)[0].strip()
+
+            start = text.find("{")
+            end = text.rfind("}")
+            if start != -1 and end != -1:
+                text = text[start:end+1]
+
             data = json.loads(text)
             candidate["ai_decision"]   = data.get("decision", "REJECT")
             candidate["ai_confidence"] = int(data.get("confidence", 0))
@@ -104,8 +122,17 @@ class AIAnalyst:
         except Exception as e:
             logger.warning(f"[AI] Gemini error (falling back to Graph RAG auto-decision): {e}")
             wr = rag_retrieval["neighborhood_win_rate"]
-            candidate["ai_decision"]   = "APPROVE" if wr >= 30.0 else "REJECT"
-            candidate["ai_confidence"] = int(max(60, wr))
-            candidate["ai_reasoning"]  = f"Graph RAG fallback: {wr}% historical win rate across similar trades."
+            if wr >= 60.0:
+                candidate["ai_decision"]   = "APPROVE"
+                candidate["ai_confidence"] = int(min(95, wr + 15))
+                candidate["ai_reasoning"]  = f"Graph RAG fallback: High-win cluster ({wr}% win rate across {rag_retrieval['neighborhood_sample_size']} twin trades)."
+            elif wr <= 25.0 and rag_retrieval["neighborhood_sample_size"] >= 4:
+                candidate["ai_decision"]   = "REJECT"
+                candidate["ai_confidence"] = 80
+                candidate["ai_reasoning"]  = f"Graph RAG fallback: Low-win trap detected ({wr}% win rate across similar trades)."
+            else:
+                candidate["ai_decision"]   = "APPROVE"
+                candidate["ai_confidence"] = 75
+                candidate["ai_reasoning"]  = f"Graph RAG fallback: Balanced structural setup ({wr}% cluster win rate)."
 
         return candidate

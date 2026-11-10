@@ -47,7 +47,16 @@ async def autonomous_trading_loop():
 
         try:
             bot.last_scan_at = datetime.utcnow().isoformat()
-            bot.add_log(f"Scanning {len(config.SYMBOLS)} symbols...")
+
+            # Sync open positions with active open orders
+            active_orders = await broker.get_open_orders()
+            active_tp_ids = {str(o.get("id")) for o in active_orders}
+            bot.open_positions = [
+                pos for pos in bot.open_positions
+                if str(pos.get("tp_order_id")) in active_tp_ids
+            ]
+
+            bot.add_log(f"Scanning {len(config.SYMBOLS)} symbols (Active positions: {len(bot.open_positions)})...")
             new_scanner_results = []
 
             for symbol in config.SYMBOLS:
@@ -142,13 +151,22 @@ async def autonomous_trading_loop():
                     bot.daily_trades_count += 1
                     bot.total_trades       += 1
                     if res.get("tp_order_id"):
+                        bot.open_positions.append({
+                            "id": res["order_id"],
+                            "tp_order_id": res.get("tp_order_id"),
+                            "symbol": symbol,
+                            "side": res["side"],
+                            "entry_price": res["price"],
+                            "amount": res.get("amount", 0.0),
+                            "timestamp": res["timestamp"],
+                        })
                         bot.add_log(
                             f"OPEN TP ORDER [{symbol}] SELL {res['amount']} "
                             f"@ ${res['tp_price']:.2f} (ID: {res['tp_order_id']})"
                         )
                 else:
                     err_msg = res.get("error", "Unknown error")
-                    bot.add_log(f"BINANCE ORDER REJECTED [{symbol}]: {err_msg}")
+                    bot.add_log(f"ORDER REJECTED [{symbol}]: {err_msg}")
 
             bot.scanner_results = new_scanner_results
 
@@ -301,6 +319,7 @@ async def get_status():
     open_orders = await broker.get_open_orders()
     return {
         "is_running":         bot.is_running,
+        "is_paper_trading":   broker.is_paper,
         "scan_interval":      bot.scan_interval,
         "risk_percent":       bot.risk_percent,
         "daily_trades_count": bot.daily_trades_count,
@@ -310,6 +329,7 @@ async def get_status():
         "last_scan_at":       bot.last_scan_at,
         "engine_log":         bot.engine_log,
         "open_orders":        open_orders,
+        "open_positions":     bot.open_positions,
         "scanner_results": [
             {
                 "symbol":         s.symbol,
@@ -406,11 +426,21 @@ async def manual_trade(req: ManualTradeRequest):
         bot.trade_history.insert(0, trade)
         bot.daily_trades_count += 1
         bot.total_trades       += 1
+        mode_label = "PAPER" if broker.is_paper else "BINANCE"
         bot.add_log(
-            f"MANUAL EXECUTED ON BINANCE [{req.symbol}] {res['side']} "
+            f"MANUAL EXECUTED [{mode_label}] [{req.symbol}] {res['side']} "
             f"{res['amount']} @ ${res['price']:.2f} (Order ID: {res['order_id']})"
         )
         if res.get("tp_order_id"):
+            bot.open_positions.append({
+                "id": res["order_id"],
+                "tp_order_id": res.get("tp_order_id"),
+                "symbol": req.symbol,
+                "side": res["side"],
+                "entry_price": res["price"],
+                "amount": res.get("amount", 0.0),
+                "timestamp": res["timestamp"],
+            })
             bot.add_log(
                 f"OPEN TP ORDER [{req.symbol}] SELL {res['amount']} "
                 f"@ ${res['tp_price']:.2f} (ID: {res['tp_order_id']})"
@@ -419,7 +449,8 @@ async def manual_trade(req: ManualTradeRequest):
             "status": "sent",
             "order_id": res["order_id"],
             "tp_order_id": res.get("tp_order_id"),
-            "message": f"Successfully executed {res['side']} {res['amount']} {req.symbol} on Binance Demo!",
+            "mode": mode_label,
+            "message": f"Successfully executed {res['side']} {res['amount']} {req.symbol} ({mode_label})!",
         }
     
     err = res.get("error", "Unknown error")

@@ -35,9 +35,10 @@ class RiskManager:
             return False
 
         # ── Rule 4: Max concurrent positions ─────────────────────
-        if len(bot.open_positions) >= 1:
-            logger.warning(f"[RISK] Max 1 concurrent position. Close existing first.")
-            bot.add_log(f"REJECTED [{symbol}] Already have an open position")
+        max_positions = getattr(config, "MAX_CONCURRENT_POSITIONS", 3)
+        if len(bot.open_positions) >= max_positions:
+            logger.warning(f"[RISK] Max concurrent positions ({max_positions}) reached.")
+            bot.add_log(f"REJECTED [{symbol}] Max concurrent positions ({max_positions}) reached")
             return False
 
         logger.success(f"[RISK] {symbol} {direction} APPROVED (confidence: {confidence}%)")

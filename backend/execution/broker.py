@@ -9,14 +9,16 @@ from backend import config
 
 class BrokerAdapter:
     """
-    Executes trades and manages orders on Binance Demo Trading (demo.binance.com) via CCXT.
-    - Market Buy orders execute immediately.
-    - Automatic Take-Profit Limit orders are placed right after, visible in Binance 'Open Orders'.
+    Executes trades and manages orders on Binance Demo Trading (demo.binance.com) via CCXT,
+    with an automatic Paper Trading fallback when API keys are not provided.
+    - If API keys provided: places live market & TP limit orders on Binance Demo.
+    - If API keys empty: simulates execution seamlessly in Paper Trading mode.
     """
 
     def __init__(self):
         self.api_key = config.BINANCE_API_KEY
         self.secret = config.BINANCE_SECRET_KEY
+        self.is_paper = not bool(self.api_key and self.secret)
 
         self.exchange = ccxt.binance({
             "apiKey": self.api_key,
@@ -31,9 +33,22 @@ class BrokerAdapter:
         self.exchange.enable_demo_trading(True)
         self._cached_orders: List[Dict[str, Any]] = []
         self._last_orders_fetch: float = 0.0
+        self._paper_balance: Dict[str, float] = {
+            "USDT": 10000.0,
+            "BTC": 0.05,
+            "ETH": 1.0,
+            "PAXG": 2.0,
+        }
+
+        if self.is_paper:
+            logger.info("[TRADE] No Binance API keys set — initialized in Paper Trading Mode.")
+        else:
+            logger.info("[TRADE] Binance Demo API keys loaded.")
 
     def _normalize_symbol(self, symbol: str) -> str:
         s = symbol.upper().replace("/", "").replace("-", "")
+        if s in ["XAUUSD", "GOLD", "PAXG", "PAXGUSDT"]:
+            return "PAXG/USDT"
         if s.endswith("USDT"):
             return f"{s[:-4]}/USDT"
         if s.endswith("USDC"):
@@ -47,13 +62,15 @@ class BrokerAdapter:
             return 0.005    # ~$15.50 USDT
         if "SOL" in unified_symbol:
             return 0.1      # ~$15.00 USDT
+        if "PAXG" in unified_symbol or "XAU" in unified_symbol:
+            return 0.005    # ~$15.00 USDT
         return 0.01
 
     async def execute_trade(self, trade: Dict[str, Any]) -> Dict[str, Any]:
         """
-        Executes a real trade on demo.binance.com.
+        Executes trade on Binance Demo if keys exist, or in Paper Trading mode if keys missing.
         If BUY: places market buy, then immediately places a Limit Sell (Take Profit)
-        order so it actively sits in the Binance 'Open Orders' tab!
+        order so it actively sits in the 'Open Orders' tab!
         """
         raw_symbol = trade.get("symbol", "BTCUSDT")
         unified_symbol = self._normalize_symbol(raw_symbol)
@@ -64,8 +81,70 @@ class BrokerAdapter:
         amount = trade.get("amount") or self._get_default_amount(unified_symbol)
 
         if not self.api_key or not self.secret:
-            logger.error("[TRADE] Missing Binance API Keys!")
-            return {"success": False, "error": "Missing Binance API Keys"}
+            # ── Paper Trading Mode ───────────────────────────────────────────
+            fill_price = float(trade.get("entry_price") or trade.get("price") or 0.0)
+            if fill_price <= 0:
+                try:
+                    ticker = await self.exchange.fetch_ticker(unified_symbol)
+                    fill_price = float(ticker.get("last") or ticker.get("close") or 100.0)
+                except Exception:
+                    fill_price = 100.0
+
+            fill_cost = round(fill_price * amount, 2)
+            order_id = f"PAPER_{int(time.time() * 1000)}"
+
+            logger.info(
+                f"[TRADE] [PAPER MODE] Executing {desired_side.upper()} {amount} {unified_symbol} @ ${fill_price:.2f}"
+            )
+
+            # Update simulated balances
+            if desired_side == "buy":
+                self._paper_balance["USDT"] = max(0.0, self._paper_balance.get("USDT", 10000.0) - fill_cost)
+                self._paper_balance[base_asset] = self._paper_balance.get(base_asset, 0.0) + amount
+            else:
+                self._paper_balance[base_asset] = max(0.0, self._paper_balance.get(base_asset, 0.0) - amount)
+                self._paper_balance["USDT"] = self._paper_balance.get("USDT", 10000.0) + fill_cost
+
+            tp_order_id = None
+            tp_price = None
+
+            if desired_side == "buy":
+                strat_tp = float(trade.get("take_profit") or 0.0)
+                tp_price = round(strat_tp, 2) if strat_tp > fill_price else round(fill_price * 1.03, 2)
+                tp_order_id = f"PAPER_TP_{int(time.time() * 1000)}"
+
+                paper_tp_order = {
+                    "id": tp_order_id,
+                    "symbol": raw_symbol,
+                    "side": "SELL",
+                    "type": "LIMIT",
+                    "price": tp_price,
+                    "amount": amount,
+                    "filled": 0.0,
+                    "remaining": amount,
+                    "cost": round(tp_price * amount, 2),
+                    "status": "OPEN",
+                    "timestamp": datetime.utcnow().isoformat(),
+                }
+                self._cached_orders.insert(0, paper_tp_order)
+                logger.success(
+                    f"[TRADE] [PAPER MODE] Placed Paper TP Limit Sell: {amount} {base_asset} @ ${tp_price:.2f} (ID: {tp_order_id})"
+                )
+
+            return {
+                "success": True,
+                "order_id": order_id,
+                "tp_order_id": tp_order_id,
+                "tp_price": tp_price,
+                "symbol": raw_symbol,
+                "side": desired_side.upper(),
+                "price": fill_price,
+                "amount": amount,
+                "cost": fill_cost,
+                "status": "EXECUTED",
+                "mode": "PAPER",
+                "timestamp": datetime.utcnow().isoformat(),
+            }
 
         try:
             balance = await self.exchange.fetch_balance()
@@ -154,7 +233,11 @@ class BrokerAdapter:
             return {"success": False, "error": str(e)}
 
     async def refresh_open_orders(self, symbol: Optional[str] = None) -> List[Dict[str, Any]]:
-        """Background worker that fetches orders from Binance Demo and updates the cache."""
+        """Background worker that fetches orders from Binance Demo (or returns paper cache) and updates."""
+        if not self.api_key or not self.secret:
+            # Paper mode: return locally cached paper orders without calling Binance private endpoints
+            return self._cached_orders
+
         try:
             symbols_to_check = [self._normalize_symbol(symbol)] if symbol else [self._normalize_symbol(s) for s in config.SYMBOLS]
             all_orders = []
@@ -197,7 +280,12 @@ class BrokerAdapter:
         return self._cached_orders
 
     async def cancel_order(self, order_id: str, symbol: str) -> bool:
-        """Cancels an open order on demo.binance.com"""
+        """Cancels an open order on demo.binance.com or removes from paper orders."""
+        if not self.api_key or not self.secret:
+            self._cached_orders = [o for o in self._cached_orders if str(o.get("id")) != str(order_id)]
+            logger.info(f"[TRADE] [PAPER MODE] Order {order_id} canceled successfully.")
+            return True
+
         try:
             unified = self._normalize_symbol(symbol)
             await self.exchange.cancel_order(order_id, unified)
@@ -208,7 +296,10 @@ class BrokerAdapter:
             return False
 
     async def get_balance(self) -> Dict[str, float]:
-        """Fetches live wallet balances from demo.binance.com"""
+        """Fetches live wallet balances from demo.binance.com or returns simulated paper balance."""
+        if not self.api_key or not self.secret:
+            return {coin: round(amt, 4) for coin, amt in self._paper_balance.items() if amt > 0}
+
         try:
             bal = await self.exchange.fetch_balance()
             return {
@@ -218,7 +309,7 @@ class BrokerAdapter:
             }
         except Exception as e:
             logger.error(f"[TRADE] Failed to fetch balance: {e}")
-            return {}
+            return {coin: round(amt, 4) for coin, amt in self._paper_balance.items() if amt > 0}
 
     async def close(self):
         await self.exchange.close()

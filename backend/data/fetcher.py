@@ -43,6 +43,8 @@ class DataFetcher:
 
     def _normalize_crypto_symbol(self, symbol: str) -> str:
         s = symbol.upper().replace("/", "").replace("-", "")
+        if s in ["XAUUSD", "GOLD", "PAXG", "PAXGUSDT"]:
+            return "PAXG/USDT"
         if s.endswith("USDT"):
             return f"{s[:-4]}/USDT"
         if s.endswith("USDC"):
@@ -60,7 +62,8 @@ class DataFetcher:
         Fetches OHLCV candles (1m, 15m, etc.)
         """
         # 1. Primary: Binance Direct via CCXT (fast, real-time, no daily limits)
-        if self.exchange and ("BTC" in symbol.upper() or "ETH" in symbol.upper() or "SOL" in symbol.upper()):
+        crypto_tokens = ["BTC", "ETH", "SOL", "PAXG", "XAU", "GOLD"]
+        if self.exchange and any(tok in symbol.upper() for tok in crypto_tokens):
             try:
                 unified = self._normalize_crypto_symbol(symbol)
                 # Map timeframe if needed
@@ -85,6 +88,10 @@ class DataFetcher:
                 "BTCUSDT": "BTC-USD",
                 "ETHUSDT": "ETH-USD",
                 "SOLUSDT": "SOL-USD",
+                "PAXGUSDT": "PAXG-USD",
+                "XAUUSD": "GC=F",
+                "GOLD": "GC=F",
+                "US30": "^DJI",
                 "EURUSD": "EURUSD=X",
                 "GBPUSD": "GBPUSD=X",
             }
