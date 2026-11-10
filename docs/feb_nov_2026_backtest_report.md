@@ -104,7 +104,22 @@ From **1 February 2026 to 10 November 2026**, the system evaluated continuous cl
 
 ---
 
-## 5. Output Verification
+## 5. Visualizer Chart Fix: Zero Floating ("In The Air") Mapping
+
+### Root Cause Analysis:
+1. **Key Collision Overwrite:** During multi-asset aggregation in `run_feb_nov_backtest.py`, both `trade_candles_all[global_key]` and `trade_candles_all[local_key]` were written. When an asset's local trade index collided with another asset's global trade number (e.g. Gold's 5th trade occurring at global index 18), the local key `XAUUSD_5` was overwritten with Trade #18's candles. This resulted in **91 out of 203 trades** displaying candle windows from entirely different market weeks where price was $50–$500 away. Consequently, the trade's real Entry and SL levels were drawn in blank space ("in the air").
+2. **Missing Local Index Resolution:** `TradeChartVisualizer.tsx` read `candleData?.entry_idx` which was undefined (the JSON uses `local_entry_idx`). This caused `entryIdx` to default to `0`, panning the viewport to the far-left edge of the 90-candle window instead of framing the entry.
+
+### Resolution:
+1. **Unique Global Trade Key Mapping:** `run_feb_nov_backtest.py` strictly writes `trade_candles_all[f"{sym}_{idx}"]`, with `t["trade_key"] = f"{sym}_{idx}"`. 0 mismatches exist across all 203 trades.
+2. **Direct Wick Anchoring:**
+   * **Stop Loss:** Anchored with an explicit dot and pill tag directly on the wick extreme of Candle 1 ($C1\text{ Low}$ for Long, $C1\text{ High}$ for Short).
+   * **Entry Level:** Marked with a horizontal dashed line connecting the Entry candle wick to the Exit candle, plus TradingView-style Risk/Reward shaded boxes.
+   * **Auto-Framing:** `TradeChartVisualizer.tsx` resolves `local_entry_idx` and `local_exit_idx`, automatically centering the active setup candle in the viewport.
+
+---
+
+## 6. Output Verification
 - **Web App API:** `GET http://localhost:3000/api/backtest` (HTTP 200)
 - **JSON Dataset:** `frontend/public/backtest_results_2026.json` & `backend/data/backtest_results.json`
 - **Visualizer Candles:** `frontend/public/trade_candles.json` (315 mapped windows, 0 missing keys)
