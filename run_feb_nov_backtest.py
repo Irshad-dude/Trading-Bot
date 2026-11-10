@@ -204,6 +204,7 @@ def main():
         old_local_num = t["trade_num"]
         sym = t["symbol"]
         t["trade_num"] = idx
+        t["trade_key"] = f"{sym}_{idx}"
         
         # Portfolio balance tracking (1% risk of starting $30k)
         pnl = t["pnl_dollar"]
@@ -222,8 +223,12 @@ def main():
         
         if local_key in raw_candles_meta:
             candle_data = dict(raw_candles_meta[local_key])
+            # Ensure local indices and price levels are preserved
+            candle_data["trade_num"] = idx
+            candle_data["trade_key"] = global_key
+            candle_data["entry_idx"] = candle_data.get("local_entry_idx", 0)
+            candle_data["exit_idx"] = candle_data.get("local_exit_idx", len(candle_data.get("candles", [])) - 1)
             trade_candles_all[global_key] = candle_data
-            trade_candles_all[local_key] = candle_data
 
     # Combined portfolio metrics
     total_trades_count = len(all_trades)

@@ -545,6 +545,7 @@
       "entry_idx": 713,
       "exit_idx": 719,
       "angle": 36.1,
+      "trade_key": "BTCUSDT_1",
       "portfolio_balance": 30200.0
     },
     {
@@ -590,6 +591,7 @@
       "entry_idx": 812,
       "exit_idx": 826,
       "angle": 34.7,
+      "trade_key": "BTCUSDT_2",
       "portfolio_balance": 30098.0
     },
     {
@@ -635,6 +637,7 @@
       "entry_idx": 538,
       "exit_idx": 633,
       "angle": 34.6,
+      "trade_key": "US30_3",
       "portfolio_balance": 29998.0
     },
     {
@@ -680,6 +683,7 @@
       "entry_idx": 1215,
       "exit_idx": 1373,
       "angle": 44.2,
+      "trade_key": "BTCUSDT_4",
       "portfolio_balance": 30199.96
     },
     {
@@ -725,6 +729,7 @@
       "entry_idx": 1381,
       "exit_idx": 1400,
       "angle": 35.3,
+      "trade_key": "XAUUSD_5",
       "portfolio_balance": 30099.96
     },
     {
@@ -770,6 +775,7 @@
       "entry_idx": 1402,
       "exit_idx": 1415,
       "angle": 50.1,
+      "trade_key": "BTCUSDT_6",
       "portfolio_balance": 30305.96
     },
     {
@@ -815,6 +821,7 @@
       "entry_idx": 1545,
       "exit_idx": 1552,
       "angle": 38.0,
+      "trade_key": "XAUUSD_7",
       "portfolio_balance": 30503.96
     },
     {
@@ -860,6 +867,7 @@
       "entry_idx": 870,
       "exit_idx": 905,
       "angle": 52.9,
+      "trade_key": "US30_8",
       "portfolio_balance": 30404.96
     },
     {
@@ -905,6 +913,7 @@
       "entry_idx": 978,
       "exit_idx": 989,
       "angle": 31.3,
+      "trade_key": "US30_9",
       "portfolio_balance": 30306.95
     },
     {
@@ -950,6 +959,7 @@
       "entry_idx": 1678,
       "exit_idx": 1691,
       "angle": 42.5,
+      "trade_key": "BTCUSDT_10",
       "portfolio_balance": 30517.07
     },
     {
@@ -995,6 +1005,7 @@
       "entry_idx": 1694,
       "exit_idx": 1706,
       "angle": 43.1,
+      "trade_key": "XAUUSD_11",
       "portfolio_balance": 30416.09
     },
     {
@@ -1040,6 +1051,7 @@
       "entry_idx": 1880,
       "exit_idx": 1882,
       "angle": 34.9,
+      "trade_key": "BTCUSDT_12",
       "portfolio_balance": 30308.93
     },
     {
@@ -1085,6 +1097,7 @@
       "entry_idx": 2172,
       "exit_idx": 2213,
       "angle": 47.1,
+      "trade_key": "XAUUSD_13",
       "portfolio_balance": 30208.96
     },
     {
@@ -1130,6 +1143,7 @@
       "entry_idx": 2266,
       "exit_idx": 2280,
       "angle": 35.3,
+      "trade_key": "XAUUSD_14",
       "portfolio_balance": 30109.99
     },
     {
@@ -1175,6 +1189,7 @@
       "entry_idx": 2318,
       "exit_idx": 2369,
       "angle": 55.7,
+      "trade_key": "BTCUSDT_15",
       "portfolio_balance": 30322.17
     },
     {
@@ -1220,6 +1235,7 @@
       "entry_idx": 2401,
       "exit_idx": 2404,
       "angle": 35.8,
+      "trade_key": "XAUUSD_16",
       "portfolio_balance": 30224.19
     },
     {
@@ -1265,6 +1281,7 @@
       "entry_idx": 2514,
       "exit_idx": 2535,
       "angle": 36.1,
+      "trade_key": "BTCUSDT_17",
       "portfolio_balance": 30115.98
     },
     {
@@ -1310,6 +1327,7 @@
       "entry_idx": 2550,
       "exit_idx": 2579,
       "angle": 43.2,
+      "trade_key": "XAUUSD_18",
       "portfolio_balance": 30309.98
     },
     {
@@ -1355,6 +1373,7 @@
       "entry_idx": 2675,
       "exit_idx": 2682,
       "angle": 45.7,
+      "trade_key": "BTCUSDT_19",
       "portfolio_balance": 30202.85
     },
     {
@@ -1400,6 +1419,7 @@
       "entry_idx": 2777,
       "exit_idx": 2780,
       "angle": 41.5,
+      "trade_key": "XAUUSD_20",
       "portfolio_balance": 30103.91
     },
     {
@@ -1445,6 +1465,7 @@
       "entry_idx": 2881,
       "exit_idx": 2917,
       "angle": 41.3,
+      "trade_key": "XAUUSD_21",
       "portfolio_balance": 30299.81
     },
     {
@@ -1490,6 +1511,7 @@
       "entry_idx": 2915,
       "exit_idx": 3010,
       "angle": 49.8,
+      "trade_key": "BTCUSDT_22",
       "portfolio_balance": 30511.93
     },
     {
@@ -1535,6 +1557,7 @@
       "entry_idx": 3098,
       "exit_idx": 3100,
       "angle": 42.2,
+      "trade_key": "XAUUSD_23",
       "portfolio_balance": 30412.02
     },
     {
@@ -1580,6 +1603,7 @@
       "entry_idx": 3175,
       "exit_idx": 3208,
       "angle": 41.1,
+      "trade_key": "XAUUSD_24",
       "portfolio_balance": 30609.84
     },
     {
@@ -1625,6 +1649,7 @@
       "entry_idx": 3346,
       "exit_idx": 3448,
       "angle": 43.2,
+      "trade_key": "XAUUSD_25",
       "portfolio_balance": 30508.95
     },
     {
@@ -1670,6 +1695,7 @@
       "entry_idx": 3440,
       "exit_idx": 3444,
       "angle": 32.7,
+      "trade_key": "BTCUSDT_26",
       "portfolio_balance": 30400.77
     },
     {
@@ -1715,6 +1741,7 @@
       "entry_idx": 3450,
       "exit_idx": 3468,
       "angle": 32.4,
+      "trade_key": "BTCUSDT_27",
       "portfolio_balance": 30293.67
     },
     {
@@ -1760,6 +1787,7 @@
       "entry_idx": 3607,
       "exit_idx": 3625,
       "angle": 40.7,
+      "trade_key": "XAUUSD_28",
       "portfolio_balance": 30193.79
     },
     {
@@ -1805,6 +1833,7 @@
       "entry_idx": 3972,
       "exit_idx": 3974,
       "angle": 35.8,
+      "trade_key": "XAUUSD_29",
       "portfolio_balance": 30094.91
     },
     {
@@ -1850,6 +1879,7 @@
       "entry_idx": 4003,
       "exit_idx": 4042,
       "angle": 49.8,
+      "trade_key": "XAUUSD_30",
       "portfolio_balance": 30290.7
     },
     {
@@ -1895,6 +1925,7 @@
       "entry_idx": 4076,
       "exit_idx": 4083,
       "angle": 40.1,
+      "trade_key": "XAUUSD_31",
       "portfolio_balance": 30490.4
     },
     {
@@ -1940,6 +1971,7 @@
       "entry_idx": 4160,
       "exit_idx": 4164,
       "angle": 39.0,
+      "trade_key": "XAUUSD_32",
       "portfolio_balance": 30694.1
     },
     {
@@ -1985,6 +2017,7 @@
       "entry_idx": 4705,
       "exit_idx": 4742,
       "angle": 47.9,
+      "trade_key": "XAUUSD_33",
       "portfolio_balance": 30901.87
     },
     {
@@ -2030,6 +2063,7 @@
       "entry_idx": 4772,
       "exit_idx": 4792,
       "angle": 50.4,
+      "trade_key": "XAUUSD_34",
       "portfolio_balance": 30795.91
     },
     {
@@ -2075,6 +2109,7 @@
       "entry_idx": 4790,
       "exit_idx": 4793,
       "angle": 30.4,
+      "trade_key": "BTCUSDT_35",
       "portfolio_balance": 30689.88
     },
     {
@@ -2120,6 +2155,7 @@
       "entry_idx": 4795,
       "exit_idx": 4799,
       "angle": 35.3,
+      "trade_key": "XAUUSD_36",
       "portfolio_balance": 30584.98
     },
     {
@@ -2165,6 +2201,7 @@
       "entry_idx": 3106,
       "exit_idx": 3107,
       "angle": 38.9,
+      "trade_key": "US30_37",
       "portfolio_balance": 30779.04
     },
     {
@@ -2210,6 +2247,7 @@
       "entry_idx": 4847,
       "exit_idx": 5160,
       "angle": 52.9,
+      "trade_key": "BTCUSDT_38",
       "portfolio_balance": 30674.07
     },
     {
@@ -2255,6 +2293,7 @@
       "entry_idx": 5194,
       "exit_idx": 5206,
       "angle": 36.4,
+      "trade_key": "XAUUSD_39",
       "portfolio_balance": 30881.78
     },
     {
@@ -2300,6 +2339,7 @@
       "entry_idx": 5253,
       "exit_idx": 5470,
       "angle": 46.0,
+      "trade_key": "XAUUSD_40",
       "portfolio_balance": 30775.85
     },
     {
@@ -2345,6 +2385,7 @@
       "entry_idx": 5574,
       "exit_idx": 5584,
       "angle": 39.6,
+      "trade_key": "BTCUSDT_41",
       "portfolio_balance": 30983.68
     },
     {
@@ -2390,6 +2431,7 @@
       "entry_idx": 5578,
       "exit_idx": 5610,
       "angle": 43.6,
+      "trade_key": "XAUUSD_42",
       "portfolio_balance": 30878.81
     },
     {
@@ -2435,6 +2477,7 @@
       "entry_idx": 5638,
       "exit_idx": 5639,
       "angle": 35.8,
+      "trade_key": "BTCUSDT_43",
       "portfolio_balance": 30772.82
     },
     {
@@ -2480,6 +2523,7 @@
       "entry_idx": 5693,
       "exit_idx": 5694,
       "angle": 44.2,
+      "trade_key": "XAUUSD_44",
       "portfolio_balance": 30980.47
     },
     {
@@ -2525,6 +2569,7 @@
       "entry_idx": 5785,
       "exit_idx": 5818,
       "angle": 47.2,
+      "trade_key": "XAUUSD_45",
       "portfolio_balance": 30874.57
     },
     {
@@ -2570,6 +2615,7 @@
       "entry_idx": 5995,
       "exit_idx": 6089,
       "angle": 43.0,
+      "trade_key": "XAUUSD_46",
       "portfolio_balance": 31084.25
     },
     {
@@ -2615,6 +2661,7 @@
       "entry_idx": 6083,
       "exit_idx": 6090,
       "angle": 31.7,
+      "trade_key": "BTCUSDT_47",
       "portfolio_balance": 30979.32
     },
     {
@@ -2660,6 +2707,7 @@
       "entry_idx": 6111,
       "exit_idx": 6139,
       "angle": 45.6,
+      "trade_key": "BTCUSDT_48",
       "portfolio_balance": 31187.09
     },
     {
@@ -2705,6 +2753,7 @@
       "entry_idx": 3906,
       "exit_idx": 3921,
       "angle": 46.8,
+      "trade_key": "US30_49",
       "portfolio_balance": 31088.12
     },
     {
@@ -2750,6 +2799,7 @@
       "entry_idx": 6278,
       "exit_idx": 6284,
       "angle": 36.7,
+      "trade_key": "XAUUSD_50",
       "portfolio_balance": 30981.18
     },
     {
@@ -2795,6 +2845,7 @@
       "entry_idx": 6683,
       "exit_idx": 6693,
       "angle": 60.8,
+      "trade_key": "XAUUSD_51",
       "portfolio_balance": 30875.31
     },
     {
@@ -2840,6 +2891,7 @@
       "entry_idx": 6700,
       "exit_idx": 6701,
       "angle": 40.0,
+      "trade_key": "XAUUSD_52",
       "portfolio_balance": 30770.5
     },
     {
@@ -2885,6 +2937,7 @@
       "entry_idx": 6871,
       "exit_idx": 6873,
       "angle": 57.8,
+      "trade_key": "XAUUSD_53",
       "portfolio_balance": 30978.02
     },
     {
@@ -2930,6 +2983,7 @@
       "entry_idx": 6909,
       "exit_idx": 6939,
       "angle": 40.1,
+      "trade_key": "XAUUSD_54",
       "portfolio_balance": 31189.69
     },
     {
@@ -2975,6 +3029,7 @@
       "entry_idx": 6941,
       "exit_idx": 6954,
       "angle": 45.8,
+      "trade_key": "XAUUSD_55",
       "portfolio_balance": 31081.74
     },
     {
@@ -3020,6 +3075,7 @@
       "entry_idx": 7106,
       "exit_idx": 7136,
       "angle": 42.8,
+      "trade_key": "XAUUSD_56",
       "portfolio_balance": 30974.87
     },
     {
@@ -3065,6 +3121,7 @@
       "entry_idx": 7372,
       "exit_idx": 7393,
       "angle": 51.9,
+      "trade_key": "XAUUSD_57",
       "portfolio_balance": 31186.48
     },
     {
@@ -3110,6 +3167,7 @@
       "entry_idx": 4863,
       "exit_idx": 4865,
       "angle": 48.3,
+      "trade_key": "US30_58",
       "portfolio_balance": 31382.44
     },
     {
@@ -3155,6 +3213,7 @@
       "entry_idx": 7919,
       "exit_idx": 8158,
       "angle": 44.8,
+      "trade_key": "XAUUSD_59",
       "portfolio_balance": 31274.52
     },
     {
@@ -3200,6 +3259,7 @@
       "entry_idx": 8265,
       "exit_idx": 8276,
       "angle": 46.1,
+      "trade_key": "XAUUSD_60",
       "portfolio_balance": 31488.2
     },
     {
@@ -3245,6 +3305,7 @@
       "entry_idx": 8358,
       "exit_idx": 8372,
       "angle": 44.1,
+      "trade_key": "XAUUSD_61",
       "portfolio_balance": 31379.22
     },
     {
@@ -3290,6 +3351,7 @@
       "entry_idx": 8503,
       "exit_idx": 8569,
       "angle": 35.3,
+      "trade_key": "XAUUSD_62",
       "portfolio_balance": 31271.33
     },
     {
@@ -3335,6 +3397,7 @@
       "entry_idx": 8573,
       "exit_idx": 8576,
       "angle": 44.4,
+      "trade_key": "XAUUSD_63",
       "portfolio_balance": 31484.95
     },
     {
@@ -3380,6 +3443,7 @@
       "entry_idx": 8659,
       "exit_idx": 8692,
       "angle": 44.0,
+      "trade_key": "XAUUSD_64",
       "portfolio_balance": 31376.0
     },
     {
@@ -3425,6 +3489,7 @@
       "entry_idx": 8716,
       "exit_idx": 8759,
       "angle": 62.6,
+      "trade_key": "XAUUSD_65",
       "portfolio_balance": 31268.14
     },
     {
@@ -3470,6 +3535,7 @@
       "entry_idx": 8771,
       "exit_idx": 8784,
       "angle": 48.2,
+      "trade_key": "XAUUSD_66",
       "portfolio_balance": 31481.7
     },
     {
@@ -3515,6 +3581,7 @@
       "entry_idx": 9022,
       "exit_idx": 9038,
       "angle": 52.4,
+      "trade_key": "XAUUSD_67",
       "portfolio_balance": 31699.53
     },
     {
@@ -3560,6 +3627,7 @@
       "entry_idx": 5938,
       "exit_idx": 5939,
       "angle": 32.5,
+      "trade_key": "US30_68",
       "portfolio_balance": 31899.41
     },
     {
@@ -3605,6 +3673,7 @@
       "entry_idx": 9148,
       "exit_idx": 9189,
       "angle": 54.9,
+      "trade_key": "XAUUSD_69",
       "portfolio_balance": 31788.32
     },
     {
@@ -3650,6 +3719,7 @@
       "entry_idx": 9384,
       "exit_idx": 9398,
       "angle": 52.6,
+      "trade_key": "XAUUSD_70",
       "portfolio_balance": 32008.28
     },
     {
@@ -3695,6 +3765,7 @@
       "entry_idx": 9992,
       "exit_idx": 10004,
       "angle": 37.4,
+      "trade_key": "XAUUSD_71",
       "portfolio_balance": 31896.1
     },
     {
@@ -3740,6 +3811,7 @@
       "entry_idx": 10006,
       "exit_idx": 10011,
       "angle": 38.3,
+      "trade_key": "XAUUSD_72",
       "portfolio_balance": 31785.04
     },
     {
@@ -3785,6 +3857,7 @@
       "entry_idx": 10014,
       "exit_idx": 10168,
       "angle": 54.7,
+      "trade_key": "XAUUSD_73",
       "portfolio_balance": 31675.09
     },
     {
@@ -3830,6 +3903,7 @@
       "entry_idx": 10172,
       "exit_idx": 10174,
       "angle": 43.8,
+      "trade_key": "XAUUSD_74",
       "portfolio_balance": 31566.24
     },
     {
@@ -3875,6 +3949,7 @@
       "entry_idx": 10375,
       "exit_idx": 10425,
       "angle": 36.6,
+      "trade_key": "XAUUSD_75",
       "portfolio_balance": 31458.48
     },
     {
@@ -3920,6 +3995,7 @@
       "entry_idx": 10872,
       "exit_idx": 10981,
       "angle": 55.2,
+      "trade_key": "XAUUSD_76",
       "portfolio_balance": 31351.8
     },
     {
@@ -3965,6 +4041,7 @@
       "entry_idx": 7095,
       "exit_idx": 7133,
       "angle": 37.2,
+      "trade_key": "US30_77",
       "portfolio_balance": 31249.86
     },
     {
@@ -4010,6 +4087,7 @@
       "entry_idx": 11146,
       "exit_idx": 11147,
       "angle": 42.7,
+      "trade_key": "XAUUSD_78",
       "portfolio_balance": 31461.09
     },
     {
@@ -4055,6 +4133,7 @@
       "entry_idx": 11238,
       "exit_idx": 11274,
       "angle": 37.8,
+      "trade_key": "XAUUSD_79",
       "portfolio_balance": 31676.55
     },
     {
@@ -4100,6 +4179,7 @@
       "entry_idx": 11448,
       "exit_idx": 11512,
       "angle": 53.6,
+      "trade_key": "XAUUSD_80",
       "portfolio_balance": 31566.67
     },
     {
@@ -4145,6 +4225,7 @@
       "entry_idx": 11667,
       "exit_idx": 11672,
       "angle": 30.4,
+      "trade_key": "BTCUSDT_81",
       "portfolio_balance": 31460.71
     },
     {
@@ -4190,6 +4271,7 @@
       "entry_idx": 11712,
       "exit_idx": 11714,
       "angle": 41.7,
+      "trade_key": "XAUUSD_82",
       "portfolio_balance": 31351.93
     },
     {
@@ -4235,6 +4317,7 @@
       "entry_idx": 11866,
       "exit_idx": 11867,
       "angle": 38.8,
+      "trade_key": "XAUUSD_83",
       "portfolio_balance": 31244.23
     },
     {
@@ -4280,6 +4363,7 @@
       "entry_idx": 11957,
       "exit_idx": 11968,
       "angle": 57.2,
+      "trade_key": "XAUUSD_84",
       "portfolio_balance": 31457.47
     },
     {
@@ -4325,6 +4409,7 @@
       "entry_idx": 11969,
       "exit_idx": 12127,
       "angle": 34.0,
+      "trade_key": "BTCUSDT_85",
       "portfolio_balance": 31352.57
     },
     {
@@ -4370,6 +4455,7 @@
       "entry_idx": 12174,
       "exit_idx": 12180,
       "angle": 51.2,
+      "trade_key": "XAUUSD_86",
       "portfolio_balance": 31243.82
     },
     {
@@ -4415,6 +4501,7 @@
       "entry_idx": 12186,
       "exit_idx": 12345,
       "angle": 44.6,
+      "trade_key": "BTCUSDT_87",
       "portfolio_balance": 31139.97
     },
     {
@@ -4460,6 +4547,7 @@
       "entry_idx": 12313,
       "exit_idx": 12316,
       "angle": 41.4,
+      "trade_key": "XAUUSD_88",
       "portfolio_balance": 31032.31
     },
     {
@@ -4505,6 +4593,7 @@
       "entry_idx": 12348,
       "exit_idx": 12353,
       "angle": 43.3,
+      "trade_key": "XAUUSD_89",
       "portfolio_balance": 31245.48
     },
     {
@@ -4550,6 +4639,7 @@
       "entry_idx": 12418,
       "exit_idx": 12431,
       "angle": 39.0,
+      "trade_key": "XAUUSD_90",
       "portfolio_balance": 31462.92
     },
     {
@@ -4595,6 +4685,7 @@
       "entry_idx": 12440,
       "exit_idx": 12471,
       "angle": 32.4,
+      "trade_key": "BTCUSDT_91",
       "portfolio_balance": 31360.1
     },
     {
@@ -4640,6 +4731,7 @@
       "entry_idx": 12498,
       "exit_idx": 12551,
       "angle": 30.7,
+      "trade_key": "BTCUSDT_92",
       "portfolio_balance": 31563.67
     },
     {
@@ -4685,6 +4777,7 @@
       "entry_idx": 12615,
       "exit_idx": 12626,
       "angle": 31.0,
+      "trade_key": "BTCUSDT_93",
       "portfolio_balance": 31459.85
     },
     {
@@ -4730,6 +4823,7 @@
       "entry_idx": 12617,
       "exit_idx": 12627,
       "angle": 42.4,
+      "trade_key": "XAUUSD_94",
       "portfolio_balance": 31348.96
     },
     {
@@ -4775,6 +4869,7 @@
       "entry_idx": 12638,
       "exit_idx": 12659,
       "angle": 38.4,
+      "trade_key": "BTCUSDT_95",
       "portfolio_balance": 31246.18
     },
     {
@@ -4820,6 +4915,7 @@
       "entry_idx": 12704,
       "exit_idx": 12708,
       "angle": 37.8,
+      "trade_key": "XAUUSD_96",
       "portfolio_balance": 31136.4
     },
     {
@@ -4865,6 +4961,7 @@
       "entry_idx": 12802,
       "exit_idx": 12810,
       "angle": 46.2,
+      "trade_key": "XAUUSD_97",
       "portfolio_balance": 31027.71
     },
     {
@@ -4910,6 +5007,7 @@
       "entry_idx": 12828,
       "exit_idx": 12853,
       "angle": 43.4,
+      "trade_key": "BTCUSDT_98",
       "portfolio_balance": 30925.95
     },
     {
@@ -4955,6 +5053,7 @@
       "entry_idx": 12830,
       "exit_idx": 12853,
       "angle": 39.8,
+      "trade_key": "XAUUSD_99",
       "portfolio_balance": 31141.15
     },
     {
@@ -5000,6 +5099,7 @@
       "entry_idx": 8359,
       "exit_idx": 8509,
       "angle": 34.9,
+      "trade_key": "US30_100",
       "portfolio_balance": 31342.99
     },
     {
@@ -5045,6 +5145,7 @@
       "entry_idx": 13019,
       "exit_idx": 13100,
       "angle": 31.2,
+      "trade_key": "BTCUSDT_101",
       "portfolio_balance": 31544.47
     },
     {
@@ -5090,6 +5191,7 @@
       "entry_idx": 13246,
       "exit_idx": 13257,
       "angle": 36.8,
+      "trade_key": "XAUUSD_102",
       "portfolio_balance": 31763.97
     },
     {
@@ -5135,6 +5237,7 @@
       "entry_idx": 13399,
       "exit_idx": 13403,
       "angle": 41.3,
+      "trade_key": "BTCUSDT_103",
       "portfolio_balance": 31661.22
     },
     {
@@ -5180,6 +5283,7 @@
       "entry_idx": 13414,
       "exit_idx": 13534,
       "angle": 37.6,
+      "trade_key": "BTCUSDT_104",
       "portfolio_balance": 31559.49
     },
     {
@@ -5225,6 +5329,7 @@
       "entry_idx": 13432,
       "exit_idx": 13433,
       "angle": 49.1,
+      "trade_key": "XAUUSD_105",
       "portfolio_balance": 31447.54
     },
     {
@@ -5270,6 +5375,7 @@
       "entry_idx": 13551,
       "exit_idx": 13563,
       "angle": 42.3,
+      "trade_key": "XAUUSD_106",
       "portfolio_balance": 31669.19
     },
     {
@@ -5315,6 +5421,7 @@
       "entry_idx": 14211,
       "exit_idx": 14228,
       "angle": 39.8,
+      "trade_key": "XAUUSD_107",
       "portfolio_balance": 31895.28
     },
     {
@@ -5360,6 +5467,7 @@
       "entry_idx": 14322,
       "exit_idx": 14329,
       "angle": 42.2,
+      "trade_key": "XAUUSD_108",
       "portfolio_balance": 31779.98
     },
     {
@@ -5405,6 +5513,7 @@
       "entry_idx": 14448,
       "exit_idx": 14454,
       "angle": 54.2,
+      "trade_key": "XAUUSD_109",
       "portfolio_balance": 32008.28
     },
     {
@@ -5450,6 +5559,7 @@
       "entry_idx": 14549,
       "exit_idx": 15106,
       "angle": 53.6,
+      "trade_key": "XAUUSD_110",
       "portfolio_balance": 31891.85
     },
     {
@@ -5495,6 +5605,7 @@
       "entry_idx": 14873,
       "exit_idx": 14876,
       "angle": 35.9,
+      "trade_key": "BTCUSDT_111",
       "portfolio_balance": 31791.14
     },
     {
@@ -5540,6 +5651,7 @@
       "entry_idx": 14987,
       "exit_idx": 15105,
       "angle": 43.6,
+      "trade_key": "BTCUSDT_112",
       "portfolio_balance": 31691.44
     },
     {
@@ -5585,6 +5697,7 @@
       "entry_idx": 15189,
       "exit_idx": 15195,
       "angle": 31.8,
+      "trade_key": "BTCUSDT_113",
       "portfolio_balance": 31888.85
     },
     {
@@ -5630,6 +5743,7 @@
       "entry_idx": 15243,
       "exit_idx": 15266,
       "angle": 37.4,
+      "trade_key": "BTCUSDT_114",
       "portfolio_balance": 31788.17
     },
     {
@@ -5675,6 +5789,7 @@
       "entry_idx": 15345,
       "exit_idx": 15417,
       "angle": 39.1,
+      "trade_key": "BTCUSDT_115",
       "portfolio_balance": 31987.52
     },
     {
@@ -5720,6 +5835,7 @@
       "entry_idx": 15419,
       "exit_idx": 15422,
       "angle": 40.0,
+      "trade_key": "BTCUSDT_116",
       "portfolio_balance": 31885.85
     },
     {
@@ -5765,6 +5881,7 @@
       "entry_idx": 15424,
       "exit_idx": 15554,
       "angle": 36.4,
+      "trade_key": "BTCUSDT_117",
       "portfolio_balance": 32087.15
     },
     {
@@ -5810,6 +5927,7 @@
       "entry_idx": 15431,
       "exit_idx": 15514,
       "angle": 42.7,
+      "trade_key": "XAUUSD_118",
       "portfolio_balance": 32317.69
     },
     {
@@ -5855,6 +5973,7 @@
       "entry_idx": 15561,
       "exit_idx": 15565,
       "angle": 31.0,
+      "trade_key": "BTCUSDT_119",
       "portfolio_balance": 32523.01
     },
     {
@@ -5900,6 +6019,7 @@
       "entry_idx": 15797,
       "exit_idx": 15808,
       "angle": 44.7,
+      "trade_key": "XAUUSD_120",
       "portfolio_balance": 32405.43
     },
     {
@@ -5945,6 +6065,7 @@
       "entry_idx": 15843,
       "exit_idx": 15861,
       "angle": 30.9,
+      "trade_key": "BTCUSDT_121",
       "portfolio_balance": 32300.71
     },
     {
@@ -5990,6 +6111,7 @@
       "entry_idx": 15874,
       "exit_idx": 15896,
       "angle": 41.6,
+      "trade_key": "BTCUSDT_122",
       "portfolio_balance": 32197.04
     },
     {
@@ -6035,6 +6157,7 @@
       "entry_idx": 15901,
       "exit_idx": 15988,
       "angle": 42.6,
+      "trade_key": "XAUUSD_123",
       "portfolio_balance": 32429.84
     },
     {
@@ -6080,6 +6203,7 @@
       "entry_idx": 15994,
       "exit_idx": 16105,
       "angle": 34.4,
+      "trade_key": "BTCUSDT_124",
       "portfolio_balance": 32635.1
     },
     {
@@ -6125,6 +6249,7 @@
       "entry_idx": 16110,
       "exit_idx": 16112,
       "angle": 38.6,
+      "trade_key": "XAUUSD_125",
       "portfolio_balance": 32516.37
     },
     {
@@ -6170,6 +6295,7 @@
       "entry_idx": 16146,
       "exit_idx": 16159,
       "angle": 41.5,
+      "trade_key": "XAUUSD_126",
       "portfolio_balance": 32751.45
     },
     {
@@ -6215,6 +6341,7 @@
       "entry_idx": 16180,
       "exit_idx": 16181,
       "angle": 40.5,
+      "trade_key": "XAUUSD_127",
       "portfolio_balance": 32631.56
     },
     {
@@ -6260,6 +6387,7 @@
       "entry_idx": 16260,
       "exit_idx": 16280,
       "angle": 38.5,
+      "trade_key": "XAUUSD_128",
       "portfolio_balance": 32512.87
     },
     {
@@ -6305,6 +6433,7 @@
       "entry_idx": 16324,
       "exit_idx": 16333,
       "angle": 36.0,
+      "trade_key": "XAUUSD_129",
       "portfolio_balance": 32747.88
     },
     {
@@ -6350,6 +6479,7 @@
       "entry_idx": 16448,
       "exit_idx": 16482,
       "angle": 38.7,
+      "trade_key": "BTCUSDT_130",
       "portfolio_balance": 32643.2
     },
     {
@@ -6395,6 +6525,7 @@
       "entry_idx": 16732,
       "exit_idx": 16734,
       "angle": 41.0,
+      "trade_key": "XAUUSD_131",
       "portfolio_balance": 32523.34
     },
     {
@@ -6440,6 +6571,7 @@
       "entry_idx": 16736,
       "exit_idx": 16744,
       "angle": 62.1,
+      "trade_key": "XAUUSD_132",
       "portfolio_balance": 32760.65
     },
     {
@@ -6485,6 +6617,7 @@
       "entry_idx": 16760,
       "exit_idx": 16776,
       "angle": 39.9,
+      "trade_key": "XAUUSD_133",
       "portfolio_balance": 33002.71
     },
     {
@@ -6530,6 +6663,7 @@
       "entry_idx": 16862,
       "exit_idx": 16888,
       "angle": 32.5,
+      "trade_key": "BTCUSDT_134",
       "portfolio_balance": 32899.07
     },
     {
@@ -6575,6 +6709,7 @@
       "entry_idx": 16897,
       "exit_idx": 16954,
       "angle": 56.3,
+      "trade_key": "BTCUSDT_135",
       "portfolio_balance": 32796.47
     },
     {
@@ -6620,6 +6755,7 @@
       "entry_idx": 16956,
       "exit_idx": 16996,
       "angle": 47.9,
+      "trade_key": "BTCUSDT_136",
       "portfolio_balance": 32999.62
     },
     {
@@ -6665,6 +6801,7 @@
       "entry_idx": 17048,
       "exit_idx": 17051,
       "angle": 35.8,
+      "trade_key": "BTCUSDT_137",
       "portfolio_balance": 32896.01
     },
     {
@@ -6710,6 +6847,7 @@
       "entry_idx": 17086,
       "exit_idx": 17087,
       "angle": 40.2,
+      "trade_key": "BTCUSDT_138",
       "portfolio_balance": 32793.44
     },
     {
@@ -6755,6 +6893,7 @@
       "entry_idx": 17120,
       "exit_idx": 17149,
       "angle": 37.2,
+      "trade_key": "BTCUSDT_139",
       "portfolio_balance": 32691.89
     },
     {
@@ -6800,6 +6939,7 @@
       "entry_idx": 17162,
       "exit_idx": 17164,
       "angle": 44.7,
+      "trade_key": "XAUUSD_140",
       "portfolio_balance": 32938.79
     },
     {
@@ -6845,6 +6985,7 @@
       "entry_idx": 17336,
       "exit_idx": 17339,
       "angle": 38.1,
+      "trade_key": "XAUUSD_141",
       "portfolio_balance": 32812.87
     },
     {
@@ -6890,6 +7031,7 @@
       "entry_idx": 17458,
       "exit_idx": 17459,
       "angle": 56.8,
+      "trade_key": "XAUUSD_142",
       "portfolio_balance": 32688.21
     },
     {
@@ -6935,6 +7077,7 @@
       "entry_idx": 17624,
       "exit_idx": 17645,
       "angle": 36.6,
+      "trade_key": "XAUUSD_143",
       "portfolio_balance": 32564.8
     },
     {
@@ -6980,6 +7123,7 @@
       "entry_idx": 17683,
       "exit_idx": 17690,
       "angle": 36.3,
+      "trade_key": "BTCUSDT_144",
       "portfolio_balance": 32765.86
     },
     {
@@ -7025,6 +7169,7 @@
       "entry_idx": 17706,
       "exit_idx": 17707,
       "angle": 42.5,
+      "trade_key": "XAUUSD_145",
       "portfolio_balance": 32643.68
     },
     {
@@ -7070,6 +7215,7 @@
       "entry_idx": 17769,
       "exit_idx": 17771,
       "angle": 38.4,
+      "trade_key": "XAUUSD_146",
       "portfolio_balance": 32885.6
     },
     {
@@ -7115,6 +7261,7 @@
       "entry_idx": 17962,
       "exit_idx": 17975,
       "angle": 36.9,
+      "trade_key": "XAUUSD_147",
       "portfolio_balance": 33132.36
     },
     {
@@ -7160,6 +7307,7 @@
       "entry_idx": 18142,
       "exit_idx": 18150,
       "angle": 56.1,
+      "trade_key": "XAUUSD_148",
       "portfolio_balance": 33006.51
     },
     {
@@ -7205,6 +7353,7 @@
       "entry_idx": 18176,
       "exit_idx": 18196,
       "angle": 40.0,
+      "trade_key": "BTCUSDT_149",
       "portfolio_balance": 32903.97
     },
     {
@@ -7250,6 +7399,7 @@
       "entry_idx": 18201,
       "exit_idx": 18234,
       "angle": 58.7,
+      "trade_key": "BTCUSDT_150",
       "portfolio_balance": 32802.46
     },
     {
@@ -7295,6 +7445,7 @@
       "entry_idx": 18234,
       "exit_idx": 18244,
       "angle": 48.7,
+      "trade_key": "XAUUSD_151",
       "portfolio_balance": 33051.63
     },
     {
@@ -7340,6 +7491,7 @@
       "entry_idx": 18359,
       "exit_idx": 18384,
       "angle": 38.4,
+      "trade_key": "XAUUSD_152",
       "portfolio_balance": 33305.79
     },
     {
@@ -7385,6 +7537,7 @@
       "entry_idx": 18397,
       "exit_idx": 18398,
       "angle": 36.4,
+      "trade_key": "BTCUSDT_153",
       "portfolio_balance": 33506.79
     },
     {
@@ -7430,6 +7583,7 @@
       "entry_idx": 18493,
       "exit_idx": 18529,
       "angle": 31.4,
+      "trade_key": "BTCUSDT_154",
       "portfolio_balance": 33404.28
     },
     {
@@ -7475,6 +7629,7 @@
       "entry_idx": 18533,
       "exit_idx": 18535,
       "angle": 39.0,
+      "trade_key": "XAUUSD_155",
       "portfolio_balance": 33274.66
     },
     {
@@ -7520,6 +7675,7 @@
       "entry_idx": 18555,
       "exit_idx": 18570,
       "angle": 42.8,
+      "trade_key": "XAUUSD_156",
       "portfolio_balance": 33146.34
     },
     {
@@ -7565,6 +7721,7 @@
       "entry_idx": 18593,
       "exit_idx": 18594,
       "angle": 30.8,
+      "trade_key": "BTCUSDT_157",
       "portfolio_balance": 33349.31
     },
     {
@@ -7610,6 +7767,7 @@
       "entry_idx": 18653,
       "exit_idx": 18657,
       "angle": 47.9,
+      "trade_key": "BTCUSDT_158",
       "portfolio_balance": 33556.34
     },
     {
@@ -7655,6 +7813,7 @@
       "entry_idx": 18843,
       "exit_idx": 18858,
       "angle": 52.2,
+      "trade_key": "XAUUSD_159",
       "portfolio_balance": 33429.3
     },
     {
@@ -7700,6 +7859,7 @@
       "entry_idx": 18857,
       "exit_idx": 18873,
       "angle": 52.9,
+      "trade_key": "BTCUSDT_160",
       "portfolio_balance": 33323.72
     },
     {
@@ -7745,6 +7905,7 @@
       "entry_idx": 18870,
       "exit_idx": 18876,
       "angle": 47.9,
+      "trade_key": "XAUUSD_161",
       "portfolio_balance": 33575.26
     },
     {
@@ -7790,6 +7951,7 @@
       "entry_idx": 18883,
       "exit_idx": 18895,
       "angle": 47.4,
+      "trade_key": "BTCUSDT_162",
       "portfolio_balance": 33470.73
     },
     {
@@ -7835,6 +7997,7 @@
       "entry_idx": 18919,
       "exit_idx": 18969,
       "angle": 43.8,
+      "trade_key": "XAUUSD_163",
       "portfolio_balance": 33727.3
     },
     {
@@ -7880,6 +8043,7 @@
       "entry_idx": 18971,
       "exit_idx": 18986,
       "angle": 37.9,
+      "trade_key": "XAUUSD_164",
       "portfolio_balance": 33596.45
     },
     {
@@ -7925,6 +8089,7 @@
       "entry_idx": 19067,
       "exit_idx": 19128,
       "angle": 57.6,
+      "trade_key": "BTCUSDT_165",
       "portfolio_balance": 33492.97
     },
     {
@@ -7970,6 +8135,7 @@
       "entry_idx": 12581,
       "exit_idx": 12601,
       "angle": 31.1,
+      "trade_key": "US30_166",
       "portfolio_balance": 33698.85
     },
     {
@@ -8015,6 +8181,7 @@
       "entry_idx": 19156,
       "exit_idx": 19162,
       "angle": 56.7,
+      "trade_key": "BTCUSDT_167",
       "portfolio_balance": 33903.75
     },
     {
@@ -8060,6 +8227,7 @@
       "entry_idx": 19742,
       "exit_idx": 19813,
       "angle": 39.1,
+      "trade_key": "XAUUSD_168",
       "portfolio_balance": 34162.84
     },
     {
@@ -8105,6 +8273,7 @@
       "entry_idx": 20026,
       "exit_idx": 20042,
       "angle": 41.6,
+      "trade_key": "XAUUSD_169",
       "portfolio_balance": 34427.11
     },
     {
@@ -8150,6 +8319,7 @@
       "entry_idx": 20337,
       "exit_idx": 20357,
       "angle": 40.5,
+      "trade_key": "XAUUSD_170",
       "portfolio_balance": 34292.33
     },
     {
@@ -8195,6 +8365,7 @@
       "entry_idx": 13314,
       "exit_idx": 13329,
       "angle": 36.1,
+      "trade_key": "US30_171",
       "portfolio_balance": 34502.32
     },
     {
@@ -8240,6 +8411,7 @@
       "entry_idx": 20548,
       "exit_idx": 20554,
       "angle": 38.4,
+      "trade_key": "XAUUSD_172",
       "portfolio_balance": 34368.89
     },
     {
@@ -8285,6 +8457,7 @@
       "entry_idx": 20694,
       "exit_idx": 21362,
       "angle": 56.0,
+      "trade_key": "XAUUSD_173",
       "portfolio_balance": 34633.08
     },
     {
@@ -8330,6 +8503,7 @@
       "entry_idx": 21454,
       "exit_idx": 21465,
       "angle": 49.3,
+      "trade_key": "XAUUSD_174",
       "portfolio_balance": 34498.34
     },
     {
@@ -8375,6 +8549,7 @@
       "entry_idx": 21517,
       "exit_idx": 21521,
       "angle": 69.2,
+      "trade_key": "XAUUSD_175",
       "portfolio_balance": 34364.95
     },
     {
@@ -8420,6 +8595,7 @@
       "entry_idx": 14038,
       "exit_idx": 14127,
       "angle": 57.5,
+      "trade_key": "US30_176",
       "portfolio_balance": 34257.85
     },
     {
@@ -8465,6 +8641,7 @@
       "entry_idx": 14162,
       "exit_idx": 14187,
       "angle": 51.4,
+      "trade_key": "US30_177",
       "portfolio_balance": 34151.82
     },
     {
@@ -8510,6 +8687,7 @@
       "entry_idx": 14249,
       "exit_idx": 14252,
       "angle": 37.9,
+      "trade_key": "US30_178",
       "portfolio_balance": 34046.85
     },
     {
@@ -8555,6 +8733,7 @@
       "entry_idx": 21864,
       "exit_idx": 21866,
       "angle": 39.7,
+      "trade_key": "XAUUSD_179",
       "portfolio_balance": 33914.8
     },
     {
@@ -8600,6 +8779,7 @@
       "entry_idx": 14279,
       "exit_idx": 14330,
       "angle": 52.8,
+      "trade_key": "US30_180",
       "portfolio_balance": 33810.88
     },
     {
@@ -8645,6 +8825,7 @@
       "entry_idx": 14338,
       "exit_idx": 14511,
       "angle": 51.3,
+      "trade_key": "US30_181",
       "portfolio_balance": 33708.0
     },
     {
@@ -8690,6 +8871,7 @@
       "entry_idx": 22215,
       "exit_idx": 22241,
       "angle": 45.8,
+      "trade_key": "XAUUSD_182",
       "portfolio_balance": 33577.27
     },
     {
@@ -8735,6 +8917,7 @@
       "entry_idx": 22266,
       "exit_idx": 22271,
       "angle": 47.4,
+      "trade_key": "XAUUSD_183",
       "portfolio_balance": 33447.84
     },
     {
@@ -8780,6 +8963,7 @@
       "entry_idx": 14524,
       "exit_idx": 14540,
       "angle": 30.9,
+      "trade_key": "US30_184",
       "portfolio_balance": 33651.54
     },
     {
@@ -8825,6 +9009,7 @@
       "entry_idx": 14601,
       "exit_idx": 14609,
       "angle": 32.3,
+      "trade_key": "US30_185",
       "portfolio_balance": 33859.31
     },
     {
@@ -8870,6 +9055,7 @@
       "entry_idx": 14634,
       "exit_idx": 14704,
       "angle": 53.3,
+      "trade_key": "US30_186",
       "portfolio_balance": 34071.24
     },
     {
@@ -8915,6 +9101,7 @@
       "entry_idx": 22488,
       "exit_idx": 22498,
       "angle": 42.6,
+      "trade_key": "XAUUSD_187",
       "portfolio_balance": 34327.51
     },
     {
@@ -8960,6 +9147,7 @@
       "entry_idx": 22569,
       "exit_idx": 22602,
       "angle": 36.5,
+      "trade_key": "XAUUSD_188",
       "portfolio_balance": 34588.9
     },
     {
@@ -9005,6 +9193,7 @@
       "entry_idx": 22786,
       "exit_idx": 22918,
       "angle": 36.9,
+      "trade_key": "XAUUSD_189",
       "portfolio_balance": 34855.52
     },
     {
@@ -9050,6 +9239,7 @@
       "entry_idx": 14963,
       "exit_idx": 14964,
       "angle": 31.5,
+      "trade_key": "US30_190",
       "portfolio_balance": 34747.44
     },
     {
@@ -9095,6 +9285,7 @@
       "entry_idx": 15242,
       "exit_idx": 15247,
       "angle": 49.3,
+      "trade_key": "US30_191",
       "portfolio_balance": 34640.44
     },
     {
@@ -9140,6 +9331,7 @@
       "entry_idx": 15270,
       "exit_idx": 15309,
       "angle": 35.2,
+      "trade_key": "US30_192",
       "portfolio_balance": 34534.51
     },
     {
@@ -9185,6 +9377,7 @@
       "entry_idx": 15346,
       "exit_idx": 15348,
       "angle": 32.2,
+      "trade_key": "US30_193",
       "portfolio_balance": 34429.64
     },
     {
@@ -9230,6 +9423,7 @@
       "entry_idx": 15597,
       "exit_idx": 15608,
       "angle": 41.6,
+      "trade_key": "US30_194",
       "portfolio_balance": 34325.82
     },
     {
@@ -9275,6 +9469,7 @@
       "entry_idx": 15756,
       "exit_idx": 15808,
       "angle": 32.0,
+      "trade_key": "US30_195",
       "portfolio_balance": 34223.04
     },
     {
@@ -9320,6 +9515,7 @@
       "entry_idx": 16199,
       "exit_idx": 16255,
       "angle": 31.1,
+      "trade_key": "US30_196",
       "portfolio_balance": 34426.55
     },
     {
@@ -9365,6 +9561,7 @@
       "entry_idx": 16274,
       "exit_idx": 16276,
       "angle": 32.7,
+      "trade_key": "US30_197",
       "portfolio_balance": 34322.76
     },
     {
@@ -9410,6 +9607,7 @@
       "entry_idx": 16283,
       "exit_idx": 16297,
       "angle": 32.7,
+      "trade_key": "US30_198",
       "portfolio_balance": 34220.01
     },
     {
@@ -9455,6 +9653,7 @@
       "entry_idx": 16547,
       "exit_idx": 16550,
       "angle": 40.1,
+      "trade_key": "US30_199",
       "portfolio_balance": 34118.28
     },
     {
@@ -9500,6 +9699,7 @@
       "entry_idx": 16573,
       "exit_idx": 16575,
       "angle": 31.4,
+      "trade_key": "US30_200",
       "portfolio_balance": 34017.57
     },
     {
@@ -9545,6 +9745,7 @@
       "entry_idx": 16959,
       "exit_idx": 16997,
       "angle": 43.3,
+      "trade_key": "US30_201",
       "portfolio_balance": 33917.87
     },
     {
@@ -9590,6 +9791,7 @@
       "entry_idx": 17453,
       "exit_idx": 17460,
       "angle": 39.9,
+      "trade_key": "US30_202",
       "portfolio_balance": 33819.16
     },
     {
@@ -9635,6 +9837,7 @@
       "entry_idx": 17672,
       "exit_idx": 17740,
       "angle": 30.1,
+      "trade_key": "US30_203",
       "portfolio_balance": 34014.6
     }
   ],

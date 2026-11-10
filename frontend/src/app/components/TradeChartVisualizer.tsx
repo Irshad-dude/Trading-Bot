@@ -121,8 +121,8 @@ export default function TradeChartVisualizer({
   const dragStartPanRef = useRef<number>(0);
 
   const candles = useMemo(() => candleData?.candles || [], [candleData]);
-  const entryIdx = candleData?.entry_idx ?? 0;
-  const exitIdx = candleData?.exit_idx ?? (candles.length > 0 ? candles.length - 1 : 0);
+  const entryIdx = candleData?.local_entry_idx ?? candleData?.entry_idx ?? 0;
+  const exitIdx = candleData?.local_exit_idx ?? candleData?.exit_idx ?? (candles.length > 0 ? candles.length - 1 : 0);
 
   // SVG Chart Dimensions
   const chartHeight = 360;
@@ -212,11 +212,14 @@ export default function TradeChartVisualizer({
     let max = Math.max(...candles.map(c => c[2]));
 
     // Include trade levels in bounds
-    if (trade.stop_loss) min = Math.min(min, trade.stop_loss);
-    if (trade.take_profit) max = Math.max(max, trade.take_profit);
-    if (trade.entry_price) {
-      min = Math.min(min, trade.entry_price);
-      max = Math.max(max, trade.entry_price);
+    const effSL = candleData?.stop_loss ?? trade.stop_loss;
+    const effTP = candleData?.take_profit ?? trade.take_profit;
+    const effEP = candleData?.entry_price ?? trade.entry_price;
+    if (effSL) min = Math.min(min, effSL);
+    if (effTP) max = Math.max(max, effTP);
+    if (effEP) {
+      min = Math.min(min, effEP);
+      max = Math.max(max, effEP);
     }
     const fTop = candleData?.fvg_top ?? trade.fvg_top;
     const fBot = candleData?.fvg_bottom ?? trade.fvg_bottom;
@@ -256,10 +259,16 @@ export default function TradeChartVisualizer({
     return paddingLeft + idx * candleSpacing + candleSpacing / 2 + panX;
   };
 
+  // Effective price levels (snapped strictly to candle data)
+  const effectiveEntryPrice = candleData?.entry_price ?? trade.entry_price;
+  const effectiveStopLoss = candleData?.stop_loss ?? trade.stop_loss;
+  const effectiveTakeProfit = candleData?.take_profit ?? trade.take_profit;
+  const effectiveExitPrice = candleData?.exit_price ?? trade.exit_price;
+
   // Positions for Trade Levels
-  const entryY = getY(trade.entry_price);
-  const slY = getY(trade.stop_loss);
-  const tpY = getY(trade.take_profit);
+  const entryY = getY(effectiveEntryPrice);
+  const slY = getY(effectiveStopLoss);
+  const tpY = getY(effectiveTakeProfit);
 
   const entryX = getX(entryIdx);
   const exitX = getX(exitIdx);
@@ -837,6 +846,32 @@ export default function TradeChartVisualizer({
           <g clipPath="url(#chartAreaClip)">
             {showDrawings && candleData && (
               <>
+                {/* ── TradingView-style Risk/Reward Position Boxes ── */}
+                {/* Green Target Zone: from localEntryIdx to localExitIdx */}
+                <rect
+                  x={getX(localEntryIdx)}
+                  y={Math.min(entryY, tpY)}
+                  width={Math.max(candleSpacing, getX(localExitIdx) - getX(localEntryIdx))}
+                  height={Math.max(2, Math.abs(entryY - tpY))}
+                  fill="url(#tpGradientLight)"
+                  stroke="#10b981"
+                  strokeWidth={1}
+                  strokeDasharray="2 2"
+                  rx={2}
+                />
+                {/* Red Risk Zone: from localEntryIdx to localExitIdx */}
+                <rect
+                  x={getX(localEntryIdx)}
+                  y={Math.min(entryY, slY)}
+                  width={Math.max(candleSpacing, getX(localExitIdx) - getX(localEntryIdx))}
+                  height={Math.max(2, Math.abs(entryY - slY))}
+                  fill="url(#slGradientLight)"
+                  stroke="#ef4444"
+                  strokeWidth={1}
+                  strokeDasharray="2 2"
+                  rx={2}
+                />
+
                 {/* ── 1. SMC Real-Wick Zigzag (Snaps directly to exact candle wicks) ── */}
                 {hasBos && hasIdm && (
                   <g className="smc-real-zigzag" opacity={0.88}>
@@ -846,8 +881,8 @@ export default function TradeChartVisualizer({
                         ${getX(localIdmIdx)},${getY(idmPrice)}
                         ${getX(localSweepIdx)},${getY(sweepPrice)}
                         ${getX(localBosIdx)},${getY(bosPrice)}
-                        ${getX(localEntryIdx)},${getY(trade.entry_price)}
-                        ${getX(localExitIdx)},${getY(isWin ? trade.take_profit : trade.stop_loss)}
+                        ${getX(localEntryIdx)},${entryY}
+                        ${getX(localExitIdx)},${isWin ? tpY : slY}
                       `}
                       fill="none"
                       stroke="#38bdf8"
@@ -861,7 +896,7 @@ export default function TradeChartVisualizer({
                     <circle cx={getX(localIdmIdx)} cy={getY(idmPrice)} r={3.5} fill="#9333ea" stroke="#ffffff" strokeWidth={1} />
                     <circle cx={getX(localSweepIdx)} cy={getY(sweepPrice)} r={3.5} fill="#a855f7" stroke="#ffffff" strokeWidth={1} />
                     <circle cx={getX(localBosIdx)} cy={getY(bosPrice)} r={3.5} fill="#0284c7" stroke="#ffffff" strokeWidth={1} />
-                    <circle cx={getX(localEntryIdx)} cy={getY(trade.entry_price)} r={3.5} fill="#16a34a" stroke="#ffffff" strokeWidth={1} />
+                    <circle cx={getX(localEntryIdx)} cy={entryY} r={3.5} fill="#16a34a" stroke="#ffffff" strokeWidth={1} />
                   </g>
                 )}
 
@@ -1013,8 +1048,29 @@ export default function TradeChartVisualizer({
                 )}
 
 
+                {/* ── 6B. Entry Level Segment (From Entry Candle to Exit Candle) ── */}
+                <g className="entry-clean-segment">
+                  <line
+                    x1={getX(localEntryIdx)}
+                    y1={entryY}
+                    x2={getX(localExitIdx)}
+                    y2={entryY}
+                    stroke="#16a34a"
+                    strokeWidth={1.8}
+                    strokeDasharray="3 2"
+                  />
+                  <circle cx={getX(localEntryIdx)} cy={entryY} r={4} fill="#16a34a" stroke="#ffffff" strokeWidth={1.5} />
+                  <g transform={`translate(${getX(localEntryIdx) + 6}, ${entryY - 8})`}>
+                    <rect x={0} y={0} width={82} height={16} rx={3} fill="#16a34a" fillOpacity={0.92} />
+                    <text x={41} y={11} textAnchor="middle" fill="#ffffff" fontSize="8" fontFamily="monospace" fontWeight="bold">
+                      ENTRY ${effectiveEntryPrice.toFixed(1)}
+                    </text>
+                  </g>
+                </g>
+
                 {/* ── 7. Stop Loss Segment (Anchored strictly to Candle 1 Low / High - Rule #8) ── */}
                 <g className="sl-clean-segment">
+                  <circle cx={getX(localC1Idx)} cy={slY} r={4} fill="#ef4444" stroke="#ffffff" strokeWidth={1.5} />
                   <line
                     x1={getX(localC1Idx)}
                     y1={slY}
@@ -1024,9 +1080,10 @@ export default function TradeChartVisualizer({
                     strokeWidth={2}
                     strokeDasharray="4 2"
                   />
-                  <g transform={`translate(${getX(localC1Idx)}, ${slY + (isLong ? 14 : -6)})`}>
-                    <text fill="#ef4444" fontSize="8.5" fontFamily="monospace" fontWeight="bold">
-                      SL ${trade.stop_loss.toFixed(1)} (C1 {isLong ? 'Low' : 'High'})
+                  <g transform={`translate(${getX(localC1Idx)}, ${slY + (isLong ? 15 : -8)})`}>
+                    <rect x={-4} y={-8} width={102} height={16} rx={3} fill="#be123c" fillOpacity={0.95} />
+                    <text x={47} y={3.5} textAnchor="middle" fill="#ffffff" fontSize="8" fontFamily="monospace" fontWeight="bold">
+                      SL ${effectiveStopLoss.toFixed(1)} (C1 {isLong ? 'Low' : 'High'})
                     </text>
                   </g>
                 </g>
@@ -1042,9 +1099,11 @@ export default function TradeChartVisualizer({
                     strokeWidth={2}
                     strokeDasharray="4 2"
                   />
-                  <g transform={`translate(${getX(localEntryIdx)}, ${tpY + (isLong ? -6 : 14)})`}>
-                    <text fill="#10b981" fontSize="8.5" fontFamily="monospace" fontWeight="bold">
-                      TP ${trade.take_profit.toFixed(1)} (1:2)
+                  <circle cx={getX(localExitIdx)} cy={tpY} r={4} fill="#10b981" stroke="#ffffff" strokeWidth={1.5} />
+                  <g transform={`translate(${getX(localEntryIdx)}, ${tpY + (isLong ? -8 : 15)})`}>
+                    <rect x={0} y={-8} width={96} height={16} rx={3} fill="#15803d" fillOpacity={0.95} />
+                    <text x={48} y={3.5} textAnchor="middle" fill="#ffffff" fontSize="8" fontFamily="monospace" fontWeight="bold">
+                      TP ${effectiveTakeProfit.toFixed(1)} (1:2 R:R)
                     </text>
                   </g>
                 </g>
@@ -1141,7 +1200,7 @@ export default function TradeChartVisualizer({
                 <g transform={`translate(-45, ${isLong ? 14 : -24})`}>
                   <rect width={90} height={18} rx={3} fill="#16a34a" stroke="#86efac" strokeWidth={0.8} />
                   <text x={45} y={12.5} textAnchor="middle" fill="#ffffff" fontSize="8.5" fontFamily="monospace" fontWeight="bold">
-                    ↗ Entry ${trade.entry_price.toFixed(1)}
+                    ↗ Entry ${effectiveEntryPrice.toFixed(1)}
                   </text>
                 </g>
               </g>

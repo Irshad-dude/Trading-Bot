@@ -759,7 +759,8 @@ export default function Dashboard() {
 
   const activeCandleData = useMemo(() => {
     if (!selectedTrade || !candlesMap) return null;
-    return candlesMap[`${selectedTrade.symbol}_${selectedTrade.trade_num}`] || null;
+    const key = (selectedTrade as any).trade_key || `${selectedTrade.symbol}_${selectedTrade.trade_num}`;
+    return candlesMap[key] || candlesMap[`${selectedTrade.symbol}_${selectedTrade.trade_num}`] || null;
   }, [selectedTrade, candlesMap]);
 
   // Equity Curve & Cumulative Win Rate Trend Data
