@@ -14,4 +14,16 @@ MAX_DAILY_LOSS_PERCENT = float(os.getenv("MAX_DAILY_LOSS_PERCENT", 5.0))
 MAX_CONCURRENT_POSITIONS = int(os.getenv("MAX_CONCURRENT_POSITIONS", 3))
 CONFIDENCE_THRESHOLD = int(os.getenv("CONFIDENCE_THRESHOLD", 70))
 
-SYMBOLS = ["BTCUSDT", "ETHUSDT", "PAXGUSDT"]
+# Safety Lock: Real-time live market analysis & paper trading ONLY.
+# Real order execution on MT5 or Binance remains strictly disabled unless explicitly enabled by user.
+PAPER_TRADING_ONLY = os.getenv("PAPER_TRADING_ONLY", "true").lower() in ("1", "true", "yes")
+
+# Monitored canonical symbols & provider mapping (Binance Demo pairs)
+SYMBOLS = ["XAUUSD", "BTCUSD", "ETHUSD"]
+SYMBOL_PROVIDER_MAP = {
+    "XAUUSD": "PAXG/USDT",
+    "BTCUSD": "BTC/USDT",
+    "ETHUSD": "ETH/USDT",
+}
+CONTEXT_4H_LIMIT = int(os.getenv("CONTEXT_4H_LIMIT", 150))
+CONTEXT_15M_LIMIT = int(os.getenv("CONTEXT_15M_LIMIT", 500))

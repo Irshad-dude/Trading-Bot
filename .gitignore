@@ -67,3 +67,8 @@ Thumbs.db
 .vscode/
 *.swp
 *.swo
+
+# SQLite DB files
+*.db
+*.db-shm
+*.db-wal

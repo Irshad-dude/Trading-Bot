@@ -15,7 +15,11 @@ from backend.ai.analyst import AIAnalyst
 from backend.ai.graph_rag import TradeKnowledgeGraph
 from backend.risk.manager import RiskManager
 from backend.execution.broker import BrokerAdapter
+from backend.execution.paper_monitor import PaperTradeMonitor
+from backend.journal.store import JournalStore
+from backend.live_service import LiveMarketService
 from backend.state import bot, TradeRecord, ScanResult
+from backend.strategy.coordinator import UnifiedStrategyCoordinator
 from backend import config
 
 # ─── App Setup ───────────────────────────────────────────────────────────────
@@ -31,145 +35,38 @@ app.add_middleware(
 
 # ─── Singletons ───────────────────────────────────────────────────────────────
 fetcher = DataFetcher()
-smc     = SMCEngine()
-ai      = AIAnalyst()
-kg      = ai.kg
-risk    = RiskManager()
-broker  = BrokerAdapter()
+smc = SMCEngine()
+ai = AIAnalyst()
+kg = ai.kg
+risk = RiskManager()
+broker = BrokerAdapter()
+journal_store = JournalStore()
+paper_monitor = PaperTradeMonitor(store=journal_store, risk_percent=config.RISK_PERCENT)
+coordinator = UnifiedStrategyCoordinator()
+live_service = LiveMarketService(
+    fetcher=fetcher,
+    coordinator=coordinator,
+    store=journal_store,
+    paper_monitor=paper_monitor,
+    analyst=ai,
+    bot_state=bot,
+)
+
 
 # ─── Autonomous Trading Loop ─────────────────────────────────────────────────
 async def autonomous_trading_loop():
-    logger.info("[SYSTEM] Autonomous trading loop initialised — waiting for engine start.")
+    logger.info("[SYSTEM] Autonomous live analysis loop initialised — waiting for engine start.")
     while True:
         if not bot.is_running:
-            await asyncio.sleep(5)
+            await asyncio.sleep(3)
             continue
 
         try:
-            bot.last_scan_at = datetime.utcnow().isoformat()
-
-            # Sync open positions with active open orders
-            active_orders = await broker.get_open_orders()
-            active_tp_ids = {str(o.get("id")) for o in active_orders}
-            bot.open_positions = [
-                pos for pos in bot.open_positions
-                if str(pos.get("tp_order_id")) in active_tp_ids
-            ]
-
-            bot.add_log(f"Scanning {len(config.SYMBOLS)} symbols (Active positions: {len(bot.open_positions)})...")
-            new_scanner_results = []
-
-            for symbol in config.SYMBOLS:
-                bot.add_log(f"Analysing {symbol}...")
-
-                # ── 1. Fetch Data ─────────────────────────────────────────
-                df_4h  = fetcher.get_market_data(symbol, timeframe="4h",  limit=100)
-                df_15m = fetcher.get_market_data(symbol, timeframe="15m", limit=200, closed_only=True)
-                df_1m  = fetcher.get_market_data(symbol, timeframe="1m",  limit=150)
-
-                if df_15m.empty or df_4h.empty:
-                    bot.add_log(f"No data for {symbol}, skipping.")
-                    continue
-
-                # ── 2. Market Structure Analysis (scanner score on 15M) ──────────
-                trend       = smc.determine_macro_trend(df_4h)
-                df_15m_scan = smc.detect_swings_and_bos(df_15m.copy())
-                fvgs        = smc.detect_fvg(df_15m_scan)
-                recent_bos  = df_15m_scan["bos_type"].iloc[-15:].dropna()
-                last_candle = df_15m.iloc[-1]
-                bos_detected = len(recent_bos) > 0
-                has_active_fvg = len([f for f in fvgs if f["index"] >= len(df_15m_scan) - 15]) > 0
-
-                score = 0
-                if trend != "NEUTRAL":    score += 30
-                if bos_detected:          score += 40
-                if has_active_fvg:        score += 30
-
-                strategy_monitor = smc.diagnose_setup(symbol, df_4h, df_15m)
-
-                new_scanner_results.append(ScanResult(
-                    symbol=symbol,
-                    trend=trend,
-                    sweep_detected=bos_detected,
-                    fvg_type="ACTIVE FVG" if has_active_fvg else None,
-                    setup_score=score,
-                    status="READY" if score >= 70 else "SCANNING",
-                    last_price=float(last_candle["close"]),
-                    timestamp=datetime.utcnow().isoformat(),
-                    strategy_monitor=strategy_monitor,
-                ))
-
-                # ── 3. Signal Detection via Irshad's SMC Strategy ─────────
-                # Pipeline: 4H Trend → IDM → BOS → FVG → Touch → Confirm
-                candidate = smc.scan_for_setups(symbol, df_4h, df_15m)
-                if not candidate:
-                    continue
-
-                bot.add_log(f"Setup: {symbol} {candidate['direction']} — validating with Gemini AI...")
-
-                # ── 4. AI Validation ──────────────────────────────────────
-                candidate = ai.validate_setup(candidate, trend)
-                if candidate.get("graph_rag"):
-                    bot.last_candidate_graph_rag = {
-                        "symbol": symbol,
-                        "direction": candidate.get("direction"),
-                        "setup_reason": candidate.get("setup_reason"),
-                        "ai_decision": candidate.get("ai_decision"),
-                        "ai_confidence": candidate.get("ai_confidence"),
-                        "entry_price": candidate.get("entry_price"),
-                        "stop_loss": candidate.get("stop_loss"),
-                        "take_profit": candidate.get("take_profit"),
-                        "graph_rag": candidate.get("graph_rag"),
-                        "timestamp": datetime.utcnow().isoformat(),
-                    }
-
-                # ── 5. Risk Gate ──────────────────────────────────────────
-                if not risk.validate_trade(candidate):
-                    continue
-
-                # ── 6. Execute via Binance Demo Broker ───────────────────
-                res = await broker.execute_trade(candidate)
-                if res.get("success"):
-                    trade = TradeRecord(
-                        id=res["order_id"],
-                        symbol=symbol,
-                        direction=res["side"],
-                        entry_price=res["price"],
-                        stop_loss=candidate.get("stop_loss", 0),
-                        take_profit=candidate.get("take_profit", 0),
-                        risk_percent=candidate.get("risk_percentage", 0.5),
-                        setup=candidate["setup_reason"],
-                        ai_reasoning=candidate.get("ai_reasoning", ""),
-                        ai_confidence=candidate.get("ai_confidence", 0),
-                        status="EXECUTED",
-                        timestamp=res["timestamp"],
-                        amount=res.get("amount", 0.0),
-                        cost=res.get("cost", 0.0),
-                        order_id=res["order_id"],
-                    )
-                    bot.trade_history.insert(0, trade)
-                    bot.daily_trades_count += 1
-                    bot.total_trades       += 1
-                    if res.get("tp_order_id"):
-                        bot.open_positions.append({
-                            "id": res["order_id"],
-                            "tp_order_id": res.get("tp_order_id"),
-                            "symbol": symbol,
-                            "side": res["side"],
-                            "entry_price": res["price"],
-                            "amount": res.get("amount", 0.0),
-                            "timestamp": res["timestamp"],
-                        })
-                        bot.add_log(
-                            f"OPEN TP ORDER [{symbol}] SELL {res['amount']} "
-                            f"@ ${res['tp_price']:.2f} (ID: {res['tp_order_id']})"
-                        )
-                else:
-                    err_msg = res.get("error", "Unknown error")
-                    bot.add_log(f"ORDER REJECTED [{symbol}]: {err_msg}")
-
-            bot.scanner_results = new_scanner_results
-
+            bot.add_log(
+                f"Live cycle scanning {len(config.SYMBOLS)} pairs "
+                f"(Open Paper Trades: {len(paper_monitor.open_trades)})..."
+            )
+            await asyncio.to_thread(live_service.run_cycle, config.SYMBOLS, True)
         except Exception as e:
             logger.error(f"[SYSTEM] Loop error: {e}")
             bot.add_log(f"ERROR: {e}")
@@ -181,210 +78,186 @@ async def autonomous_trading_loop():
 
 @app.get("/health")
 async def health():
-    return {"status": "ok", "running": bot.is_running}
+    conn = fetcher.get_connection_status()
+    return {
+        "status": "ok",
+        "running": bot.is_running,
+        "paper_trading_only": config.PAPER_TRADING_ONLY,
+        "feed_connected": conn.get("connected", False),
+        "provider": conn.get("provider", "BINANCE_DEMO"),
+    }
 
 
 @app.post("/api/strategy-monitor/scan")
 async def run_strategy_monitor_scan():
-    """Fetch market data and diagnose SMC stages without executing trades."""
-    results = []
-
-    for symbol in config.SYMBOLS:
-        try:
-            df_4h = fetcher.get_market_data(
-                symbol, timeframe="4h", limit=100
-            )
-            df_15m = fetcher.get_market_data(
-                symbol, timeframe="15m", limit=200, closed_only=True
-            )
-
-            if df_4h is None or df_15m is None or df_4h.empty or df_15m.empty:
-                bot.add_log(f"[MONITOR] Insufficient market data: {symbol}")
-                continue
-
-            diagnosis = smc.diagnose_setup(symbol, df_4h, df_15m)
-            fvg_zone = diagnosis.get("fvg_zone") or {}
-
-            results.append(
-                ScanResult(
-                    symbol=symbol,
-                    trend=diagnosis.get("macro_trend") or "NEUTRAL",
-                    sweep_detected=bool(diagnosis.get("idm_level")),
-                    fvg_type=fvg_zone.get("type"),
-                    setup_score=0,
-                    status=diagnosis.get("stage_status") or "WAITING",
-                    last_price=float(df_15m["close"].iloc[-1]),
-                    timestamp=datetime.utcnow().isoformat(),
-                    strategy_monitor=diagnosis,
-                )
-            )
-
-        except Exception as e:
-            logger.exception(f"[MONITOR] Scan failed for {symbol}: {e}")
-            bot.add_log(f"[MONITOR] {symbol} scan failed: {e}")
-
-    bot.scanner_results = results
-    bot.last_scan_at = datetime.utcnow().isoformat()
-
-    return {
-        "mode": "MONITOR_ONLY",
-        "count": len(results),
-        "scanner_results": results,
-    }
+    """Fetch closed market data and diagnose BOTH strategies (paper/analysis mode only)."""
+    try:
+        snapshot = await asyncio.to_thread(live_service.run_cycle, config.SYMBOLS, False)
+        return {
+            "mode": "LIVE_ANALYSIS_PAPER_ONLY",
+            "count": len(bot.scanner_results),
+            "scanner_results": [
+                {
+                    "symbol": s.symbol,
+                    "trend": s.trend,
+                    "sweep_detected": s.sweep_detected,
+                    "fvg_type": s.fvg_type,
+                    "setup_score": s.setup_score,
+                    "status": s.status,
+                    "last_price": s.last_price,
+                    "bid": s.bid,
+                    "ask": s.ask,
+                    "spread": s.spread,
+                    "strategy_monitor": s.strategy_monitor,
+                    "chain_monitor": s.chain_monitor,
+                }
+                for s in bot.scanner_results
+            ],
+            "connection": snapshot.get("connection"),
+        }
+    except Exception as e:
+        logger.exception(f"[MONITOR] Scan failed: {e}")
+        return {"mode": "LIVE_ANALYSIS_PAPER_ONLY", "count": 0, "error": str(e), "scanner_results": []}
 
 
 @app.get("/api/strategy-monitor/candles")
-async def get_strategy_monitor_candles(symbol: str = "BTCUSDT"):
-    """Returns 15M candles and structural SMC anchor levels for the given symbol."""
+async def get_strategy_monitor_candles(symbol: str = "BTCUSD"):
+    """Returns closed 15M candles + live ticker + structural levels for the requested symbol."""
     try:
-        norm_symbol = symbol.upper()
-        df_4h = fetcher.get_market_data(norm_symbol, "4h", limit=100)
-        df_15m = fetcher.get_market_data(norm_symbol, "15m", limit=70, closed_only=True)
-        if df_15m is None or df_15m.empty:
-            return {"error": f"No candles available for {norm_symbol}"}
-
-        diag = smc.diagnose_setup(norm_symbol, df_4h, df_15m)
-        candles = []
-        for idx, row in df_15m.iterrows():
-            candles.append([
-                str(idx),
-                round(float(row["open"]), 2),
-                round(float(row["high"]), 2),
-                round(float(row["low"]), 2),
-                round(float(row["close"]), 2)
-            ])
-
-        n = len(candles)
-        idm_level = diag.get("idm_level")
-        bos_level = diag.get("bos_level")
-        fvg = diag.get("fvg_zone") or {}
-        fvg_top = fvg.get("top")
-        fvg_bottom = fvg.get("bottom")
-        current_price = diag.get("current_price") or candles[-1][4]
-
-        sh_idx = max(0, n - 45)
-        idm_idx = max(sh_idx + 5, n - 35)
-        sweep_idx = max(idm_idx + 4, n - 25)
-        bos_idx = max(sweep_idx + 4, n - 15)
-        c1_idx = max(bos_idx + 1, n - 10)
-        c2_idx = min(n - 1, c1_idx + 1)
-        c3_idx = min(n - 1, c2_idx + 1)
-        entry_idx = max(c3_idx, n - 5)
-        exit_idx = n - 1
-
-        sl = diag.get("stop_loss") or (idm_level if idm_level else current_price * 1.02)
-        tp = diag.get("take_profit") or (current_price - 2 * abs(sl - current_price))
-
-        return {
-            "window_start_global": 0,
-            "window_end_global": n - 1,
-            "local_sh_idx": sh_idx,
-            "local_idm_idx": idm_idx,
-            "local_sweep_idx": sweep_idx,
-            "local_bos_idx": bos_idx,
-            "local_choch_idx": sweep_idx,
-            "local_choch_break_idx": bos_idx,
-            "local_c1_idx": c1_idx,
-            "local_c2_idx": c2_idx,
-            "local_c3_idx": c3_idx,
-            "local_entry_idx": entry_idx,
-            "local_exit_idx": exit_idx,
-            "sh_price": idm_level or (candles[sh_idx][2] if candles else 0),
-            "idm_price": idm_level,
-            "sweep_price": idm_level,
-            "bos_price": bos_level,
-            "bos_level": bos_level,
-            "idm_level": idm_level,
-            "choch_price": 0,
-            "trade_type": "CONTINUATION_BOS",
-            "fvg_top": fvg_top,
-            "fvg_bottom": fvg_bottom,
-            "entry_price": current_price,
-            "stop_loss": sl,
-            "take_profit": tp,
-            "exit_price": current_price,
-            "direction": diag.get("direction") or ("LONG" if diag.get("macro_trend") == "BULLISH" else "SHORT"),
-            "result": "WIN",
-            "angle": 42.5,
-            "candles": candles,
-            "strategy_monitor": diag
-        }
+        return await asyncio.to_thread(live_service.get_live_candles_payload, symbol, 120)
     except Exception as e:
         logger.exception(f"Failed to get strategy monitor candles for {symbol}: {e}")
         return {"error": str(e)}
 
 
+@app.get("/api/live-analysis")
+async def get_live_analysis():
+    """Returns full live market analysis state: connection health, tickers, signals, and paper trades."""
+    return live_service.get_live_snapshot()
+
+
+@app.get("/api/signals")
+async def get_signals(symbol: Optional[str] = None, limit: int = 50):
+    return {"signals": journal_store.list_signals(limit=limit, symbol=symbol)}
+
+
+@app.get("/api/paper-trades")
+async def get_paper_trades(limit: int = 100):
+    return {
+        "paper_trading_only": config.PAPER_TRADING_ONLY,
+        "summary": paper_monitor.get_summary(),
+        "open_trades": paper_monitor.open_trades,
+        "closed_trades": journal_store.get_closed_paper_trades(limit=limit),
+    }
+
+
+class ClosePaperTradeRequest(BaseModel):
+    trade_id: str
+
+
+@app.post("/api/paper-trades/close")
+async def close_paper_trade(req: ClosePaperTradeRequest):
+    closed = paper_monitor.close_manual(req.trade_id)
+    if closed:
+        live_service._sync_bot_state_from_store()
+        return {"status": "closed", "trade": closed, "summary": paper_monitor.get_summary()}
+    return {"status": "not_found", "message": f"Open paper trade {req.trade_id} not found"}
+
+
+@app.post("/api/connection/reconnect")
+async def reconnect_feed():
+    ok = False
+    if hasattr(fetcher.provider, "reconnect"):
+        ok = await asyncio.to_thread(fetcher.provider.reconnect)
+    elif hasattr(fetcher.provider, "connect"):
+        ok = await asyncio.to_thread(fetcher.provider.connect)
+    bot.connection_status = fetcher.get_connection_status()
+    return {"reconnected": ok, "connection": bot.connection_status}
+
+
 @app.get("/api/status")
 async def get_status():
-    open_orders = await broker.get_open_orders()
     return {
-        "is_running":         bot.is_running,
-        "is_paper_trading":   broker.is_paper,
-        "scan_interval":      bot.scan_interval,
-        "risk_percent":       bot.risk_percent,
+        "is_running": bot.is_running,
+        "is_paper_trading": config.PAPER_TRADING_ONLY,
+        "paper_trading_only": config.PAPER_TRADING_ONLY,
+        "scan_interval": bot.scan_interval,
+        "risk_percent": bot.risk_percent,
         "daily_trades_count": bot.daily_trades_count,
-        "total_trades":       bot.total_trades,
-        "wins":               bot.wins,
-        "losses":             bot.losses,
-        "last_scan_at":       bot.last_scan_at,
-        "engine_log":         bot.engine_log,
-        "open_orders":        open_orders,
-        "open_positions":     bot.open_positions,
+        "total_trades": bot.total_trades,
+        "wins": bot.wins,
+        "losses": bot.losses,
+        "last_scan_at": bot.last_scan_at,
+        "engine_log": bot.engine_log,
+        "connection_status": bot.connection_status or fetcher.get_connection_status(),
+        "live_tickers": bot.live_tickers,
+        "paper_summary": paper_monitor.get_summary(),
+        "paper_trades_open": paper_monitor.open_trades,
+        "paper_trades_closed": journal_store.get_closed_paper_trades(limit=50),
+        "recent_signals": journal_store.list_signals(limit=30),
+        "open_orders": bot.open_orders,
+        "open_positions": paper_monitor.open_trades,
         "scanner_results": [
             {
-                "symbol":         s.symbol,
-                "trend":          s.trend,
+                "symbol": s.symbol,
+                "trend": s.trend,
                 "sweep_detected": s.sweep_detected,
-                "fvg_type":       s.fvg_type,
-                "setup_score":    s.setup_score,
-                "status":         s.status,
-                "last_price":     s.last_price,
+                "fvg_type": s.fvg_type,
+                "setup_score": s.setup_score,
+                "status": s.status,
+                "last_price": s.last_price,
+                "bid": s.bid,
+                "ask": s.ask,
+                "spread": s.spread,
                 "strategy_monitor": s.strategy_monitor,
+                "chain_monitor": s.chain_monitor,
             }
             for s in bot.scanner_results
         ],
         "last_candidate_graph_rag": bot.last_candidate_graph_rag,
         "trade_history": [
             {
-                "id":            t.id,
-                "order_id":      getattr(t, "order_id", t.id),
-                "symbol":        t.symbol,
-                "direction":     t.direction,
-                "entry_price":   t.entry_price,
-                "amount":        getattr(t, "amount", 0.0),
-                "cost":          getattr(t, "cost", 0.0),
-                "stop_loss":     t.stop_loss,
-                "take_profit":   t.take_profit,
-                "setup":         t.setup,
+                "id": t.id,
+                "order_id": getattr(t, "order_id", t.id),
+                "symbol": t.symbol,
+                "direction": t.direction,
+                "entry_price": t.entry_price,
+                "amount": getattr(t, "amount", 0.0),
+                "cost": getattr(t, "cost", 0.0),
+                "stop_loss": t.stop_loss,
+                "take_profit": t.take_profit,
+                "setup": t.setup,
                 "ai_confidence": t.ai_confidence,
-                "status":        t.status,
-                "timestamp":     t.timestamp,
+                "status": t.status,
+                "pnl": getattr(t, "pnl", 0.0),
+                "timestamp": t.timestamp,
             }
-            for t in bot.trade_history[:20]
+            for t in bot.trade_history[:50]
         ],
     }
 
 
 class ControlRequest(BaseModel):
-    action:        str            # "start" | "stop"
-    scan_interval: Optional[int]   = None
-    risk_percent:  Optional[float] = None
+    action: str            # "start" | "stop"
+    scan_interval: Optional[int] = None
+    risk_percent: Optional[float] = None
 
 
 @app.post("/api/control")
 async def control_engine(req: ControlRequest):
     if req.action == "start":
-        if req.scan_interval: bot.scan_interval = req.scan_interval
-        if req.risk_percent:  bot.risk_percent  = req.risk_percent
-        bot.is_running         = True
-        bot.daily_trades_count = 0
-        bot.add_log("Engine STARTED by user from dashboard.")
-        logger.info("[SYSTEM] Engine started via frontend.")
-        return {"status": "started"}
+        if req.scan_interval:
+            bot.scan_interval = req.scan_interval
+        if req.risk_percent:
+            bot.risk_percent = req.risk_percent
+        bot.is_running = True
+        bot.add_log("Live Analysis Engine STARTED (Paper Trading Safety Lock ACTIVE).")
+        logger.info("[SYSTEM] Engine started via frontend (PAPER ONLY).")
+        return {"status": "started", "paper_trading_only": config.PAPER_TRADING_ONLY}
 
     if req.action == "stop":
         bot.is_running = False
-        bot.add_log("Engine STOPPED by user.")
+        bot.add_log("Live Analysis Engine STOPPED by user.")
         logger.info("[SYSTEM] Engine stopped via frontend.")
         return {"status": "stopped"}
 
@@ -392,90 +265,95 @@ async def control_engine(req: ControlRequest):
 
 
 class ManualTradeRequest(BaseModel):
-    symbol:    str
+    symbol: str
     direction: str   # "LONG" | "SHORT" | "BUY" | "SELL"
 
 
 @app.post("/api/trade/manual")
 async def manual_trade(req: ManualTradeRequest):
-    trade_data = {
-        "symbol":           req.symbol,
-        "direction":        req.direction,
-        "risk_percentage":  bot.risk_percent,
-        "setup_reason":     "Manual Execution from Web Terminal",
-    }
-    res = await broker.execute_trade(trade_data)
-    if res.get("success"):
-        trade = TradeRecord(
-            id=res["order_id"],
-            symbol=req.symbol,
-            direction=res["side"],
-            entry_price=res["price"],
-            stop_loss=0,
-            take_profit=0,
-            risk_percent=bot.risk_percent,
-            setup="Manual UI Order",
-            ai_reasoning="Manual execution triggered by trader",
-            ai_confidence=100,
-            status="EXECUTED",
-            timestamp=res["timestamp"],
-            amount=res.get("amount", 0.0),
-            cost=res.get("cost", 0.0),
-            order_id=res["order_id"],
-        )
-        bot.trade_history.insert(0, trade)
-        bot.daily_trades_count += 1
-        bot.total_trades       += 1
-        mode_label = "PAPER" if broker.is_paper else "BINANCE"
-        bot.add_log(
-            f"MANUAL EXECUTED [{mode_label}] [{req.symbol}] {res['side']} "
-            f"{res['amount']} @ ${res['price']:.2f} (Order ID: {res['order_id']})"
-        )
-        if res.get("tp_order_id"):
-            bot.open_positions.append({
-                "id": res["order_id"],
-                "tp_order_id": res.get("tp_order_id"),
-                "symbol": req.symbol,
-                "side": res["side"],
-                "entry_price": res["price"],
-                "amount": res.get("amount", 0.0),
-                "timestamp": res["timestamp"],
-            })
-            bot.add_log(
-                f"OPEN TP ORDER [{req.symbol}] SELL {res['amount']} "
-                f"@ ${res['tp_price']:.2f} (ID: {res['tp_order_id']})"
-            )
+    """
+    When PAPER_TRADING_ONLY is True (safety lock), simulates a manual paper trade
+    at live Bid/Ask instead of sending any order to Binance or MT5.
+    """
+    sym = fetcher.normalize_canonical_symbol(req.symbol)
+    ticker = await asyncio.to_thread(fetcher.get_live_ticker, sym)
+    if not ticker.get("connected") or not ticker.get("last"):
+        return {"status": "failed", "message": f"Live feed unavailable for {sym}"}
+
+    side_norm = req.direction.upper()
+    direction = "LONG" if side_norm in ("LONG", "BUY") else "SHORT"
+    action_label = "BUY" if direction == "LONG" else "SELL"
+    entry = float(ticker["ask"] if direction == "LONG" else ticker["bid"]) or float(ticker["last"])
+    sl_dist = max(entry * 0.005, 0.5)
+    sl = entry - sl_dist if direction == "LONG" else entry + sl_dist
+    tp = entry + (sl_dist * 2.0) if direction == "LONG" else entry - (sl_dist * 2.0)
+
+    from backend.strategy.coordinator import StrategySignal
+
+    sig = StrategySignal(
+        signal_id=f"MANUAL_{sym}_{datetime.utcnow().strftime('%Y%m%d%H%M%S%f')}",
+        strategy_name="MANUAL_PAPER",
+        symbol=sym,
+        timeframe="LIVE_TICK",
+        market_trend="MANUAL",
+        direction=direction,
+        action_label=action_label,
+        entry_price=entry,
+        stop_loss=sl,
+        take_profit=tp,
+        risk_reward_ratio=2.0,
+        signal_timestamp=datetime.utcnow().isoformat(),
+        setup_status="ENTRY_TRIGGERED",
+        reasoning=f"Manual UI paper order triggered on {sym} ({action_label} @ {entry:.2f}).",
+        spread_at_signal=float(ticker.get("spread") or 0.0),
+        ai_decision="MANUAL_PAPER",
+        ai_confidence=100,
+    )
+    trade = paper_monitor.process_signal(sig, live_ticker=ticker)
+    if trade:
+        live_service._sync_bot_state_from_store()
+        bot.add_log(f"MANUAL PAPER {action_label} {sym} @ ${entry:.2f} (SL {sl:.2f} / TP {tp:.2f})")
         return {
             "status": "sent",
-            "order_id": res["order_id"],
-            "tp_order_id": res.get("tp_order_id"),
-            "mode": mode_label,
-            "message": f"Successfully executed {res['side']} {res['amount']} {req.symbol} ({mode_label})!",
+            "order_id": trade["trade_id"],
+            "mode": "PAPER_TRADING_ONLY",
+            "message": f"Paper {action_label} opened on {sym} @ ${entry:.2f} (No real money risked).",
         }
-    
-    err = res.get("error", "Unknown error")
-    bot.add_log(f"MANUAL ORDER FAILED [{req.symbol}]: {err}")
-    return {"status": "failed", "message": f"Binance rejected: {err}"}
+    return {
+        "status": "failed",
+        "message": f"Manual paper trade skipped (active MANUAL_PAPER trade already open on {sym}).",
+    }
 
 
 class CancelOrderRequest(BaseModel):
     order_id: str
-    symbol:   str
+    symbol: str
 
 
 @app.post("/api/order/cancel")
 async def cancel_order_api(req: CancelOrderRequest):
-    success = await broker.cancel_order(req.order_id, req.symbol)
-    if success:
-        bot.add_log(f"CANCELED OPEN ORDER on Binance: ID {req.order_id} ({req.symbol})")
-        return {"status": "success", "message": f"Order {req.order_id} canceled successfully"}
-    return {"status": "failed", "message": f"Failed to cancel order {req.order_id} on Binance"}
+    closed = paper_monitor.close_manual(req.order_id)
+    if closed:
+        live_service._sync_bot_state_from_store()
+        bot.add_log(f"CLOSED PAPER POSITION {req.order_id} ({req.symbol}) @ ${closed['exit_price']}")
+        return {"status": "success", "message": f"Paper trade {req.order_id} closed"}
+    return {"status": "failed", "message": f"Paper trade {req.order_id} not found"}
 
 
 @app.get("/api/balance")
 async def get_balance():
-    bal = await broker.get_balance()
-    return {"balances": bal}
+    summary = paper_monitor.get_summary()
+    return {
+        "paper_trading_only": config.PAPER_TRADING_ONLY,
+        "balances": {
+            "USDT": {
+                "total": summary["balance"],
+                "free": summary["balance"],
+                "equity": summary["equity"],
+            }
+        },
+        "summary": summary,
+    }
 
 
 @app.get("/api/backtest")
@@ -602,11 +480,20 @@ async def get_unified_graph_rag():
 
 
 # ─── Startup ──────────────────────────────────────────────────────────────────
+async def _initial_warmup_scan():
+    try:
+        await asyncio.to_thread(live_service.run_cycle, config.SYMBOLS, False)
+        logger.info("[SYSTEM] Initial live market warmup complete (PAPER_TRADING_ONLY=True).")
+    except Exception as e:
+        logger.warning(f"[SYSTEM] Initial warmup scan failed: {e}")
+
+
 @app.on_event("startup")
 async def startup():
-    logger.info("[SYSTEM] Agent Nexus V2 starting up...")
+    logger.info("[SYSTEM] Agent Nexus V2 starting up (Paper Trading Mode Only)...")
+    asyncio.create_task(_initial_warmup_scan())
     asyncio.create_task(autonomous_trading_loop())
-    logger.info("[SYSTEM] Trading loop spawned. Engine is IDLE — start from frontend.")
+    logger.info("[SYSTEM] Live analysis loop spawned. Engine is IDLE — start from frontend.")
 
 
 if __name__ == "__main__":

@@ -46,6 +46,33 @@ interface StrategyMonitor {
   reason: string;
   stop_loss?: number;
   take_profit?: number;
+  choch_level?: number | null;
+  last_angle?: number | null;
+  spread?: number;
+  bid?: number;
+  ask?: number;
+  last_closed_15m_ts?: string;
+  chain_of_choch?: {
+    strategy_name: string;
+    trend: string;
+    stage: string;
+    stage_status: string;
+    idm_level: number | null;
+    bos_level: number | null;
+    choch_level: number | null;
+    last_angle: number | null;
+    rejection_reason?: string | null;
+    reason?: string;
+    pending_fvg?: {
+      direction: string;
+      top: number | null;
+      bottom: number | null;
+      stop_loss: number | null;
+      take_profit: number | null;
+      angle?: number | null;
+      type?: string | null;
+    } | null;
+  } | null;
 }
 
 interface ScanResult {
@@ -56,7 +83,11 @@ interface ScanResult {
   setup_score: number;
   status: string;
   last_price: number;
+  bid?: number;
+  ask?: number;
+  spread?: number;
   strategy_monitor?: StrategyMonitor | null;
+  chain_monitor?: StrategyMonitor['chain_of_choch'];
 }
 
 interface TradeRecord {
@@ -184,8 +215,97 @@ interface OpenOrderRecord {
   timestamp: string;
 }
 
+interface LiveSignalRecord {
+  signal_id: string;
+  strategy_name: string;
+  symbol: string;
+  timeframe: string;
+  market_trend: string;
+  direction: string;
+  action_label: string;
+  idm_level?: number | null;
+  bos_level?: number | null;
+  bos_confirmed?: boolean;
+  choch_info?: {
+    type?: string;
+    choch_price?: number | null;
+    angle?: number | null;
+  } | null;
+  fvg_top?: number | null;
+  fvg_bottom?: number | null;
+  entry_price?: number;
+  stop_loss?: number;
+  take_profit?: number;
+  risk_reward_ratio?: number;
+  signal_timestamp: string;
+  setup_status: string;
+  reasoning: string;
+  rejection_reason?: string | null;
+  spread_at_signal?: number;
+  ai_decision?: string | null;
+  ai_confidence?: number | null;
+  ai_reasoning?: string | null;
+}
+
+interface PaperTradeRecord {
+  trade_id: string;
+  signal_id: string;
+  strategy_name: string;
+  symbol: string;
+  timeframe: string;
+  direction: string;
+  action_label: string;
+  market_trend?: string;
+  entry_price: number;
+  stop_loss: number;
+  take_profit: number;
+  risk_amount: number;
+  position_size: number;
+  current_price: number;
+  unrealized_pnl: number;
+  unrealized_r?: number;
+  realized_pnl: number;
+  mfe: number;
+  mae: number;
+  status: string;
+  lifecycle_stage?: string;
+  exit_condition?: string | null;
+  exit_price?: number | null;
+  final_result?: string | null;
+  reasoning?: string;
+  opened_at: string;
+  closed_at?: string | null;
+}
+
+interface PaperSummary {
+  paper_trading_only: boolean;
+  initial_balance: number;
+  balance: number;
+  equity: number;
+  total_unrealized_pnl: number;
+  total_realized_pnl: number;
+  open_count: number;
+  closed_count: number;
+  wins: number;
+  losses: number;
+  win_rate: number;
+}
+
+interface ConnectionStatus {
+  provider?: string;
+  connected?: boolean;
+  mode?: string;
+  reconnect_count?: number;
+  consecutive_failures?: number;
+  last_heartbeat?: string | null;
+  last_latency_ms?: number | null;
+  last_error?: string | null;
+  mt5_bridge_status?: string;
+}
+
 interface BotStatus {
   is_running: boolean;
+  paper_trading_only?: boolean;
   scan_interval: number;
   risk_percent: number;
   daily_trades_count: number;
@@ -194,6 +314,11 @@ interface BotStatus {
   losses: number;
   last_scan_at: string | null;
   engine_log: string[];
+  connection_status?: ConnectionStatus;
+  paper_summary?: PaperSummary;
+  paper_trades_open?: PaperTradeRecord[];
+  paper_trades_closed?: PaperTradeRecord[];
+  recent_signals?: LiveSignalRecord[];
   open_orders?: OpenOrderRecord[];
   scanner_results: ScanResult[];
   trade_history: TradeRecord[];
@@ -280,7 +405,7 @@ function useBackend() {
     }
   };
 
-  return { status, connected, sendControl, sendManualTrade, cancelOrder };
+  return { status, connected, refreshStatus: fetchStatus, sendControl, sendManualTrade, cancelOrder };
 }
 
 // ─── UI Primitives (Clean Light Minimalist) ──────────────────────────────────
@@ -302,7 +427,9 @@ function Badge({ label, color }: { label: string; color: 'green' | 'red' | 'cyan
 
 // ─── Main Dashboard ───────────────────────────────────────────────────────────
 export default function Dashboard() {
-  const { status, connected, sendControl, sendManualTrade, cancelOrder } = useBackend();
+  const { status, connected, refreshStatus, sendControl, sendManualTrade, cancelOrder } = useBackend();
+  const [liveCandlesBySymbol, setLiveCandlesBySymbol] = useState<Record<string, TradeCandleData>>({});
+  const [scanningNow, setScanningNow] = useState(false);
   const [activeTab, setActiveTab] = useState<'scanner' | 'open_orders' | 'trades' | 'backtest' | 'graph_rag'>('backtest');
   const [targetGraphTradeNum, setTargetGraphTradeNum] = useState<number | undefined>(undefined);
   const [navigatedFromGraph, setNavigatedFromGraph] = useState<boolean>(false);
@@ -366,6 +493,30 @@ export default function Dashboard() {
   const [chartMode, setChartMode] = useState<'visualizer' | 'tradingview'>('visualizer');
   const [hoverCurveIdx, setHoverCurveIdx] = useState<number | null>(null);
   const [scannerChartSymbol, setScannerChartSymbol] = useState<string | null>(null);
+
+  // Fetch real live closed 15M candles + IDM/BOS/CHoCH/FVG overlays when a live symbol chart opens
+  useEffect(() => {
+    if (!scannerChartSymbol) return;
+    let cancelled = false;
+    const fetchLiveCandles = async () => {
+      try {
+        const res = await callBackend(`/strategy-monitor/candles?symbol=${encodeURIComponent(scannerChartSymbol)}`);
+        if (!res.ok) return;
+        const data = await res.json();
+        if (!cancelled && data && Array.isArray(data.candles) && data.candles.length > 0) {
+          setLiveCandlesBySymbol(prev => ({ ...prev, [scannerChartSymbol]: data }));
+        }
+      } catch {
+        // ignore transient poll errors
+      }
+    };
+    fetchLiveCandles();
+    const tid = setInterval(fetchLiveCandles, 15000);
+    return () => {
+      cancelled = true;
+      clearInterval(tid);
+    };
+  }, [scannerChartSymbol]);
 
   const getLiveSmcTradeItem = (symbol: string, monitor?: StrategyMonitor | null): BacktestTrade => {
     const isEth = symbol === 'ETHUSDT';
@@ -846,6 +997,50 @@ export default function Dashboard() {
     setTimeout(() => setTradeToast(null), 4000);
   };
 
+  const handleManualScan = async () => {
+    setScanningNow(true);
+    try {
+      await callBackend('/strategy-monitor/scan', { method: 'POST' });
+      await refreshStatus();
+      setTradeToast('Live market scan completed');
+    } catch {
+      setTradeToast('Live market scan failed');
+    } finally {
+      setScanningNow(false);
+      setTimeout(() => setTradeToast(null), 3500);
+    }
+  };
+
+  const handleReconnectFeed = async () => {
+    try {
+      const res = await callBackend('/connection/reconnect', { method: 'POST' });
+      const data = await res.json();
+      await refreshStatus();
+      setTradeToast(data.reconnected ? 'Live feed reconnected' : 'Reconnect attempted');
+    } catch {
+      setTradeToast('Reconnect failed');
+    } finally {
+      setTimeout(() => setTradeToast(null), 3500);
+    }
+  };
+
+  const handleClosePaperTrade = async (tradeId: string) => {
+    try {
+      const res = await callBackend('/paper-trades/close', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ trade_id: tradeId }),
+      });
+      const data = await res.json();
+      await refreshStatus();
+      setTradeToast(data.status === 'closed' ? `Closed paper trade ${tradeId}` : data.message || 'Close failed');
+    } catch {
+      setTradeToast('Failed to close paper trade');
+    } finally {
+      setTimeout(() => setTradeToast(null), 3500);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-[#f8fafc] text-slate-800 flex flex-col font-sans">
       
@@ -872,8 +1067,15 @@ export default function Dashboard() {
           </div>
 
           <div className="hidden md:flex items-center gap-2 pl-4 border-l border-slate-200 text-[11px] text-slate-500 font-mono">
-            <span className={`w-2 h-2 rounded-full flex-shrink-0 ${connected ? 'bg-emerald-500' : 'bg-rose-500'}`} />
-            <span>{connected ? 'Feed connected' : 'Feed offline'}</span>
+            <span className={`w-2 h-2 rounded-full flex-shrink-0 ${connected && status?.connection_status?.connected !== false ? 'bg-emerald-500' : 'bg-rose-500'}`} />
+            <span>
+              {connected
+                ? `${status?.connection_status?.provider || 'BINANCE_DEMO'} ${status?.connection_status?.last_latency_ms ? `· ${status.connection_status.last_latency_ms}ms` : 'connected'}`
+                : 'Backend offline'}
+            </span>
+            <span className="px-1.5 py-0.5 rounded bg-amber-50 text-amber-800 border border-amber-200 text-[10px] font-semibold">
+              PAPER ONLY
+            </span>
           </div>
         </div>
 
@@ -882,8 +1084,8 @@ export default function Dashboard() {
           {[
             { key: 'backtest', label: `Backtest (${backtestData?.trades?.length ?? '...'})` },
             { key: 'graph_rag', label: 'Trade Brain (Graph RAG)' },
-            { key: 'scanner', label: 'Scanner' },
-            { key: 'open_orders', label: `Orders (${status?.open_orders?.length ?? 0})` },
+            { key: 'scanner', label: 'Live Analysis' },
+            { key: 'open_orders', label: `Paper Open (${status?.paper_trades_open?.length ?? status?.open_orders?.length ?? 0})` },
             { key: 'trades', label: 'Ledger' },
           ].map(tab => (
             <button
@@ -916,14 +1118,14 @@ export default function Dashboard() {
             <span>{status?.is_running ? 'Stop Engine' : 'Start Engine'}</span>
           </button>
 
-          {/* Test Order Button */}
+          {/* Test Paper Order Button */}
           <button
-            onClick={() => handleManualTrade('BTCUSDT', 'BUY')}
+            onClick={() => handleManualTrade('BTCUSD', 'BUY')}
             disabled={!connected}
             className="hidden sm:flex h-8 px-3 rounded-lg text-xs font-mono font-medium bg-slate-900 text-white hover:bg-slate-800 transition-colors items-center gap-1.5 disabled:opacity-40 disabled:cursor-not-allowed"
           >
             <ZapIcon className="w-3 h-3 text-amber-300 flex-shrink-0" />
-            <span>Test Order</span>
+            <span>Test Paper</span>
           </button>
 
           {/* Clock */}
@@ -2124,20 +2326,85 @@ export default function Dashboard() {
             ══════════════════════════════════════════════════════════════════ */}
         {activeTab === 'scanner' && (
           <div className="bg-white border border-slate-200 rounded-xl overflow-hidden shadow-xs">
-            <div className="px-5 py-3.5 border-b border-slate-100 bg-slate-50/70 flex items-center justify-between">
-              <span className="text-xs font-semibold text-slate-700 flex items-center gap-2">
-                <ActivityIcon className="w-3.5 h-3.5 text-slate-700" />
-                Live market scanner
-              </span>
-              <span className={`text-[11px] font-mono px-2 py-0.5 rounded-md border font-medium ${status?.is_running ? 'text-emerald-700 border-emerald-200 bg-emerald-50' : 'text-slate-500 border-slate-200 bg-slate-100'}`}>
-                {status?.is_running ? `Scanning every ${status?.scan_interval}s` : 'Engine idle'}
-              </span>
+            <div className="px-5 py-3.5 border-b border-slate-100 bg-slate-50/70 flex items-center justify-between flex-wrap gap-3">
+              <div className="flex items-center gap-3 flex-wrap">
+                <span className="text-xs font-semibold text-slate-700 flex items-center gap-2">
+                  <ActivityIcon className="w-3.5 h-3.5 text-slate-700" />
+                  Live Market Analysis &amp; Paper Monitor
+                </span>
+                <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-amber-50 text-amber-800 border border-amber-200 font-semibold">
+                  PAPER MODE ONLY · ZERO REAL ORDERS
+                </span>
+                <span className="text-[10px] font-mono text-slate-500">
+                  Feed: {status?.connection_status?.provider || 'BINANCE_DEMO'} · {status?.connection_status?.mt5_bridge_status === 'STANDBY_MACOS_UNSUPPORTED' ? 'MT5 Bridge: Standby' : 'MT5 Ready'}
+                </span>
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={handleManualScan}
+                  disabled={!connected || scanningNow}
+                  className="h-7 px-2.5 rounded-md text-xs font-mono font-medium bg-slate-900 text-white hover:bg-slate-800 disabled:opacity-40 cursor-pointer"
+                >
+                  {scanningNow ? 'Scanning...' : 'Scan Now'}
+                </button>
+                <button
+                  onClick={handleReconnectFeed}
+                  disabled={!connected}
+                  className="h-7 px-2.5 rounded-md text-xs font-mono font-medium bg-white text-slate-700 border border-slate-200 hover:bg-slate-50 disabled:opacity-40 cursor-pointer"
+                >
+                  Reconnect Feed
+                </button>
+                <span className={`text-[11px] font-mono px-2 py-0.5 rounded-md border font-medium ${status?.is_running ? 'text-emerald-700 border-emerald-200 bg-emerald-50' : 'text-slate-500 border-slate-200 bg-slate-100'}`}>
+                  {status?.is_running ? `Scanning every ${status?.scan_interval}s` : 'Engine idle'}
+                </span>
+              </div>
             </div>
+
+            {/* Paper Account & Connection Telemetry Strip */}
+            <div className="px-5 py-3 border-b border-slate-100 bg-white grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 text-xs font-mono">
+              <div className="p-2.5 rounded-lg bg-slate-50 border border-slate-100">
+                <div className="text-[10px] text-slate-400 uppercase">Paper Balance</div>
+                <div className="font-bold text-slate-900 mt-0.5">
+                  ${(status?.paper_summary?.balance ?? 10000).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                </div>
+              </div>
+              <div className="p-2.5 rounded-lg bg-slate-50 border border-slate-100">
+                <div className="text-[10px] text-slate-400 uppercase">Live Equity</div>
+                <div className="font-bold text-slate-900 mt-0.5">
+                  ${(status?.paper_summary?.equity ?? 10000).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                </div>
+              </div>
+              <div className="p-2.5 rounded-lg bg-slate-50 border border-slate-100">
+                <div className="text-[10px] text-slate-400 uppercase">Unrealized P&amp;L</div>
+                <div className={`font-bold mt-0.5 ${(status?.paper_summary?.total_unrealized_pnl ?? 0) >= 0 ? 'text-emerald-700' : 'text-rose-700'}`}>
+                  {(status?.paper_summary?.total_unrealized_pnl ?? 0) >= 0 ? '+' : ''}${(status?.paper_summary?.total_unrealized_pnl ?? 0).toFixed(2)}
+                </div>
+              </div>
+              <div className="p-2.5 rounded-lg bg-slate-50 border border-slate-100">
+                <div className="text-[10px] text-slate-400 uppercase">Realized P&amp;L</div>
+                <div className={`font-bold mt-0.5 ${(status?.paper_summary?.total_realized_pnl ?? 0) >= 0 ? 'text-emerald-700' : 'text-rose-700'}`}>
+                  {(status?.paper_summary?.total_realized_pnl ?? 0) >= 0 ? '+' : ''}${(status?.paper_summary?.total_realized_pnl ?? 0).toFixed(2)}
+                </div>
+              </div>
+              <div className="p-2.5 rounded-lg bg-slate-50 border border-slate-100">
+                <div className="text-[10px] text-slate-400 uppercase">Paper W/L ({status?.paper_summary?.win_rate ?? 0}%)</div>
+                <div className="font-bold text-slate-800 mt-0.5">
+                  {status?.paper_summary?.wins ?? 0}W / {status?.paper_summary?.losses ?? 0}L ({status?.paper_summary?.open_count ?? 0} Open)
+                </div>
+              </div>
+              <div className="p-2.5 rounded-lg bg-slate-50 border border-slate-100">
+                <div className="text-[10px] text-slate-400 uppercase">Feed Health</div>
+                <div className={`font-bold mt-0.5 ${status?.connection_status?.connected ? 'text-emerald-700' : 'text-rose-700'}`}>
+                  {status?.connection_status?.connected ? `ONLINE (${status?.connection_status?.last_latency_ms ?? 0}ms)` : 'OFFLINE'}
+                </div>
+              </div>
+            </div>
+
             <div className="overflow-x-auto">
               <table className="w-full border-collapse">
                 <thead>
                   <tr className="border-b border-slate-200 bg-slate-50/50">
-                    {['Asset', '15m Price', '4H Macro Bias', 'Break of structure', 'Fair value gap', 'SMC score', 'Status', 'Action'].map(h => (
+                    {['Asset', 'Bid / Ask (Spread)', '4H Macro Bias', '15M Chain Structure', 'IDM / BOS / CHoCH', 'Fair value gap', 'Setup Score', 'Status'].map(h => (
                       <th key={h} className="px-4 py-2.5 text-left text-xs font-medium text-slate-500 whitespace-nowrap">{h}</th>
                     ))}
                   </tr>
@@ -2146,62 +2413,59 @@ export default function Dashboard() {
                   {(!status?.scanner_results || status.scanner_results.length === 0) ? (
                     <tr>
                       <td colSpan={8} className="px-5 py-12 text-center text-xs font-mono text-slate-400">
-                        {connected ? 'Start engine to begin scanning markets...' : 'Connect backend to see live scanner data'}
+                        {connected ? 'Click "Scan Now" or "Start Engine" to inspect XAUUSD, BTCUSD, and ETHUSD...' : 'Connect backend to see live scanner data'}
                       </td>
                     </tr>
                   ) : (
-                    status.scanner_results.map(row => (
-                      <tr key={row.symbol} className="hover:bg-slate-50/70 transition-colors">
-                        <td className="px-4 py-3 font-mono font-semibold text-xs text-slate-900">{row.symbol}</td>
-                        <td className="px-4 py-3 font-mono text-xs text-slate-700 tabular-nums">
-                          {row.last_price ? `$${row.last_price.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '—'}
-                        </td>
-                        <td className="px-4 py-3">
-                          <Badge label={row.trend} color={row.trend === 'BULLISH' ? 'green' : row.trend === 'BEARISH' ? 'red' : 'gray'} />
-                        </td>
-                        <td className="px-4 py-3">
-                          {row.sweep_detected
-                            ? <Badge label="BOS Confirmed" color="cyan" />
-                            : <span className="text-xs text-slate-300">—</span>}
-                        </td>
-                        <td className="px-4 py-3">
-                          {row.fvg_type
-                            ? <Badge label="Active FVG" color="green" />
-                            : <span className="text-xs text-slate-300">—</span>}
-                        </td>
-                        <td className="px-4 py-3 w-36">
-                          <div className="flex items-center gap-2">
-                            <div className="flex-1 h-1.5 bg-slate-100 rounded-full overflow-hidden">
-                              <div className={`h-full ${row.setup_score >= 70 ? 'bg-emerald-500' : 'bg-slate-400'}`} style={{ width: `${row.setup_score}%` }} />
-                            </div>
-                            <span className="text-xs font-mono font-medium text-slate-700">{row.setup_score}</span>
-                          </div>
-                        </td>
-                        <td className="px-4 py-3">
-                          <Badge label={row.status} color={row.status === 'WATCHING' ? 'amber' : 'gray'} />
-                        </td>
-                        <td className="px-4 py-3">
-                          {row.setup_score >= 70 ? (
+                    status.scanner_results.map(row => {
+                      const chain = row.chain_monitor || row.strategy_monitor?.chain_of_choch;
+                      const smcMon = row.strategy_monitor;
+                      return (
+                        <tr key={row.symbol} className="hover:bg-slate-50/70 transition-colors">
+                          <td className="px-4 py-3 font-mono font-semibold text-xs text-slate-900">{row.symbol}</td>
+                          <td className="px-4 py-3 font-mono text-xs text-slate-700 tabular-nums">
+                            {row.last_price ? `$${row.last_price.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '—'}
+                            {row.spread != null && (
+                              <span className="block text-[10px] text-slate-400">
+                                Spd: {row.spread.toFixed(2)}
+                              </span>
+                            )}
+                          </td>
+                          <td className="px-4 py-3">
+                            <Badge label={row.trend} color={row.trend === 'BULLISH' ? 'green' : row.trend === 'BEARISH' ? 'red' : 'gray'} />
+                          </td>
+                          <td className="px-4 py-3 font-mono text-xs">
                             <div className="flex items-center gap-1.5">
-                              <button
-                                onClick={() => handleManualTrade(row.symbol, 'LONG')}
-                                className="h-7 px-2.5 text-xs font-medium rounded-md bg-emerald-700 text-white hover:bg-emerald-800 transition-colors"
-                              >
-                                Buy
-                              </button>
-                              <button
-                                onClick={() => handleManualTrade(row.symbol, 'SHORT')}
-                                className="h-7 px-2.5 text-xs font-medium rounded-md bg-rose-700 text-white hover:bg-rose-800 transition-colors"
-                              >
-                                Sell
-                              </button>
+                              <Badge label={chain?.trend || '—'} color={chain?.trend === 'BULLISH' ? 'green' : chain?.trend === 'BEARISH' ? 'red' : 'gray'} />
+                              {chain?.last_angle != null && (
+                                <span className="text-[11px] text-slate-500">{chain.last_angle}°</span>
+                              )}
                             </div>
-                          ) : (
-                            <span className="text-xs text-slate-300">—</span>
-                          )}
-                        </td>
-                      </tr>
-                    ))
+                          </td>
+                          <td className="px-4 py-3 font-mono text-[11px] text-slate-700">
+                            <div>IDM: {(smcMon?.idm_level ?? chain?.idm_level)?.toLocaleString() ?? '—'}</div>
+                            <div>BOS: {(smcMon?.bos_level ?? chain?.bos_level)?.toLocaleString() ?? '—'}</div>
+                            <div>CHoCH: {(smcMon?.choch_level ?? chain?.choch_level)?.toLocaleString() ?? '—'}</div>
+                          </td>
+                          <td className="px-4 py-3">
+                            {row.fvg_type
+                              ? <Badge label={row.fvg_type} color="green" />
+                              : <span className="text-xs text-slate-300">—</span>}
+                          </td>
+                          <td className="px-4 py-3 w-36">
+                            <div className="flex items-center gap-2">
+                              <div className="flex-1 h-1.5 bg-slate-100 rounded-full overflow-hidden">
+                                <div className={`h-full ${row.setup_score >= 70 ? 'bg-emerald-500' : 'bg-slate-400'}`} style={{ width: `${row.setup_score}%` }} />
+                              </div>
+                              <span className="text-xs font-mono font-medium text-slate-700">{row.setup_score}</span>
+                            </div>
+                          </td>
+                          <td className="px-4 py-3">
+                            <Badge label={row.status} color={row.status === 'SIGNAL' ? 'green' : row.status === 'WATCHING' ? 'amber' : 'gray'} />
+                          </td>
+                        </tr>
+                      );
+                    })
                   )}
                 </tbody>
               </table>
@@ -2305,7 +2569,7 @@ export default function Dashboard() {
                             </div>
 
                             <div className="rounded-lg bg-slate-50 p-3">
-                              <div className="text-[10px] uppercase text-slate-400 mb-1">Current Strategy Stage</div>
+                              <div className="text-[10px] uppercase text-slate-400 mb-1">4H + 15M SMC Stage</div>
                               <div className="text-xs font-bold text-slate-800">
                                 {(monitor.stage || 'UNKNOWN').replace(/_/g, ' ')}
                               </div>
@@ -2314,17 +2578,51 @@ export default function Dashboard() {
                               </p>
                             </div>
 
-                            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                            {monitor.chain_of_choch && (
+                              <div className="rounded-lg border border-slate-200 bg-white p-3 space-y-2">
+                                <div className="flex items-center justify-between">
+                                  <span className="text-[10px] font-semibold uppercase text-slate-500">
+                                    15M Chain-of-CHoCH Engine
+                                  </span>
+                                  <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-slate-100 text-slate-700">
+                                    {monitor.chain_of_choch.trend} · {monitor.chain_of_choch.stage_status}
+                                    {monitor.chain_of_choch.last_angle != null ? ` · ${monitor.chain_of_choch.last_angle}°` : ''}
+                                  </span>
+                                </div>
+                                <div className="text-xs text-slate-600">
+                                  {monitor.chain_of_choch.reason}
+                                </div>
+                                {monitor.chain_of_choch.rejection_reason && (
+                                  <div className="text-[11px] font-mono text-rose-700 bg-rose-50 border border-rose-200 rounded px-2 py-1">
+                                    Rejection Reason: {monitor.chain_of_choch.rejection_reason}
+                                  </div>
+                                )}
+                              </div>
+                            )}
+
+                            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                               <div>
                                 <div className="text-[10px] text-slate-400 uppercase">IDM Level</div>
                                 <div className="text-xs font-mono font-medium text-slate-800 mt-1">
-                                  {monitor.idm_level != null ? monitor.idm_level.toLocaleString() : '—'}
+                                  {(monitor.idm_level ?? monitor.chain_of_choch?.idm_level) != null
+                                    ? (monitor.idm_level ?? monitor.chain_of_choch?.idm_level)?.toLocaleString()
+                                    : '—'}
                                 </div>
                               </div>
                               <div>
                                 <div className="text-[10px] text-slate-400 uppercase">BOS Level</div>
                                 <div className="text-xs font-mono font-medium text-slate-800 mt-1">
-                                  {monitor.bos_level != null ? monitor.bos_level.toLocaleString() : '—'}
+                                  {(monitor.bos_level ?? monitor.chain_of_choch?.bos_level) != null
+                                    ? (monitor.bos_level ?? monitor.chain_of_choch?.bos_level)?.toLocaleString()
+                                    : '—'}
+                                </div>
+                              </div>
+                              <div>
+                                <div className="text-[10px] text-slate-400 uppercase">CHoCH Level</div>
+                                <div className="text-xs font-mono font-medium text-slate-800 mt-1">
+                                  {(monitor.choch_level ?? monitor.chain_of_choch?.choch_level) != null
+                                    ? (monitor.choch_level ?? monitor.chain_of_choch?.choch_level)?.toLocaleString()
+                                    : '—'}
                                 </div>
                               </div>
                               <div>
@@ -2431,11 +2729,11 @@ export default function Dashboard() {
                               </div>
                             </div>
 
-                            {/* The Interactive Prepared SMC Chart */}
+                            {/* The Interactive Prepared SMC Chart (Real Live Closed Candles) */}
                             <div className="rounded-xl overflow-hidden border border-slate-200 bg-white shadow-xs">
                               <TradeChartVisualizer
                                 trade={getLiveSmcTradeItem(row.symbol, monitor)}
-                                candleData={getLiveSmcCandleData(row.symbol, monitor)}
+                                candleData={liveCandlesBySymbol[row.symbol] || getLiveSmcCandleData(row.symbol, monitor)}
                                 hasPrev={false}
                                 hasNext={false}
                                 onClose={() => setScannerChartSymbol(null)}
@@ -2446,6 +2744,156 @@ export default function Dashboard() {
                       </div>
                     );
                   })
+                )}
+              </div>
+            </div>
+
+            {/* LIVE PAPER TRADE MONITORING */}
+            <div className="border-t border-slate-200">
+              <div className="px-5 py-3.5 bg-slate-50/70 flex items-center justify-between">
+                <div>
+                  <h3 className="text-sm font-semibold text-slate-900">
+                    Live Paper Trade Monitoring
+                  </h3>
+                  <p className="text-xs text-slate-500 mt-0.5">
+                    Real-time MTM P&amp;L, MFE, MAE, and SL/TP lifecycle (No real broker orders)
+                  </p>
+                </div>
+                <span className="text-xs font-mono text-slate-600">
+                  {status?.paper_trades_open?.length ?? 0} Open · {status?.paper_trades_closed?.length ?? 0} Closed
+                </span>
+              </div>
+              <div className="overflow-x-auto">
+                <table className="w-full border-collapse text-xs font-mono tabular-nums">
+                  <thead>
+                    <tr className="border-b border-slate-200 bg-slate-50/50">
+                      {['Asset', 'Strategy', 'Side', 'Entry', 'Live Price', 'SL / TP', 'Unrealized P&L', 'MFE / MAE', 'Status / Exit', 'Action'].map(h => (
+                        <th key={h} className="px-4 py-2 text-left text-[11px] font-medium text-slate-500 whitespace-nowrap">{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {[...(status?.paper_trades_open || []), ...(status?.paper_trades_closed || []).slice(0, 10)].length === 0 ? (
+                      <tr>
+                        <td colSpan={10} className="px-5 py-8 text-center text-xs text-slate-400">
+                          No active or closed paper trades yet. Engine will paper-trade valid setups automatically when running.
+                        </td>
+                      </tr>
+                    ) : (
+                      [...(status?.paper_trades_open || []), ...(status?.paper_trades_closed || []).slice(0, 10)].map(pt => {
+                        const pnlVal = pt.status === 'CLOSED' ? pt.realized_pnl : pt.unrealized_pnl;
+                        return (
+                          <tr key={pt.trade_id} className="hover:bg-slate-50/70">
+                            <td className="px-4 py-2.5 font-semibold text-slate-900">{pt.symbol}</td>
+                            <td className="px-4 py-2.5 text-[11px] text-slate-600">{pt.strategy_name}</td>
+                            <td className="px-4 py-2.5">
+                              <Badge label={pt.action_label || pt.direction} color={pt.direction === 'LONG' ? 'green' : 'red'} />
+                            </td>
+                            <td className="px-4 py-2.5">${pt.entry_price.toLocaleString(undefined, { maximumFractionDigits: 2 })}</td>
+                            <td className="px-4 py-2.5 font-semibold">${pt.current_price.toLocaleString(undefined, { maximumFractionDigits: 2 })}</td>
+                            <td className="px-4 py-2.5 text-[11px]">
+                              <span className="text-rose-600">SL {pt.stop_loss.toLocaleString()}</span>
+                              <span className="text-slate-300"> / </span>
+                              <span className="text-emerald-600">TP {pt.take_profit.toLocaleString()}</span>
+                            </td>
+                            <td className={`px-4 py-2.5 font-semibold ${pnlVal >= 0 ? 'text-emerald-700' : 'text-rose-700'}`}>
+                              {pnlVal >= 0 ? '+' : ''}${pnlVal.toFixed(2)}
+                            </td>
+                            <td className="px-4 py-2.5 text-[11px]">
+                              <span className="text-emerald-600">+${(pt.mfe ?? 0).toFixed(2)}</span>
+                              <span className="text-slate-300"> / </span>
+                              <span className="text-rose-600">${(pt.mae ?? 0).toFixed(2)}</span>
+                            </td>
+                            <td className="px-4 py-2.5">
+                              <Badge
+                                label={pt.status === 'CLOSED' ? `${pt.final_result || 'CLOSED'} (${pt.exit_condition || ''})` : pt.lifecycle_stage || 'OPEN'}
+                                color={pt.status === 'OPEN' ? 'cyan' : pt.final_result === 'WIN' ? 'green' : 'red'}
+                              />
+                            </td>
+                            <td className="px-4 py-2.5">
+                              {pt.status === 'OPEN' ? (
+                                <button
+                                  onClick={() => handleClosePaperTrade(pt.trade_id)}
+                                  className="h-6 px-2 text-[11px] font-medium rounded bg-slate-800 text-white hover:bg-slate-700 cursor-pointer"
+                                >
+                                  Close Paper
+                                </button>
+                              ) : (
+                                <span className="text-[10px] text-slate-400">
+                                  {pt.closed_at ? new Date(pt.closed_at).toLocaleTimeString() : '—'}
+                                </span>
+                              )}
+                            </td>
+                          </tr>
+                        );
+                      })
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            {/* REAL-TIME SIGNALS & STRATEGY REASONING */}
+            <div className="border-t border-slate-200">
+              <div className="px-5 py-3.5 bg-slate-50/70 flex items-center justify-between">
+                <div>
+                  <h3 className="text-sm font-semibold text-slate-900">
+                    Real-Time Signals &amp; Rejection Log
+                  </h3>
+                  <p className="text-xs text-slate-500 mt-0.5">
+                    Structured IDM, BOS, CHoCH, FVG reasoning and rejection explanations
+                  </p>
+                </div>
+                <span className="text-xs font-mono text-slate-500">
+                  Latest {status?.recent_signals?.length ?? 0} Events
+                </span>
+              </div>
+              <div className="divide-y divide-slate-100 max-h-96 overflow-y-auto">
+                {(!status?.recent_signals || status.recent_signals.length === 0) ? (
+                  <div className="px-5 py-8 text-center text-xs font-mono text-slate-400">
+                    No triggered signals or rejected setups recorded yet.
+                  </div>
+                ) : (
+                  status.recent_signals.map(sig => (
+                    <div key={sig.signal_id} className="px-5 py-3 text-xs space-y-1.5 hover:bg-slate-50/60">
+                      <div className="flex items-center justify-between flex-wrap gap-2">
+                        <div className="flex items-center gap-2 font-mono">
+                          <span className="font-bold text-slate-900">{sig.symbol}</span>
+                          <Badge label={sig.action_label || sig.direction} color={sig.direction === 'LONG' ? 'green' : 'red'} />
+                          <span className="px-1.5 py-0.5 rounded bg-slate-100 text-slate-700 text-[10px]">{sig.strategy_name}</span>
+                          <Badge
+                            label={sig.setup_status}
+                            color={sig.setup_status === 'ENTRY_TRIGGERED' ? 'green' : sig.setup_status === 'REJECTED' ? 'red' : 'amber'}
+                          />
+                        </div>
+                        <span className="text-[11px] font-mono text-slate-400">
+                          {new Date(sig.signal_timestamp).toLocaleString()}
+                        </span>
+                      </div>
+                      <p className="text-slate-700 leading-relaxed">{sig.reasoning}</p>
+                      {sig.rejection_reason && (
+                        <div className="text-[11px] font-mono text-rose-700">
+                          Rejection Reason: {sig.rejection_reason}
+                        </div>
+                      )}
+                      {sig.setup_status === 'ENTRY_TRIGGERED' && (
+                        <div className="flex flex-wrap gap-3 text-[11px] font-mono text-slate-600 pt-0.5">
+                          <span>Entry: ${sig.entry_price?.toLocaleString()}</span>
+                          <span>SL: ${sig.stop_loss?.toLocaleString()}</span>
+                          <span>TP: ${sig.take_profit?.toLocaleString()}</span>
+                          <span>R:R 1:{sig.risk_reward_ratio ?? 2}</span>
+                          {sig.idm_level != null && <span>IDM: {sig.idm_level}</span>}
+                          {sig.bos_level != null && <span>BOS: {sig.bos_level}</span>}
+                          {sig.fvg_bottom != null && sig.fvg_top != null && (
+                            <span>FVG: [{sig.fvg_bottom}–{sig.fvg_top}]</span>
+                          )}
+                          {sig.ai_decision && (
+                            <span className="text-indigo-700">AI: {sig.ai_decision} ({sig.ai_confidence ?? 0}%)</span>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  ))
                 )}
               </div>
             </div>
