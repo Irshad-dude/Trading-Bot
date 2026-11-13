@@ -1,6 +1,8 @@
+import os
 import pandas as pd
 import numpy as np
 from typing import Optional, Dict, List, Any, Tuple
+
 
 
 class SMCEngine:
@@ -65,15 +67,16 @@ class SMCEngine:
         atr = tr.rolling(period).mean().iloc[-1]
         return float(atr) if not np.isnan(atr) else 0.0
 
-    # ─── STEP 1: 4H TREND — swing-point market structure ────────────────────
+    # ─── STEP 1: MACRO TREND — swing-point market structure ────────────────────
     def determine_macro_trend(self, df_4h: pd.DataFrame) -> str:
         """
         Reads Higher Highs / Higher Lows (Bullish) or
-               Lower Lows / Lower Highs (Bearish) from 4H swing structure.
-        Requires at least 30 candles for reliable swing detection.
+               Lower Lows / Lower Highs (Bearish) from HTF swing structure (30M/4H).
+        Requires at least 15 candles for reliable swing detection.
         """
-        if df_4h.empty or len(df_4h) < 30:
+        if df_4h.empty or len(df_4h) < 15:
             return "BULLISH"
+
 
         df = df_4h.copy().reset_index(drop=True)
         n = self.pivot_length
@@ -509,10 +512,13 @@ class SMCEngine:
         Uses the same detection methods as scan_for_setups().
         This method is for dashboard visibility only.
         """
+        ltf_tf = os.getenv("LTF_TIMEFRAME", "1m").upper()
+        htf_tf = os.getenv("HTF_TIMEFRAME", "30m").upper()
         result: Dict[str, Any] = {
             "symbol": symbol,
             "macro_trend": None,
-            "execution_timeframe": "15M",
+            "macro_timeframe": htf_tf,
+            "execution_timeframe": ltf_tf,
             "stage": "INSUFFICIENT_DATA",
             "stage_status": "WAITING",
             "direction": None,
@@ -522,10 +528,10 @@ class SMCEngine:
             "fvg_touched": False,
             "confirm_candle": None,
             "current_price": None,
-            "reason": "Waiting for sufficient 4H and closed 15M candle data.",
+            "reason": f"Waiting for sufficient {htf_tf} and closed {ltf_tf} candle data.",
         }
 
-        if df_4h.empty or df_15m.empty or len(df_4h) < 30 or len(df_15m) < 20:
+        if df_4h.empty or df_15m.empty or len(df_4h) < 15 or len(df_15m) < 15:
             return result
 
         df_4h = df_4h.reset_index(drop=True)
@@ -534,16 +540,17 @@ class SMCEngine:
 
         trend = self.determine_macro_trend(df_4h)
         result["macro_trend"] = trend
-        result["stage"] = "4H_BIAS"
+        result["stage"] = f"{htf_tf}_BIAS"
         result["stage_status"] = "DETECTED"
-        result["reason"] = f"4H macro bias detected: {trend}."
+        result["reason"] = f"{htf_tf} macro bias detected: {trend}."
 
         swing_highs, swing_lows = self._find_swings(df_15m)
         if not swing_highs or not swing_lows:
-            result["stage"] = "15M_SWINGS"
+            result["stage"] = f"{ltf_tf}_SWINGS"
             result["stage_status"] = "WAITING"
-            result["reason"] = "Waiting for valid 15M swing highs and lows."
+            result["reason"] = f"Waiting for valid {ltf_tf} swing highs and lows."
             return result
+
 
         inducement = self.find_inducement(
             df_15m, trend, swing_highs, swing_lows
@@ -674,7 +681,7 @@ class SMCEngine:
 
         If ANY step fails → returns None (no trade).
         """
-        if df_4h.empty or df_15m.empty or len(df_4h) < 30 or len(df_15m) < 20:
+        if df_4h.empty or df_15m.empty or len(df_4h) < 15 or len(df_15m) < 15:
             return None
 
         df_4h  = df_4h.reset_index(drop=True)

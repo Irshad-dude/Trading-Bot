@@ -25,5 +25,15 @@ SYMBOL_PROVIDER_MAP = {
     "BTCUSD": "BTC/USDT",
     "ETHUSD": "ETH/USDT",
 }
-CONTEXT_4H_LIMIT = int(os.getenv("CONTEXT_4H_LIMIT", 150))
-CONTEXT_15M_LIMIT = int(os.getenv("CONTEXT_15M_LIMIT", 500))
+
+# Strategy Analysis & Execution Timeframes
+# User-Configured Testing Resolution: 30M Macro Trend Analysis, 1M Trade Execution
+HTF_TIMEFRAME = os.getenv("HTF_TIMEFRAME", "30m")
+LTF_TIMEFRAME = os.getenv("LTF_TIMEFRAME", "1m")
+
+CONTEXT_HTF_LIMIT = int(os.getenv("CONTEXT_HTF_LIMIT", 200))
+CONTEXT_LTF_LIMIT = int(os.getenv("CONTEXT_LTF_LIMIT", 500))
+
+# Backward compatibility aliases
+CONTEXT_4H_LIMIT = CONTEXT_HTF_LIMIT
+CONTEXT_15M_LIMIT = CONTEXT_LTF_LIMIT

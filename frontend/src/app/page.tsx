@@ -26,6 +26,7 @@ import {
 interface StrategyMonitor {
   symbol: string;
   macro_trend: string | null;
+  macro_timeframe?: string;
   execution_timeframe: string;
   stage: string;
   stage_status: string;
@@ -570,7 +571,7 @@ export default function Dashboard() {
       direction: direction,
       entry_time: isActive ? activePos.opened_at : (liveData?.candles?.[liveData.candles.length - 1]?.[0] ?? new Date().toISOString()),
       entry_price: entryPrice,
-      exit_time: isActive ? 'Active Position' : (hasActiveSetup ? 'Pending Retracement' : 'Scanning 15M Structure'),
+      exit_time: isActive ? 'Active Position' : (hasActiveSetup ? 'Pending Retracement' : `Scanning ${liveData?.timeframe || '1M'} Structure`),
       exit_price: tp,
       stop_loss: sl,
       take_profit: tp,
@@ -583,17 +584,18 @@ export default function Dashboard() {
       setup_reason: isActive
         ? `Active paper position on ${symbol} (${direction} @ $${entryPrice.toLocaleString()})`
         : hasActiveSetup
-        ? `Candidate 15M Setup (${stageName.replace(/_/g, ' ')}) waiting for entry touch @ $${entryPrice.toLocaleString()}`
-        : `Live 15M Market Scanning: No confirmed Break of Structure (BOS) yet · Price oscillating in swing range`,
+        ? `Candidate ${liveData?.timeframe || '1M'} Setup (${stageName.replace(/_/g, ' ')}) waiting for entry touch @ $${entryPrice.toLocaleString()}`
+        : `Live ${liveData?.timeframe || '1M'} Market Scanning: No confirmed Break of Structure (BOS) yet · Price oscillating in swing range`,
       trade_type: liveData?.trade_type ?? (chain?.stage?.includes('REVERSAL') ? 'REVERSAL_CHOCH' : 'CONTINUATION_BOS'),
       bos_level: bosLevel != null ? Number(bosLevel) : undefined,
       idm_level: idmLevel != null ? Number(idmLevel) : undefined,
       fvg_top: fvgTop != null ? Number(fvgTop) : undefined,
       fvg_bottom: fvgBottom != null ? Number(fvgBottom) : undefined,
-      timeframe: '15M',
-      macro_timeframe: '4H',
+      timeframe: liveData?.timeframe ?? '1M',
+      macro_timeframe: liveData?.macro_timeframe ?? '30M',
       '4h_trend': liveData?.macro_trend ?? monitor?.macro_trend ?? chain?.trend ?? 'NEUTRAL',
       four_h_trend: liveData?.macro_trend ?? monitor?.macro_trend ?? chain?.trend ?? 'NEUTRAL',
+
       entry_time_ist: isActive ? 'Active Now' : (hasActiveSetup ? 'Pending Retracement' : 'Scanning Structure'),
       exit_time_ist: hasActiveSetup ? 'Target 1:2' : 'Waiting Breakout',
       angle: Number(liveData?.angle ?? chain?.last_angle ?? 0),
@@ -2366,7 +2368,8 @@ export default function Dashboard() {
               <table className="w-full border-collapse">
                 <thead>
                   <tr className="border-b border-slate-200 bg-slate-50/50">
-                    {['Asset', 'Bid / Ask (Spread)', '4H Macro Bias', '15M Chain Structure', 'IDM / BOS / CHoCH', 'Fair value gap', 'Setup Score', 'Status'].map(h => (
+                    {['Asset', 'Bid / Ask (Spread)', 'Macro Bias (30M)', 'Chain Structure (1M)', 'IDM / BOS / CHoCH', 'Fair value gap', 'Setup Score', 'Status'].map(h => (
+
                       <th key={h} className="px-4 py-2.5 text-left text-xs font-medium text-slate-500 whitespace-nowrap">{h}</th>
                     ))}
                   </tr>
@@ -2441,8 +2444,9 @@ export default function Dashboard() {
                     Live SMC Strategy Monitor
                   </h3>
                   <p className="text-xs text-slate-500 mt-1">
-                    4H bias → 15M IDM → BOS → FVG → Touch → Confirmation
+                    30M bias → 1M IDM → BOS → FVG → Touch → Confirmation
                   </p>
+
                 </div>
                 <span className="text-[10px] font-mono text-slate-500">
                   LIVE DIAGNOSTICS
@@ -2508,7 +2512,7 @@ export default function Dashboard() {
                           <div className="p-4 space-y-4">
                             <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
                               <div>
-                                <div className="text-[10px] text-slate-400 uppercase">4H Macro Bias</div>
+                                <div className="text-[10px] text-slate-400 uppercase">{monitor.macro_timeframe || '30M'} Macro Bias</div>
                                 <div className={`text-xs font-semibold mt-1 ${
                                   monitor.macro_trend === 'BULLISH' ? 'text-emerald-600' :
                                   monitor.macro_trend === 'BEARISH' ? 'text-rose-600' : 'text-slate-600'
@@ -2531,7 +2535,7 @@ export default function Dashboard() {
                             </div>
 
                             <div className="rounded-lg bg-slate-50 p-3">
-                              <div className="text-[10px] uppercase text-slate-400 mb-1">4H + 15M SMC Stage</div>
+                              <div className="text-[10px] uppercase text-slate-400 mb-1">{monitor.macro_timeframe || '30M'} + {monitor.execution_timeframe || '1M'} SMC Stage</div>
                               <div className="text-xs font-bold text-slate-800">
                                 {(monitor.stage || 'UNKNOWN').replace(/_/g, ' ')}
                               </div>
@@ -2544,8 +2548,9 @@ export default function Dashboard() {
                               <div className="rounded-lg border border-slate-200 bg-white p-3 space-y-2">
                                 <div className="flex items-center justify-between">
                                   <span className="text-[10px] font-semibold uppercase text-slate-500">
-                                    15M Chain-of-CHoCH Engine
+                                    {monitor.execution_timeframe || '1M'} Chain-of-CHoCH Engine
                                   </span>
+
                                   <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-slate-100 text-slate-700">
                                     {monitor.chain_of_choch.trend} · {monitor.chain_of_choch.stage_status}
                                     {monitor.chain_of_choch.last_angle != null ? ` · ${monitor.chain_of_choch.last_angle}°` : ''}
@@ -2651,8 +2656,9 @@ export default function Dashboard() {
                                 <div className="flex items-center gap-2">
                                   <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
                                   <span className="text-xs font-bold text-slate-800">
-                                    {row.symbol} 15M SMC Prepared Structure & Zones
+                                    {row.symbol} {monitor?.execution_timeframe || '1M'} SMC Prepared Structure & Zones
                                   </span>
+
                                   <span className="text-[10px] px-2 py-0.5 rounded bg-sky-50 text-sky-700 border border-sky-200 font-mono">
                                     {monitor?.stage || 'CONTINUATION_BOS'}
                                   </span>
@@ -2677,19 +2683,20 @@ export default function Dashboard() {
                                     {hasBos ? (
                                       <>
                                         <div className="p-2 rounded bg-slate-50 border border-slate-100">
-                                          <div className="text-[10px] uppercase text-purple-600 font-medium">15M IDM Level</div>
+                                          <div className="text-[10px] uppercase text-purple-600 font-medium">{monitor?.execution_timeframe || '1M'} IDM Level</div>
                                           <div className="font-mono font-bold text-purple-700 mt-0.5">
                                             {idmLvl != null ? `$${idmLvl.toLocaleString()}` : '—'}
                                           </div>
                                         </div>
                                         <div className="p-2 rounded bg-slate-50 border border-slate-100">
-                                          <div className="text-[10px] uppercase text-sky-600 font-medium">15M BOS Level</div>
+                                          <div className="text-[10px] uppercase text-sky-600 font-medium">{monitor?.execution_timeframe || '1M'} BOS Level</div>
                                           <div className="font-mono font-bold text-sky-700 mt-0.5">
                                             {bosLvl != null ? `$${bosLvl.toLocaleString()}` : '—'}
                                           </div>
                                         </div>
                                         <div className="p-2 rounded bg-slate-50 border border-slate-100">
-                                          <div className="text-[10px] uppercase text-amber-600 font-medium">15M FVG Zone</div>
+                                          <div className="text-[10px] uppercase text-amber-600 font-medium">{monitor?.execution_timeframe || '1M'} FVG Zone</div>
+
                                           <div className="font-mono font-semibold text-amber-800 mt-0.5 text-[11px]">
                                             {fvgTop != null && fvgBot != null
                                               ? `$${Math.min(fvgTop, fvgBot).toLocaleString()} – $${Math.max(fvgTop, fvgBot).toLocaleString()}`

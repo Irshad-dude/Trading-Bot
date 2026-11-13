@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import hashlib
+import os
 from dataclasses import asdict, dataclass, field
+
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -567,44 +569,65 @@ class UnifiedStrategyCoordinator:
     def evaluate_symbol(
         self,
         symbol: str,
-        df_4h_closed: pd.DataFrame,
-        df_15m_closed: pd.DataFrame,
+        df_4h_closed: Optional[pd.DataFrame] = None,
+        df_15m_closed: Optional[pd.DataFrame] = None,
         live_spread: float = 0.0,
         allow_live_entries: bool = True,
+        df_htf_closed: Optional[pd.DataFrame] = None,
+        df_ltf_closed: Optional[pd.DataFrame] = None,
     ) -> Dict[str, Any]:
         """
         Runs BOTH strategies (SMCEngine + ChainOfChochEngine) strictly on closed candles.
         Never reads incomplete/forming candles.
+        Supports customizable testing resolutions (e.g., 30M trend + 1M execution).
         """
         sym = symbol.upper()
         signals: List[StrategySignal] = []
 
-        # ── 1. ChainOfChochEngine (Pure 15M p=4) ──────────────────────────
+        htf_in = df_htf_closed if df_htf_closed is not None else df_4h_closed
+        ltf_in = df_ltf_closed if df_ltf_closed is not None else df_15m_closed
+
+        if htf_in is None or ltf_in is None:
+            return {
+                "symbol": sym,
+                "last_closed_15m_ts": "",
+                "smc_analysis": {},
+                "chain_analysis": {},
+                "signals": [],
+                "events": [],
+            }
+
+        htf_tf = os.getenv("HTF_TIMEFRAME", "30m").upper()
+        ltf_tf = os.getenv("LTF_TIMEFRAME", "1m").upper()
+        timeframe_label = f"{htf_tf} + {ltf_tf}"
+
+        df_htf = _normalize_ts_df(htf_in)
+        df_ltf = _normalize_ts_df(ltf_in)
+
+        # ── 1. ChainOfChochEngine (Pure LTF execution, p=4) ───────────────
         chain_signals, chain_events, chain_diag = self._replay_chain_context(
-            sym, df_15m_closed, allow_live_entries_on_new_bars=allow_live_entries
+            sym, df_ltf, allow_live_entries_on_new_bars=allow_live_entries
         )
         for s in chain_signals:
             s.spread_at_signal = live_spread
+            s.timeframe = ltf_tf
         signals.extend(chain_signals)
 
-        # ── 2. SMCEngine (4H Macro + 15M IDM/BOS/FVG + Confirm Candle) ────
-        df_4h = _normalize_ts_df(df_4h_closed)
-        df_15m = _normalize_ts_df(df_15m_closed)
-
-        smc_diag = self.smc.diagnose_setup(sym, df_4h, df_15m)
+        # ── 2. SMCEngine (HTF Trend + LTF IDM/BOS/FVG + Confirm Candle) ───
+        smc_diag = self.smc.diagnose_setup(sym, df_htf, df_ltf)
         self.last_smc_diagnostics[sym] = smc_diag
 
-        latest_15m_ts = _to_iso_utc(df_15m.iloc[-1]["timestamp"]) if not df_15m.empty else ""
+        latest_ltf_ts = _to_iso_utc(df_ltf.iloc[-1]["timestamp"]) if not df_ltf.empty else ""
         smc_setup = None
         if (
             allow_live_entries
-            and latest_15m_ts
-            and self.last_smc_candle_ts.get(sym) != latest_15m_ts
-            and len(df_4h) >= 20
-            and len(df_15m) >= 30
+            and latest_ltf_ts
+            and self.last_smc_candle_ts.get(sym) != latest_ltf_ts
+            and len(df_htf) >= 15
+            and len(df_ltf) >= 15
         ):
-            smc_setup = self.smc.scan_for_setups(sym, df_4h, df_15m)
-            self.last_smc_candle_ts[sym] = latest_15m_ts
+            smc_setup = self.smc.scan_for_setups(sym, df_htf, df_ltf)
+            self.last_smc_candle_ts[sym] = latest_ltf_ts
 
             if smc_setup:
                 direction = smc_setup["direction"]
@@ -615,10 +638,10 @@ class UnifiedStrategyCoordinator:
                 confirm = smc_setup.get("confirm_candle") or {}
 
                 sig = StrategySignal(
-                    signal_id=build_signal_id("SMC_4H_15M", sym, direction, latest_15m_ts),
-                    strategy_name="SMC_4H_15M",
+                    signal_id=build_signal_id(f"SMC_{htf_tf}_{ltf_tf}", sym, direction, latest_ltf_ts),
+                    strategy_name=f"SMC_{htf_tf}_{ltf_tf}",
                     symbol=sym,
-                    timeframe="4H + 15M",
+                    timeframe=timeframe_label,
                     market_trend=smc_setup.get("macro_trend", smc_diag.get("macro_trend", "NEUTRAL")),
                     direction=direction,
                     action_label=action_label,
@@ -641,7 +664,7 @@ class UnifiedStrategyCoordinator:
                     stop_loss=float(smc_setup["stop_loss"]),
                     take_profit=float(smc_setup["take_profit"]),
                     risk_reward_ratio=float(smc_setup.get("reward_risk_ratio", 2.0)),
-                    signal_timestamp=latest_15m_ts,
+                    signal_timestamp=latest_ltf_ts,
                     setup_status="ENTRY_TRIGGERED",
                     reasoning=smc_setup.get("setup_reason", smc_diag.get("reason", "")),
                     rejection_reason=None,
@@ -657,11 +680,11 @@ class UnifiedStrategyCoordinator:
             elif smc_diag.get("stage_status") == "FAILED":
                 rej_sig = StrategySignal(
                     signal_id=build_signal_id(
-                        "SMC_REJ", sym, smc_diag.get("macro_trend", "NEUTRAL"), latest_15m_ts
+                        "SMC_REJ", sym, smc_diag.get("macro_trend", "NEUTRAL"), latest_ltf_ts
                     ),
-                    strategy_name="SMC_4H_15M",
+                    strategy_name=f"SMC_{htf_tf}_{ltf_tf}",
                     symbol=sym,
-                    timeframe="4H + 15M",
+                    timeframe=timeframe_label,
                     market_trend=smc_diag.get("macro_trend", "NEUTRAL"),
                     direction="LONG" if smc_diag.get("macro_trend") == "BULLISH" else "SHORT",
                     action_label="BUY" if smc_diag.get("macro_trend") == "BULLISH" else "SELL",
@@ -675,7 +698,7 @@ class UnifiedStrategyCoordinator:
                     bos_confirmed=bool(smc_diag.get("bos_level")),
                     fvg_top=(smc_diag.get("fvg_zone") or {}).get("top"),
                     fvg_bottom=(smc_diag.get("fvg_zone") or {}).get("bottom"),
-                    signal_timestamp=latest_15m_ts,
+                    signal_timestamp=latest_ltf_ts,
                     setup_status="REJECTED",
                     reasoning=smc_diag.get("reason", "SMC setup validation failed."),
                     rejection_reason=smc_diag.get("reason"),
@@ -685,9 +708,11 @@ class UnifiedStrategyCoordinator:
 
         return {
             "symbol": sym,
-            "last_closed_15m_ts": latest_15m_ts,
+            "last_closed_15m_ts": latest_ltf_ts,
+            "last_closed_ltf_ts": latest_ltf_ts,
             "smc_analysis": smc_diag,
             "chain_analysis": chain_diag,
             "signals": signals,
             "events": chain_events,
         }
+

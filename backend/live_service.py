@@ -9,6 +9,10 @@ from backend.ai.analyst import AIAnalyst
 from backend.config import (
     CONTEXT_15M_LIMIT,
     CONTEXT_4H_LIMIT,
+    CONTEXT_HTF_LIMIT,
+    CONTEXT_LTF_LIMIT,
+    HTF_TIMEFRAME,
+    LTF_TIMEFRAME,
     PAPER_TRADING_ONLY,
     SYMBOLS,
 )
@@ -199,11 +203,11 @@ class LiveMarketService:
             )
 
         # Fetch strict CLOSED candles only for strategy parity
-        df_4h = self.fetcher.get_market_data(sym, "4h", limit=CONTEXT_4H_LIMIT, closed_only=True)
-        df_15m = self.fetcher.get_market_data(sym, "15m", limit=CONTEXT_15M_LIMIT, closed_only=True)
+        df_htf = self.fetcher.get_market_data(sym, HTF_TIMEFRAME, limit=CONTEXT_HTF_LIMIT, closed_only=True)
+        df_ltf = self.fetcher.get_market_data(sym, LTF_TIMEFRAME, limit=CONTEXT_LTF_LIMIT, closed_only=True)
 
-        if df_4h.empty or df_15m.empty:
-            msg = f"Insufficient closed candles for {sym} (4H={len(df_4h)}, 15M={len(df_15m)}). Signal skipped."
+        if df_htf.empty or df_ltf.empty:
+            msg = f"Insufficient closed candles for {sym} ({HTF_TIMEFRAME.upper()}={len(df_htf)}, {LTF_TIMEFRAME.upper()}={len(df_ltf)}). Signal skipped."
             logger.warning(f"[LiveMarketService] {msg}")
             self.store.log_event("DATA_INCOMPLETE", msg, symbol=sym)
             return {
@@ -224,15 +228,15 @@ class LiveMarketService:
                 ),
             }
 
-        # Check closed-bar exits cleanly on latest closed 15M bar before processing new signals
-        latest_15m = df_15m.iloc[-1]
-        latest_15m_ts = str(latest_15m["timestamp"].isoformat())
-        if self.fetcher.is_new_closed_bar(sym, "15m", df_15m):
+        # Check closed-bar exits cleanly on latest closed LTF bar before processing new signals
+        latest_ltf = df_ltf.iloc[-1]
+        latest_ltf_ts = str(latest_ltf["timestamp"].isoformat())
+        if self.fetcher.is_new_closed_bar(sym, LTF_TIMEFRAME, df_ltf):
             closed_on_bar = self.paper_monitor.update_with_closed_bar(
                 sym,
-                bar_high=float(latest_15m["high"]),
-                bar_low=float(latest_15m["low"]),
-                bar_ts=latest_15m_ts,
+                bar_high=float(latest_ltf["high"]),
+                bar_low=float(latest_ltf["low"]),
+                bar_ts=latest_ltf_ts,
             )
             for cb in closed_on_bar:
                 self.bot_state.log(
@@ -242,11 +246,12 @@ class LiveMarketService:
         # Evaluate BOTH strategies strictly on closed candles
         eval_res = self.coordinator.evaluate_symbol(
             sym,
-            df_4h_closed=df_4h,
-            df_15m_closed=df_15m,
+            df_htf_closed=df_htf,
+            df_ltf_closed=df_ltf,
             live_spread=float(ticker.get("spread") or 0.0),
             allow_live_entries=allow_live_entries,
         )
+
 
         opened_trades: List[Dict[str, Any]] = []
         for sig in eval_res["signals"]:
@@ -282,7 +287,7 @@ class LiveMarketService:
 
         status_label = "SIGNAL" if opened_trades else ("WATCHING" if has_fvg or has_bos else "IDLE")
 
-        # Merge enriched strategy_monitor dict keeping existing UI fields untouched
+        # Enriched strategy_monitor keeping SMC strictly SMC
         enriched_monitor = dict(smc_diag)
         enriched_monitor["current_price"] = live_px
         enriched_monitor["chain_of_choch"] = chain_diag
@@ -291,21 +296,11 @@ class LiveMarketService:
         enriched_monitor["spread"] = ticker.get("spread", 0.0)
         enriched_monitor["bid"] = ticker.get("bid", live_px)
         enriched_monitor["ask"] = ticker.get("ask", live_px)
-        enriched_monitor["last_closed_15m_ts"] = latest_15m_ts
-        if not enriched_monitor.get("fvg_zone") and chain_diag.get("pending_fvg"):
-            pf = chain_diag["pending_fvg"]
-            pf_top = pf.get("top")
-            pf_bottom = pf.get("bottom")
-            if pf_top is not None and pf_bottom is not None:
-                enriched_monitor["fvg_zone"] = {
-                    "type": f"CHAIN_{pf.get('direction', 'NEUTRAL')}_FVG",
-                    "top": float(pf_top),
-                    "bottom": float(pf_bottom),
-                    "midpoint": round((float(pf_top) + float(pf_bottom)) / 2.0, 4),
-                    "sl_price": pf.get("stop_loss"),
-                }
-                enriched_monitor["stop_loss"] = pf.get("stop_loss")
-                enriched_monitor["take_profit"] = pf.get("take_profit")
+        enriched_monitor["last_closed_ltf_ts"] = latest_ltf_ts
+        enriched_monitor["last_closed_15m_ts"] = latest_ltf_ts
+        enriched_monitor["execution_timeframe"] = LTF_TIMEFRAME.upper()
+        enriched_monitor["macro_timeframe"] = HTF_TIMEFRAME.upper()
+
 
         scan_res = ScanResult(
             symbol=sym,
@@ -385,33 +380,43 @@ class LiveMarketService:
             "chain_diagnostics": self.coordinator.last_chain_diagnostics,
         }
 
-    def get_live_candles_payload(self, symbol: str, limit: int = 120) -> Dict[str, Any]:
+    def get_live_candles_payload(
+        self, symbol: str, limit: int = 120, timeframe: Optional[str] = None
+    ) -> Dict[str, Any]:
         sym = self.fetcher.normalize_canonical_symbol(symbol)
-        df_4h = self.fetcher.get_market_data(sym, "4h", limit=CONTEXT_4H_LIMIT, closed_only=True)
-        df_15m_full = self.fetcher.get_market_data(sym, "15m", limit=CONTEXT_15M_LIMIT, closed_only=True)
+        ltf = timeframe or LTF_TIMEFRAME
+        htf = HTF_TIMEFRAME
+        df_htf = self.fetcher.get_market_data(sym, htf, limit=CONTEXT_HTF_LIMIT, closed_only=True)
+        df_ltf_full = self.fetcher.get_market_data(sym, ltf, limit=CONTEXT_LTF_LIMIT, closed_only=True)
         ticker = self.fetcher.get_live_ticker(sym)
 
-        if df_15m_full.empty:
-            return {"symbol": sym, "candles": [], "error": f"No closed 15M candles for {sym}"}
+        if df_ltf_full.empty:
+            return {
+                "symbol": sym,
+                "timeframe": ltf.upper(),
+                "macro_timeframe": htf.upper(),
+                "candles": [],
+                "error": f"No closed {ltf} candles for {sym}",
+            }
 
-        df_15m = df_15m_full.tail(limit).reset_index(drop=True)
-        offset = max(0, len(df_15m_full) - len(df_15m))
+        df_ltf = df_ltf_full.tail(limit).reset_index(drop=True)
+        offset = max(0, len(df_ltf_full) - len(df_ltf))
 
         # Run diagnostics on full closed context without emitting extra trades
         smc_diag = (
-            self.coordinator.smc.diagnose_setup(sym, df_4h, df_15m_full)
-            if not df_4h.empty
+            self.coordinator.smc.diagnose_setup(sym, df_htf, df_ltf_full)
+            if not df_htf.empty
             else {}
         )
         chain_diag = self.coordinator.last_chain_diagnostics.get(sym) or {}
         if not chain_diag:
             eval_res = self.coordinator.evaluate_symbol(
-                sym, df_4h, df_15m_full, live_spread=float(ticker.get("spread") or 0.0), allow_live_entries=False
+                sym, df_htf_closed=df_htf, df_ltf_closed=df_ltf_full, live_spread=float(ticker.get("spread") or 0.0), allow_live_entries=False
             )
             chain_diag = eval_res["chain_analysis"]
 
         candles_list: List[List[Any]] = []
-        for _, row in df_15m.iterrows():
+        for _, row in df_ltf.iterrows():
             ts_str = row["timestamp"].strftime("%Y-%m-%dT%H:%M:%SZ")
             candles_list.append(
                 [
@@ -437,23 +442,36 @@ class LiveMarketService:
         recent_sh: Optional[Dict[str, Any]] = None
         recent_sl: Optional[Dict[str, Any]] = None
         p_len = 4
-        if len(df_15m) >= 2 * p_len + 1:
-            highs = df_15m["high"].values
-            lows = df_15m["low"].values
-            for s in range(p_len, len(df_15m) - p_len):
+        if len(df_ltf) >= 2 * p_len + 1:
+            highs = df_ltf["high"].values
+            lows = df_ltf["low"].values
+            for s in range(p_len, len(df_ltf) - p_len):
                 wh = highs[s - p_len : s + p_len + 1]
                 wl = lows[s - p_len : s + p_len + 1]
                 if highs[s] == wh.max():
                     recent_sh = {
                         "index": int(s),
                         "price": round(float(highs[s]), 4),
-                        "timestamp": df_15m.iloc[s]["timestamp"].strftime("%Y-%m-%dT%H:%M:%SZ"),
+                        "timestamp": df_ltf.iloc[s]["timestamp"].strftime("%Y-%m-%dT%H:%M:%SZ"),
                     }
                 if lows[s] == wl.min():
                     recent_sl = {
                         "index": int(s),
                         "price": round(float(lows[s]), 4),
-                        "timestamp": df_15m.iloc[s]["timestamp"].strftime("%Y-%m-%dT%H:%M:%SZ"),
+                        "timestamp": df_ltf.iloc[s]["timestamp"].strftime("%Y-%m-%dT%H:%M:%SZ"),
+                    }
+
+                if highs[s] == wh.max():
+                    recent_sh = {
+                        "index": int(s),
+                        "price": round(float(highs[s]), 4),
+                        "timestamp": df_ltf.iloc[s]["timestamp"].strftime("%Y-%m-%dT%H:%M:%SZ"),
+                    }
+                if lows[s] == wl.min():
+                    recent_sl = {
+                        "index": int(s),
+                        "price": round(float(lows[s]), 4),
+                        "timestamp": df_ltf.iloc[s]["timestamp"].strftime("%Y-%m-%dT%H:%M:%SZ"),
                     }
 
         has_active_setup = bool(open_trade) or bool(pending_fvg)
@@ -541,7 +559,8 @@ class LiveMarketService:
 
         return {
             "symbol": sym,
-            "timeframe": "15M",
+            "timeframe": ltf.upper(),
+            "macro_timeframe": htf.upper(),
             "macro_trend": smc_diag.get("macro_trend") or chain_diag.get("trend"),
             "direction": direction,
             "trade_type": (open_trade or {}).get("trade_type") or pending_fvg.get("type") or "CONTINUATION_BOS",

@@ -87,6 +87,8 @@ export interface TradeCandleData {
   result?: string;
   angle?: number;
   macro_trend?: string;
+  timeframe?: string;
+  macro_timeframe?: string;
   candles: [string, number, number, number, number][]; // [time, open, high, low, close]
   is_active_trade?: boolean;
   open_trade?: any;
@@ -557,7 +559,7 @@ export default function TradeChartVisualizer({
             </span>
             <span className="text-xs px-2.5 py-0.5 rounded-full font-mono font-bold bg-indigo-50 border border-indigo-200 text-indigo-700 shadow-2xs flex items-center gap-1">
               <ClockIcon className="w-3 h-3 text-indigo-600" />
-              15M Chart
+              {candleData?.timeframe || '1M'} Chart
             </span>
           </div>
 
@@ -580,7 +582,7 @@ export default function TradeChartVisualizer({
               ) : (
                 <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider border flex items-center gap-1.5 font-mono bg-sky-50 text-sky-800 border-sky-300">
                   <span className="w-2 h-2 rounded-full bg-sky-500 animate-pulse" />
-                  <span>🔍 SCANNING 15M RANGE · WAITING FOR BREAKOUT</span>
+                  <span>🔍 SCANNING {candleData?.timeframe || '1M'} RANGE · WAITING FOR BREAKOUT</span>
                 </span>
               )}
               <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider border flex items-center gap-1 font-mono bg-slate-100 text-slate-700 border-slate-300">
@@ -632,16 +634,16 @@ export default function TradeChartVisualizer({
             </span>
           )}
 
-          {/* 4H Trend Direction Badge */}
-          {(trade['4h_trend'] || trade.four_h_trend) && (
+          {/* Trend Direction Badge */}
+          {(trade['4h_trend'] || trade.four_h_trend || candleData?.macro_trend) && (
             <span
               className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider border flex items-center gap-1 font-mono ${
-                (trade['4h_trend'] || trade.four_h_trend) === 'BULLISH'
+                (trade['4h_trend'] || trade.four_h_trend || candleData?.macro_trend) === 'BULLISH'
                   ? 'bg-emerald-100 text-emerald-800 border-emerald-300'
                   : 'bg-rose-100 text-rose-800 border-rose-300'
               }`}
             >
-              <span>🧭 4H: {trade['4h_trend'] || trade.four_h_trend}</span>
+              <span>🧭 {candleData?.macro_timeframe || '30M'}: {trade['4h_trend'] || trade.four_h_trend || candleData?.macro_trend}</span>
             </span>
           )}
 
