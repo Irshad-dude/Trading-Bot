@@ -532,10 +532,12 @@ export default function Dashboard() {
     const activePos = openTrade || liveData?.open_trade;
 
     const currentPrice = liveData?.current_price ?? row.last_price ?? monitor?.current_price ?? 0;
-    const idmLevel = liveData?.idm_level ?? monitor?.idm_level ?? chain?.idm_level;
-    const bosLevel = liveData?.bos_level ?? monitor?.bos_level ?? chain?.bos_level;
-    const fvgTop = liveData?.fvg_top ?? monitor?.fvg_zone?.top;
-    const fvgBottom = liveData?.fvg_bottom ?? monitor?.fvg_zone?.bottom;
+    const hasActiveSetup = isActive || Boolean(liveData?.planned_entry != null && liveData?.local_bos_idx != null);
+
+    const idmLevel = hasActiveSetup ? (liveData?.idm_level ?? activePos?.idm_price) : undefined;
+    const bosLevel = hasActiveSetup ? (liveData?.bos_level ?? activePos?.bos_price) : undefined;
+    const fvgTop = hasActiveSetup ? (liveData?.fvg_top ?? activePos?.fvg_top) : undefined;
+    const fvgBottom = hasActiveSetup ? (liveData?.fvg_bottom ?? activePos?.fvg_bottom) : undefined;
 
     const rawDir = activePos?.direction
       ?? liveData?.direction
@@ -545,15 +547,15 @@ export default function Dashboard() {
 
     const entryPrice = isActive
       ? Number(activePos.entry_price)
-      : (liveData?.planned_entry ?? (direction === 'LONG' ? fvgTop : fvgBottom) ?? currentPrice);
+      : (hasActiveSetup ? Number(liveData?.planned_entry ?? (direction === 'LONG' ? fvgTop : fvgBottom) ?? 0) : 0);
 
     const sl = isActive
       ? Number(activePos.stop_loss)
-      : (liveData?.stop_loss ?? monitor?.stop_loss ?? idmLevel ?? currentPrice);
+      : (hasActiveSetup ? Number(liveData?.stop_loss ?? 0) : 0);
 
     const tp = isActive
       ? Number(activePos.take_profit)
-      : (liveData?.take_profit ?? monitor?.take_profit ?? (entryPrice ? entryPrice + (direction === 'LONG' ? 1 : -1) * 2 * Math.abs(entryPrice - sl) : currentPrice));
+      : (hasActiveSetup ? Number(liveData?.take_profit ?? 0) : 0);
 
     const pnlDollar = isActive ? Number(activePos.unrealized_pnl ?? 0) : 0;
     const riskAmount = Number(activePos?.risk_amount ?? 100);
@@ -568,11 +570,11 @@ export default function Dashboard() {
       direction: direction,
       entry_time: isActive ? activePos.opened_at : (liveData?.candles?.[liveData.candles.length - 1]?.[0] ?? new Date().toISOString()),
       entry_price: entryPrice,
-      exit_time: isActive ? 'Active Position' : 'Pending Retracement',
+      exit_time: isActive ? 'Active Position' : (hasActiveSetup ? 'Pending Retracement' : 'Scanning 15M Structure'),
       exit_price: tp,
       stop_loss: sl,
       take_profit: tp,
-      risk_distance: Math.abs(entryPrice - sl),
+      risk_distance: entryPrice && sl ? Math.abs(entryPrice - sl) : 0,
       rr_ratio: '1:2',
       result: isActive ? 'ACTIVE_OPEN' : 'LIVE_CANDIDATE',
       pnl_percent: pnlPercent,
@@ -580,7 +582,9 @@ export default function Dashboard() {
       running_balance: status?.paper_summary?.balance ?? 10000.0,
       setup_reason: isActive
         ? `Active paper position on ${symbol} (${direction} @ $${entryPrice.toLocaleString()})`
-        : `Live ${symbol} 15M Structure: ${stageName.replace(/_/g, ' ')} (${stageStatus})`,
+        : hasActiveSetup
+        ? `Candidate 15M Setup (${stageName.replace(/_/g, ' ')}) waiting for entry touch @ $${entryPrice.toLocaleString()}`
+        : `Live 15M Market Scanning: No confirmed Break of Structure (BOS) yet · Price oscillating in swing range`,
       trade_type: liveData?.trade_type ?? (chain?.stage?.includes('REVERSAL') ? 'REVERSAL_CHOCH' : 'CONTINUATION_BOS'),
       bos_level: bosLevel != null ? Number(bosLevel) : undefined,
       idm_level: idmLevel != null ? Number(idmLevel) : undefined,
@@ -590,8 +594,8 @@ export default function Dashboard() {
       macro_timeframe: '4H',
       '4h_trend': liveData?.macro_trend ?? monitor?.macro_trend ?? chain?.trend ?? 'NEUTRAL',
       four_h_trend: liveData?.macro_trend ?? monitor?.macro_trend ?? chain?.trend ?? 'NEUTRAL',
-      entry_time_ist: isActive ? 'Active Now' : 'Pending Retracement',
-      exit_time_ist: 'Target 1:2',
+      entry_time_ist: isActive ? 'Active Now' : (hasActiveSetup ? 'Pending Retracement' : 'Scanning Structure'),
+      exit_time_ist: hasActiveSetup ? 'Target 1:2' : 'Waiting Breakout',
       angle: Number(liveData?.angle ?? chain?.last_angle ?? 0),
     };
   };
@@ -2659,33 +2663,62 @@ export default function Dashboard() {
                               </div>
                               {(() => {
                                 const liveCandleData = liveCandlesBySymbol[row.symbol];
-                                const fvgTop = liveCandleData?.fvg_top ?? monitor?.fvg_zone?.top;
-                                const fvgBot = liveCandleData?.fvg_bottom ?? monitor?.fvg_zone?.bottom;
-                                const idmLvl = liveCandleData?.idm_level ?? monitor?.idm_level;
-                                const bosLvl = liveCandleData?.bos_level ?? monitor?.bos_level;
+                                const hasBos = liveCandleData?.local_bos_idx != null && liveCandleData?.bos_level != null;
+                                const fvgTop = liveCandleData?.fvg_top;
+                                const fvgBot = liveCandleData?.fvg_bottom;
+                                const idmLvl = liveCandleData?.idm_level;
+                                const bosLvl = liveCandleData?.bos_level;
                                 const currPx = liveCandleData?.current_price ?? row.last_price ?? monitor?.current_price;
+                                const shPrice = liveCandleData?.recent_swing_high?.price;
+                                const slPrice = liveCandleData?.recent_swing_low?.price;
+
                                 return (
                                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
-                                    <div className="p-2 rounded bg-slate-50 border border-slate-100">
-                                      <div className="text-[10px] uppercase text-purple-600 font-medium">15M IDM Level</div>
-                                      <div className="font-mono font-bold text-purple-700 mt-0.5">
-                                        {idmLvl != null ? `$${idmLvl.toLocaleString()}` : '—'}
-                                      </div>
-                                    </div>
-                                    <div className="p-2 rounded bg-slate-50 border border-slate-100">
-                                      <div className="text-[10px] uppercase text-sky-600 font-medium">15M BOS Level</div>
-                                      <div className="font-mono font-bold text-sky-700 mt-0.5">
-                                        {bosLvl != null ? `$${bosLvl.toLocaleString()}` : '—'}
-                                      </div>
-                                    </div>
-                                    <div className="p-2 rounded bg-slate-50 border border-slate-100">
-                                      <div className="text-[10px] uppercase text-amber-600 font-medium">15M FVG Zone</div>
-                                      <div className="font-mono font-semibold text-amber-800 mt-0.5 text-[11px]">
-                                        {fvgTop != null && fvgBot != null
-                                          ? `$${Math.min(fvgTop, fvgBot).toLocaleString()} – $${Math.max(fvgTop, fvgBot).toLocaleString()}`
-                                          : 'Waiting for FVG'}
-                                      </div>
-                                    </div>
+                                    {hasBos ? (
+                                      <>
+                                        <div className="p-2 rounded bg-slate-50 border border-slate-100">
+                                          <div className="text-[10px] uppercase text-purple-600 font-medium">15M IDM Level</div>
+                                          <div className="font-mono font-bold text-purple-700 mt-0.5">
+                                            {idmLvl != null ? `$${idmLvl.toLocaleString()}` : '—'}
+                                          </div>
+                                        </div>
+                                        <div className="p-2 rounded bg-slate-50 border border-slate-100">
+                                          <div className="text-[10px] uppercase text-sky-600 font-medium">15M BOS Level</div>
+                                          <div className="font-mono font-bold text-sky-700 mt-0.5">
+                                            {bosLvl != null ? `$${bosLvl.toLocaleString()}` : '—'}
+                                          </div>
+                                        </div>
+                                        <div className="p-2 rounded bg-slate-50 border border-slate-100">
+                                          <div className="text-[10px] uppercase text-amber-600 font-medium">15M FVG Zone</div>
+                                          <div className="font-mono font-semibold text-amber-800 mt-0.5 text-[11px]">
+                                            {fvgTop != null && fvgBot != null
+                                              ? `$${Math.min(fvgTop, fvgBot).toLocaleString()} – $${Math.max(fvgTop, fvgBot).toLocaleString()}`
+                                              : 'Waiting for FVG'}
+                                          </div>
+                                        </div>
+                                      </>
+                                    ) : (
+                                      <>
+                                        <div className="p-2 rounded bg-slate-50 border border-slate-100">
+                                          <div className="text-[10px] uppercase text-sky-600 font-medium">Range High (HH)</div>
+                                          <div className="font-mono font-bold text-sky-700 mt-0.5">
+                                            {shPrice != null ? `$${shPrice.toLocaleString()}` : 'Scanning'}
+                                          </div>
+                                        </div>
+                                        <div className="p-2 rounded bg-slate-50 border border-slate-100">
+                                          <div className="text-[10px] uppercase text-rose-600 font-medium">Range Low (LL)</div>
+                                          <div className="font-mono font-bold text-rose-700 mt-0.5">
+                                            {slPrice != null ? `$${slPrice.toLocaleString()}` : 'Scanning'}
+                                          </div>
+                                        </div>
+                                        <div className="p-2 rounded bg-slate-50 border border-slate-100">
+                                          <div className="text-[10px] uppercase text-amber-600 font-medium">Structure Status</div>
+                                          <div className="font-mono font-bold text-amber-800 mt-0.5 text-[11px]">
+                                            Waiting for Breakout
+                                          </div>
+                                        </div>
+                                      </>
+                                    )}
                                     <div className="p-2 rounded bg-slate-50 border border-slate-100">
                                       <div className="text-[10px] uppercase text-slate-500 font-medium">Live Market Price</div>
                                       <div className="font-mono font-bold text-slate-900 mt-0.5">

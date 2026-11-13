@@ -327,67 +327,78 @@ class ChainOfChochEngine:
         # ── Step B: Check Pending FVG Retrace Touch / C1 Extreme Invalidation ─
         if state.active_pos is None and state.pending_fvg is not None:
             f = state.pending_fvg
-            # Strictly evaluate on candles AFTER C3 closed (by timestamp or index)
-            c3_ts = f.get("c3_ts")
-            is_after_c3 = (ts_str > c3_ts) if c3_ts else (i > f.get("c3_idx", -1))
+            c3_idx = f.get("c3_idx", -1)
+            # Expire stale FVG setups if more than 30 closed 15M candles have elapsed without mitigation
+            if c3_idx >= 0 and (i - c3_idx) > 30:
+                reason = f"Pending {f['direction']} FVG expired: 30+ candles ({i - c3_idx}) elapsed without mitigation."
+                state.pending_fvg = None
+                state.last_stage = "SCANNING_STRUCTURE"
+                state.last_stage_status = "WAITING"
+                state.last_rejection_reason = reason
+                events["invalidated_reason"] = reason
 
-            if is_after_c3:
-                if f["direction"] == "LONG":
-                    if c_low <= f["c1_low"]:
-                        reason = f"Pending LONG FVG invalidated: candle low ({c_low:.2f}) breached C1 Low SL ({f['c1_low']:.2f}) before zone touch."
-                        state.pending_fvg = None
-                        state.last_rejection_reason = reason
-                        state.last_stage = "FVG_TOUCH"
-                        state.last_stage_status = "INVALIDATED"
-                        events["invalidated_reason"] = reason
-                    elif c_low <= f["fvg_top"] and c_high >= f["fvg_bottom"]:
-                        entry_p = min(f["fvg_top"], c_open)
-                        sl = float(f["c1_low"])
-                        risk_d = entry_p - sl
-                        if risk_d > 0.05 and allow_entries:
-                            tp = round(entry_p + 2.0 * risk_d, 2)
-                            pos_dict = {
-                                "strategy_name": "CHAIN_OF_CHOCH_15M",
-                                "type": f["type"],
-                                "direction": "LONG",
-                                "entry_time": ts_str,
-                                "entry_price": round(entry_p, 2),
-                                "stop_loss": round(sl, 2),
-                                "take_profit": tp,
-                                "risk_distance": round(risk_d, 4),
-                                "sh_idx": f["sh_idx"],
-                                "sh_price": f["sh_price"],
-                                "idm_idx": f["idm_idx"],
-                                "idm_price": f["idm_price"],
-                                "sweep_idx": f.get("sweep_idx", f["idm_idx"]),
-                                "sweep_price": f.get("sweep_price", f["idm_price"]),
-                                "bos_idx": f["bos_idx"],
-                                "bos_price": f["bos_price"],
-                                "bos_level": f["bos_level"],
-                                "idm_level": f["idm_level"],
-                                "choch_idx": f.get("choch_idx", f["sh_idx"]),
-                                "choch_price": f.get("choch_price", f["bos_level"]),
-                                "choch_break_idx": f.get("choch_break_idx", f["c2_idx"]),
-                                "c1_idx": f["c1_idx"],
-                                "c2_idx": f["c2_idx"],
-                                "c3_idx": f["c3_idx"],
-                                "fvg_top": f["fvg_top"],
-                                "fvg_bottom": f["fvg_bottom"],
-                                "entry_idx": i,
-                                "angle": f.get("angle", 0.0),
-                                "anchor_ts": f.get("anchor_ts", ts_str),
-                            }
-                            state.active_pos = pos_dict
-                            state.pending_fvg = None
-                            state.last_stage = "ENTRY_TRIGGERED"
-                            state.last_stage_status = "TRIGGERED"
-                            state.last_rejection_reason = None
-                            events["triggered_signal"] = pos_dict
-                        elif risk_d <= 0.05:
-                            reason = f"Pending LONG FVG skipped: risk distance ({risk_d:.4f}) <= 0.05 minimum threshold."
+            elif state.pending_fvg is not None:
+                # Strictly evaluate on candles AFTER C3 closed (by timestamp or index)
+                c3_ts = f.get("c3_ts")
+                is_after_c3 = (ts_str > c3_ts) if c3_ts else (i > c3_idx)
+
+                if is_after_c3:
+                    if f["direction"] == "LONG":
+                        if c_low <= f["c1_low"]:
+                            reason = f"Pending LONG FVG invalidated: candle low ({c_low:.2f}) breached C1 Low SL ({f['c1_low']:.2f}) before zone touch."
                             state.pending_fvg = None
                             state.last_rejection_reason = reason
+                            state.last_stage = "FVG_TOUCH"
+                            state.last_stage_status = "INVALIDATED"
                             events["invalidated_reason"] = reason
+                        elif c_low <= f["fvg_top"] and c_high >= f["fvg_bottom"]:
+                            entry_p = min(f["fvg_top"], c_open)
+                            sl = float(f["c1_low"])
+                            risk_d = entry_p - sl
+                            if risk_d > 0.05 and allow_entries:
+                                tp = round(entry_p + 2.0 * risk_d, 2)
+                                pos_dict = {
+                                    "strategy_name": "CHAIN_OF_CHOCH_15M",
+                                    "type": f["type"],
+                                    "direction": "LONG",
+                                    "entry_time": ts_str,
+                                    "entry_price": round(entry_p, 2),
+                                    "stop_loss": round(sl, 2),
+                                    "take_profit": tp,
+                                    "risk_distance": round(risk_d, 4),
+                                    "sh_idx": f["sh_idx"],
+                                    "sh_price": f["sh_price"],
+                                    "idm_idx": f["idm_idx"],
+                                    "idm_price": f["idm_price"],
+                                    "sweep_idx": f.get("sweep_idx", f["idm_idx"]),
+                                    "sweep_price": f.get("sweep_price", f["idm_price"]),
+                                    "bos_idx": f["bos_idx"],
+                                    "bos_price": f["bos_price"],
+                                    "bos_level": f["bos_level"],
+                                    "idm_level": f["idm_level"],
+                                    "choch_idx": f.get("choch_idx", f["sh_idx"]),
+                                    "choch_price": f.get("choch_price", f["bos_level"]),
+                                    "choch_break_idx": f.get("choch_break_idx", f["c2_idx"]),
+                                    "c1_idx": f["c1_idx"],
+                                    "c2_idx": f["c2_idx"],
+                                    "c3_idx": f["c3_idx"],
+                                    "fvg_top": f["fvg_top"],
+                                    "fvg_bottom": f["fvg_bottom"],
+                                    "entry_idx": i,
+                                    "angle": f.get("angle", 0.0),
+                                    "anchor_ts": f.get("anchor_ts", ts_str),
+                                }
+                                state.active_pos = pos_dict
+                                state.pending_fvg = None
+                                state.last_stage = "ENTRY_TRIGGERED"
+                                state.last_stage_status = "TRIGGERED"
+                                state.last_rejection_reason = None
+                                events["triggered_signal"] = pos_dict
+                            elif risk_d <= 0.05:
+                                reason = f"Pending LONG FVG skipped: risk distance ({risk_d:.4f}) <= 0.05 minimum threshold."
+                                state.pending_fvg = None
+                                state.last_rejection_reason = reason
+                                events["invalidated_reason"] = reason
 
                 elif f["direction"] == "SHORT":
                     if c_high >= f["c1_high"]:
