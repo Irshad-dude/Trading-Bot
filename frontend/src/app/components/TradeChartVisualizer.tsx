@@ -79,13 +79,20 @@ export interface TradeCandleData {
   fvg_top?: number;
   fvg_bottom?: number;
   entry_price?: number;
+  planned_entry?: number;
   stop_loss?: number;
   take_profit?: number;
   exit_price?: number;
   direction?: string;
   result?: string;
   angle?: number;
+  macro_trend?: string;
   candles: [string, number, number, number, number][]; // [time, open, high, low, close]
+  is_active_trade?: boolean;
+  open_trade?: any;
+  current_price?: number;
+  setup_stage?: string;
+  stage_status?: string;
 }
 
 interface TradeChartVisualizerProps {
@@ -139,13 +146,18 @@ export default function TradeChartVisualizer({
   const candleSpacing = baseSpacing * zoom;
   const candleBodyWidth = Math.max(4, Math.min(24, candleSpacing * 0.72));
 
-  // Auto-center view on the entry setup candle
+  const isLiveCandidate = trade.result === 'LIVE_CANDIDATE' || candleData?.is_active_trade === false;
+  const isLiveActive = trade.result === 'ACTIVE_OPEN' || candleData?.is_active_trade === true;
+  const isBacktest = !isLiveCandidate && !isLiveActive;
+
+  // Auto-center view on the entry setup candle or latest live candle
   useEffect(() => {
-    const targetCandleX = paddingLeft + entryIdx * candleSpacing + candleSpacing / 2;
+    const centerIdx = isLiveCandidate ? Math.max(0, candleCount - 8) : entryIdx;
+    const targetCandleX = paddingLeft + centerIdx * candleSpacing + candleSpacing / 2;
     const desiredCenter = paddingLeft + chartWidth * 0.45;
     const targetPan = desiredCenter - targetCandleX;
     setPanX(targetPan);
-  }, [trade.trade_num, trade.symbol, entryIdx, candleSpacing, chartWidth]);
+  }, [trade.trade_num, trade.symbol, entryIdx, candleSpacing, chartWidth, isLiveCandidate, candleCount]);
 
   // Drag, Touch and Wheel event handlers for smooth sliding
   const handleMouseDown = (e: React.MouseEvent) => {
@@ -197,7 +209,8 @@ export default function TradeChartVisualizer({
   };
 
   const handleResetPan = () => {
-    const targetCandleX = paddingLeft + entryIdx * candleSpacing + candleSpacing / 2;
+    const centerIdx = isLiveCandidate ? Math.max(0, candleCount - 8) : entryIdx;
+    const targetCandleX = paddingLeft + centerIdx * candleSpacing + candleSpacing / 2;
     const desiredCenter = paddingLeft + chartWidth * 0.45;
     setPanX(desiredCenter - targetCandleX);
     setZoom(1);
@@ -337,9 +350,10 @@ export default function TradeChartVisualizer({
   const displayFvgH = fvgH;
   const displayFvgBottomY = fvgBottomY;
 
-  // FVG Box Horizontal Boundaries (from C1 wick across wait candles to Entry touch)
-  const fvgBoxX1 = Math.min(getX(localC1Idx), getX(localEntryIdx)) - candleBodyWidth / 2;
-  const fvgBoxX2 = Math.max(getX(localC1Idx), getX(localEntryIdx)) + candleBodyWidth / 2;
+  // FVG Box Horizontal Boundaries (from C1 wick across wait candles to Entry touch or current live candle)
+  const rightBoundaryIdx = isLiveCandidate ? Math.max(0, candleCount - 1) : localEntryIdx;
+  const fvgBoxX1 = Math.min(getX(localC1Idx), getX(rightBoundaryIdx)) - candleBodyWidth / 2;
+  const fvgBoxX2 = Math.max(getX(localC1Idx), getX(rightBoundaryIdx)) + candleBodyWidth / 2;
   const fvgBoxW = Math.max(candleSpacing * 2, fvgBoxX2 - fvgBoxX1);
 
   // Price ticks on right axis
@@ -483,7 +497,11 @@ export default function TradeChartVisualizer({
         <div className="flex items-center gap-3">
           <div className="flex items-center gap-2">
             <span className="font-bold font-mono text-slate-900 text-sm tracking-tight">
-              Trade #{trade.trade_num}
+              {isLiveCandidate
+                ? `Candidate: ${trade.symbol}`
+                : isLiveActive
+                ? `Active Position: ${trade.symbol}`
+                : `Trade #${trade.trade_num}`}
             </span>
             <span className="text-xs px-2.5 py-0.5 rounded-full font-mono font-semibold bg-white border border-slate-200 text-slate-700 shadow-2xs">
               {isGold ? '🥇 Gold (XAU/USD)' : isBtc ? '₿ Bitcoin (BTC)' : '⟠ Ethereum (ETH)'}
@@ -503,18 +521,45 @@ export default function TradeChartVisualizer({
             {trade.direction}
           </span>
 
-          <span
-            className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider border flex items-center gap-1 font-mono ${
-              isWin ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-rose-50 text-rose-700 border-rose-200'
-            }`}
-          >
-            {isWin ? <TargetIcon className="w-3 h-3 text-emerald-600" /> : <ShieldCheckIcon className="w-3 h-3 text-rose-600" />}
-            {isWin ? 'TAKE PROFIT HIT (+2R)' : 'STOP LOSS HIT (-1R)'}
-          </span>
+          {isLiveCandidate ? (
+            <>
+              <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider border flex items-center gap-1.5 font-mono bg-amber-50 text-amber-800 border-amber-300">
+                <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse" />
+                <span>{candleData?.stage_status === 'WAITING' ? '⏳ PENDING FVG RETRACEMENT' : `🔍 ${candleData?.setup_stage || 'CANDIDATE SETUP'}`}</span>
+              </span>
+              <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider border flex items-center gap-1 font-mono bg-slate-100 text-slate-700 border-slate-300">
+                NO POSITION OPEN
+              </span>
+              <span className="font-mono text-xs font-semibold px-2 py-0.5 rounded bg-slate-100 text-slate-700 border border-slate-200">
+                Planned R:R 1:2
+              </span>
+            </>
+          ) : isLiveActive ? (
+            <>
+              <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider border flex items-center gap-1.5 font-mono bg-cyan-50 text-cyan-800 border-cyan-300">
+                <span className="w-2 h-2 rounded-full bg-cyan-500 animate-pulse" />
+                <span>ACTIVE POSITION</span>
+              </span>
+              <span className={`font-mono text-xs font-bold tabular-nums px-2 py-0.5 rounded ${trade.pnl_dollar >= 0 ? 'bg-emerald-50 text-emerald-700' : 'bg-rose-50 text-rose-700'}`}>
+                Unrealized P&amp;L: {trade.pnl_dollar >= 0 ? `+$${trade.pnl_dollar.toFixed(2)}` : `-$${Math.abs(trade.pnl_dollar).toFixed(2)}`}
+              </span>
+            </>
+          ) : (
+            <>
+              <span
+                className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider border flex items-center gap-1 font-mono ${
+                  isWin ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-rose-50 text-rose-700 border-rose-200'
+                }`}
+              >
+                {isWin ? <TargetIcon className="w-3 h-3 text-emerald-600" /> : <ShieldCheckIcon className="w-3 h-3 text-rose-600" />}
+                {isWin ? 'TAKE PROFIT HIT (+2R)' : 'STOP LOSS HIT (-1R)'}
+              </span>
 
-          <span className={`font-mono text-xs font-bold tabular-nums px-2 py-0.5 rounded ${trade.pnl_percent >= 0 ? 'bg-emerald-50 text-emerald-700' : 'bg-rose-50 text-rose-700'}`}>
-            {trade.pnl_percent >= 0 ? `+${trade.pnl_percent.toFixed(1)}%` : `${trade.pnl_percent.toFixed(1)}%`} ({trade.pnl_dollar >= 0 ? `+$${trade.pnl_dollar.toFixed(0)}` : `-$${Math.abs(trade.pnl_dollar).toFixed(0)}`})
-          </span>
+              <span className={`font-mono text-xs font-bold tabular-nums px-2 py-0.5 rounded ${trade.pnl_percent >= 0 ? 'bg-emerald-50 text-emerald-700' : 'bg-rose-50 text-rose-700'}`}>
+                {trade.pnl_percent >= 0 ? `+${trade.pnl_percent.toFixed(1)}%` : `${trade.pnl_percent.toFixed(1)}%`} ({trade.pnl_dollar >= 0 ? `+$${trade.pnl_dollar.toFixed(0)}` : `-$${Math.abs(trade.pnl_dollar).toFixed(0)}`})
+              </span>
+            </>
+          )}
 
           {/* Chain-of-CHoCH Setup Type Badge */}
           {(trade.trade_type || candleData?.trade_type) && (
@@ -846,44 +891,57 @@ export default function TradeChartVisualizer({
           <g clipPath="url(#chartAreaClip)">
             {showDrawings && candleData && (
               <>
-                {/* ── TradingView-style Risk/Reward Position Boxes ── */}
-                {/* Green Target Zone: from localEntryIdx to localExitIdx */}
-                <rect
-                  x={getX(localEntryIdx)}
-                  y={Math.min(entryY, tpY)}
-                  width={Math.max(candleSpacing, getX(localExitIdx) - getX(localEntryIdx))}
-                  height={Math.max(2, Math.abs(entryY - tpY))}
-                  fill="url(#tpGradientLight)"
-                  stroke="#10b981"
-                  strokeWidth={1}
-                  strokeDasharray="2 2"
-                  rx={2}
-                />
-                {/* Red Risk Zone: from localEntryIdx to localExitIdx */}
-                <rect
-                  x={getX(localEntryIdx)}
-                  y={Math.min(entryY, slY)}
-                  width={Math.max(candleSpacing, getX(localExitIdx) - getX(localEntryIdx))}
-                  height={Math.max(2, Math.abs(entryY - slY))}
-                  fill="url(#slGradientLight)"
-                  stroke="#ef4444"
-                  strokeWidth={1}
-                  strokeDasharray="2 2"
-                  rx={2}
-                />
+                {/* ── TradingView-style Risk/Reward Position Boxes (Active & Backtest Trades Only) ── */}
+                {!isLiveCandidate && (
+                  <>
+                    {/* Green Target Zone: from localEntryIdx to localExitIdx */}
+                    <rect
+                      x={getX(localEntryIdx)}
+                      y={Math.min(entryY, tpY)}
+                      width={Math.max(candleSpacing, getX(localExitIdx) - getX(localEntryIdx))}
+                      height={Math.max(2, Math.abs(entryY - tpY))}
+                      fill="url(#tpGradientLight)"
+                      stroke="#10b981"
+                      strokeWidth={1}
+                      strokeDasharray="2 2"
+                      rx={2}
+                    />
+                    {/* Red Risk Zone: from localEntryIdx to localExitIdx */}
+                    <rect
+                      x={getX(localEntryIdx)}
+                      y={Math.min(entryY, slY)}
+                      width={Math.max(candleSpacing, getX(localExitIdx) - getX(localEntryIdx))}
+                      height={Math.max(2, Math.abs(entryY - slY))}
+                      fill="url(#slGradientLight)"
+                      stroke="#ef4444"
+                      strokeWidth={1}
+                      strokeDasharray="2 2"
+                      rx={2}
+                    />
+                  </>
+                )}
 
                 {/* ── 1. SMC Real-Wick Zigzag (Snaps directly to exact candle wicks) ── */}
                 {hasBos && hasIdm && (
                   <g className="smc-real-zigzag" opacity={0.88}>
                     <polyline
-                      points={`
-                        ${getX(localShIdx)},${getY(shPrice)}
-                        ${getX(localIdmIdx)},${getY(idmPrice)}
-                        ${getX(localSweepIdx)},${getY(sweepPrice)}
-                        ${getX(localBosIdx)},${getY(bosPrice)}
-                        ${getX(localEntryIdx)},${entryY}
-                        ${getX(localExitIdx)},${isWin ? tpY : slY}
-                      `}
+                      points={
+                        isLiveCandidate
+                          ? `
+                            ${getX(localShIdx)},${getY(shPrice)}
+                            ${getX(localIdmIdx)},${getY(idmPrice)}
+                            ${getX(localSweepIdx)},${getY(sweepPrice)}
+                            ${getX(localBosIdx)},${getY(bosPrice)}
+                          `
+                          : `
+                            ${getX(localShIdx)},${getY(shPrice)}
+                            ${getX(localIdmIdx)},${getY(idmPrice)}
+                            ${getX(localSweepIdx)},${getY(sweepPrice)}
+                            ${getX(localBosIdx)},${getY(bosPrice)}
+                            ${getX(localEntryIdx)},${entryY}
+                            ${getX(localExitIdx)},${isWin ? tpY : slY}
+                          `
+                      }
                       fill="none"
                       stroke="#38bdf8"
                       strokeWidth={2}
@@ -896,7 +954,9 @@ export default function TradeChartVisualizer({
                     <circle cx={getX(localIdmIdx)} cy={getY(idmPrice)} r={3.5} fill="#9333ea" stroke="#ffffff" strokeWidth={1} />
                     <circle cx={getX(localSweepIdx)} cy={getY(sweepPrice)} r={3.5} fill="#a855f7" stroke="#ffffff" strokeWidth={1} />
                     <circle cx={getX(localBosIdx)} cy={getY(bosPrice)} r={3.5} fill="#0284c7" stroke="#ffffff" strokeWidth={1} />
-                    <circle cx={getX(localEntryIdx)} cy={entryY} r={3.5} fill="#16a34a" stroke="#ffffff" strokeWidth={1} />
+                    {!isLiveCandidate && (
+                      <circle cx={getX(localEntryIdx)} cy={entryY} r={3.5} fill="#16a34a" stroke="#ffffff" strokeWidth={1} />
+                    )}
                   </g>
                 )}
 
@@ -1048,22 +1108,24 @@ export default function TradeChartVisualizer({
                 )}
 
 
-                {/* ── 6B. Entry Level Segment (From Entry Candle to Exit Candle) ── */}
+                {/* ── 6B. Entry Level Segment ── */}
                 <g className="entry-clean-segment">
                   <line
-                    x1={getX(localEntryIdx)}
+                    x1={isLiveCandidate ? getX(localC3Idx) : getX(localEntryIdx)}
                     y1={entryY}
-                    x2={getX(localExitIdx)}
+                    x2={isLiveCandidate ? getX(candleCount - 1) + 40 : getX(localExitIdx)}
                     y2={entryY}
-                    stroke="#16a34a"
+                    stroke={isLiveCandidate ? "#d97706" : "#16a34a"}
                     strokeWidth={1.8}
-                    strokeDasharray="3 2"
+                    strokeDasharray={isLiveCandidate ? "4 3" : "3 2"}
                   />
-                  <circle cx={getX(localEntryIdx)} cy={entryY} r={4} fill="#16a34a" stroke="#ffffff" strokeWidth={1.5} />
-                  <g transform={`translate(${getX(localEntryIdx) + 6}, ${entryY - 8})`}>
-                    <rect x={0} y={0} width={82} height={16} rx={3} fill="#16a34a" fillOpacity={0.92} />
-                    <text x={41} y={11} textAnchor="middle" fill="#ffffff" fontSize="8" fontFamily="monospace" fontWeight="bold">
-                      ENTRY ${effectiveEntryPrice.toFixed(1)}
+                  {!isLiveCandidate && (
+                    <circle cx={getX(localEntryIdx)} cy={entryY} r={4} fill="#16a34a" stroke="#ffffff" strokeWidth={1.5} />
+                  )}
+                  <g transform={`translate(${isLiveCandidate ? Math.max(getX(localC3Idx) + 6, getX(candleCount - 1) - 60) : getX(localEntryIdx) + 6}, ${entryY - 8})`}>
+                    <rect x={0} y={0} width={isLiveCandidate ? 116 : 82} height={16} rx={3} fill={isLiveCandidate ? "#d97706" : "#16a34a"} fillOpacity={0.92} />
+                    <text x={isLiveCandidate ? 58 : 41} y={11} textAnchor="middle" fill="#ffffff" fontSize="8" fontFamily="monospace" fontWeight="bold">
+                      {isLiveCandidate ? `PLANNED ENTRY $${effectiveEntryPrice.toFixed(1)}` : `ENTRY $${effectiveEntryPrice.toFixed(1)}`}
                     </text>
                   </g>
                 </g>
@@ -1074,36 +1136,38 @@ export default function TradeChartVisualizer({
                   <line
                     x1={getX(localC1Idx)}
                     y1={slY}
-                    x2={getX(localExitIdx)}
+                    x2={isLiveCandidate ? getX(candleCount - 1) + 40 : getX(localExitIdx)}
                     y2={slY}
                     stroke="#ef4444"
                     strokeWidth={2}
                     strokeDasharray="4 2"
                   />
                   <g transform={`translate(${getX(localC1Idx)}, ${slY + (isLong ? 15 : -8)})`}>
-                    <rect x={-4} y={-8} width={102} height={16} rx={3} fill="#be123c" fillOpacity={0.95} />
-                    <text x={47} y={3.5} textAnchor="middle" fill="#ffffff" fontSize="8" fontFamily="monospace" fontWeight="bold">
-                      SL ${effectiveStopLoss.toFixed(1)} (C1 {isLong ? 'Low' : 'High'})
+                    <rect x={-4} y={-8} width={isLiveCandidate ? 124 : 102} height={16} rx={3} fill="#be123c" fillOpacity={0.95} />
+                    <text x={isLiveCandidate ? 58 : 47} y={3.5} textAnchor="middle" fill="#ffffff" fontSize="8" fontFamily="monospace" fontWeight="bold">
+                      {isLiveCandidate ? `PLANNED SL $${effectiveStopLoss.toFixed(1)} (C1)` : `SL $${effectiveStopLoss.toFixed(1)} (C1 ${isLong ? 'Low' : 'High'})`}
                     </text>
                   </g>
                 </g>
 
-                {/* ── 8. Take Profit Segment (Begins at Entry, extends to Exit - Rule #9) ── */}
+                {/* ── 8. Take Profit Segment (Begins at Entry or C3, extends to Exit or live edge - Rule #9) ── */}
                 <g className="tp-clean-segment">
                   <line
-                    x1={getX(localEntryIdx)}
+                    x1={isLiveCandidate ? getX(localC3Idx) : getX(localEntryIdx)}
                     y1={tpY}
-                    x2={getX(localExitIdx)}
+                    x2={isLiveCandidate ? getX(candleCount - 1) + 40 : getX(localExitIdx)}
                     y2={tpY}
                     stroke="#10b981"
                     strokeWidth={2}
                     strokeDasharray="4 2"
                   />
-                  <circle cx={getX(localExitIdx)} cy={tpY} r={4} fill="#10b981" stroke="#ffffff" strokeWidth={1.5} />
-                  <g transform={`translate(${getX(localEntryIdx)}, ${tpY + (isLong ? -8 : 15)})`}>
-                    <rect x={0} y={-8} width={96} height={16} rx={3} fill="#15803d" fillOpacity={0.95} />
-                    <text x={48} y={3.5} textAnchor="middle" fill="#ffffff" fontSize="8" fontFamily="monospace" fontWeight="bold">
-                      TP ${effectiveTakeProfit.toFixed(1)} (1:2 R:R)
+                  {!isLiveCandidate && (
+                    <circle cx={getX(localExitIdx)} cy={tpY} r={4} fill="#10b981" stroke="#ffffff" strokeWidth={1.5} />
+                  )}
+                  <g transform={`translate(${isLiveCandidate ? Math.max(getX(localC3Idx) + 6, getX(candleCount - 1) - 60) : getX(localEntryIdx)}, ${tpY + (isLong ? -8 : 15)})`}>
+                    <rect x={0} y={-8} width={isLiveCandidate ? 116 : 96} height={16} rx={3} fill="#15803d" fillOpacity={0.95} />
+                    <text x={isLiveCandidate ? 58 : 48} y={3.5} textAnchor="middle" fill="#ffffff" fontSize="8" fontFamily="monospace" fontWeight="bold">
+                      {isLiveCandidate ? `PLANNED TP $${effectiveTakeProfit.toFixed(1)} (1:2)` : `TP $${effectiveTakeProfit.toFixed(1)} (1:2 R:R)`}
                     </text>
                   </g>
                 </g>
@@ -1380,34 +1444,43 @@ export default function TradeChartVisualizer({
       {/* ── Bottom Summary Row (IST Timezone) ── */}
       <div className="px-6 py-3.5 bg-slate-50 border-t border-slate-100 grid grid-cols-2 md:grid-cols-5 gap-4 text-xs font-mono tabular-nums">
         <div>
-          <span className="text-slate-400 block text-[10px] uppercase font-semibold">Entry (IST Kolkata)</span>
+          <span className="text-slate-400 block text-[10px] uppercase font-semibold">
+            {isLiveCandidate ? 'Planned Entry (FVG Boundary)' : 'Entry (IST Kolkata)'}
+          </span>
           <span className="text-slate-700">{trade.entry_time_ist || trade.entry_time.slice(0, 16)}</span>
-          <span className="text-sky-700 font-bold block">${trade.entry_price.toLocaleString()}</span>
+          <span className="text-sky-700 font-bold block">${effectiveEntryPrice.toLocaleString()}</span>
         </div>
         <div>
-          <span className="text-slate-400 block text-[10px] uppercase font-semibold">Exit (IST Kolkata)</span>
+          <span className="text-slate-400 block text-[10px] uppercase font-semibold">
+            {isLiveCandidate ? 'Planned Take Profit (1:2 RR)' : 'Exit (IST Kolkata)'}
+          </span>
           <span className="text-slate-700">{trade.exit_time_ist || trade.exit_time.slice(0, 16)}</span>
-          <span className={isWin ? 'text-emerald-600 font-bold block' : 'text-rose-600 font-bold block'}>
-            ${trade.exit_price.toLocaleString()}
+          <span className={isWin ? 'text-emerald-600 font-bold block' : 'text-slate-700 font-bold block'}>
+            ${effectiveTakeProfit.toLocaleString()}
           </span>
         </div>
         <div>
-          <span className="text-slate-400 block text-[10px] uppercase font-semibold">Stop Loss (1R)</span>
-          <span className="text-rose-600 font-medium">${trade.stop_loss.toLocaleString()}</span>
-          <span className="text-slate-400 text-[10px] block">Risk: ${trade.risk_distance}</span>
+          <span className="text-slate-400 block text-[10px] uppercase font-semibold">
+            {isLiveCandidate ? 'Planned Stop Loss' : 'Stop Loss (1R)'}
+          </span>
+          <span className="text-rose-600 font-medium">${effectiveStopLoss.toLocaleString()}</span>
+          <span className="text-slate-400 text-[10px] block">Risk: ${trade.risk_distance ? trade.risk_distance.toFixed(1) : '—'}</span>
         </div>
         <div>
           <span className="text-slate-400 block text-[10px] uppercase font-semibold">Take Profit (2R)</span>
-          <span className="text-emerald-600 font-medium">${trade.take_profit.toLocaleString()}</span>
-          <span className="text-slate-400 text-[10px] block">Target: ${(trade.risk_distance * 2).toFixed(2)}</span>
+          <span className="text-emerald-600 font-medium">${effectiveTakeProfit.toLocaleString()}</span>
+          <span className="text-slate-400 text-[10px] block">R:R {trade.rr_ratio}</span>
         </div>
         <div>
-          <span className="text-slate-400 block text-[10px] uppercase font-semibold">Result & Duration</span>
-          <span className={`font-bold text-sm block ${isWin ? 'text-emerald-600' : 'text-rose-600'}`}>
-            {trade.result} ({trade.pnl_percent >= 0 ? `+${trade.pnl_percent}%` : `${trade.pnl_percent}%`})
+          <span className="text-slate-400 block text-[10px] uppercase font-semibold">
+            {isLiveCandidate ? 'Setup Status' : 'Result & Duration'}
+          </span>
+          <span className={`font-bold text-sm block ${isLiveCandidate ? 'text-amber-700' : isWin ? 'text-emerald-600' : 'text-rose-600'}`}>
+            {isLiveCandidate ? (candleData?.stage_status || 'WAITING RETRACEMENT') : trade.result}
+            {!isLiveCandidate && ` (${trade.pnl_percent >= 0 ? `+${trade.pnl_percent}%` : `${trade.pnl_percent}%`})`}
           </span>
           <span className="text-slate-500 text-[10px] block">
-            {trade.duration_hours ? `${trade.duration_hours}h duration · ` : ''}Bal: ${trade.running_balance.toLocaleString()}
+            {isLiveCandidate ? 'No position open · Live monitoring' : (trade.duration_hours ? `${trade.duration_hours}h duration · ` : '') + `Bal: $${trade.running_balance.toLocaleString()}`}
           </span>
         </div>
       </div>

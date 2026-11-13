@@ -441,47 +441,80 @@ class LiveMarketService:
         local_c1_idx = _shift_idx(pending_fvg.get("c1_idx"))
         local_c2_idx = _shift_idx(pending_fvg.get("c2_idx"))
         local_c3_idx = _shift_idx(pending_fvg.get("c3_idx"))
-        local_entry_idx = _shift_idx(smc_diag.get("confirm_candle")) or (n - 1 if open_trade else None)
 
         idm_lvl = smc_diag.get("idm_level") or chain_diag.get("idm_level")
         bos_lvl = smc_diag.get("bos_level") or chain_diag.get("bos_level")
-        sl_val = (
-            (open_trade or {}).get("stop_loss")
-            or smc_diag.get("stop_loss")
-            or pending_fvg.get("stop_loss")
+
+        direction = (
+            (open_trade or {}).get("direction")
+            or pending_fvg.get("direction")
+            or smc_diag.get("direction")
+            or ("LONG" if (smc_diag.get("macro_trend") or chain_diag.get("trend")) == "BULLISH" else "SHORT")
         )
-        tp_val = (
-            (open_trade or {}).get("take_profit")
-            or smc_diag.get("take_profit")
-            or pending_fvg.get("take_profit")
-        )
-        entry_val = (
-            (open_trade or {}).get("entry_price")
-            or ticker.get("last")
-            or (candles_list[-1][4] if candles_list else None)
-        )
+
+        # Compute planned limit entry strictly at FVG boundary (Rule #8/9)
+        fvg_top_val = fvg_zone.get("top")
+        fvg_bot_val = fvg_zone.get("bottom")
+        has_fvg = fvg_top_val is not None and fvg_bot_val is not None
+
+        planned_entry: Optional[float] = None
+        if has_fvg:
+            planned_entry = float(fvg_top_val) if direction == "LONG" else float(fvg_bot_val)
+
+        sl_val: Optional[float] = None
+        tp_val: Optional[float] = None
+        entry_val: Optional[float] = None
+        local_entry_idx: Optional[int] = None
+
+        if open_trade:
+            # Active paper position is genuinely OPEN
+            entry_val = float(open_trade["entry_price"])
+            sl_val = float(open_trade["stop_loss"])
+            tp_val = float(open_trade["take_profit"])
+            local_entry_idx = _shift_idx(open_trade.get("entry_idx")) or (n - 1)
+        elif has_fvg:
+            # Candidate structure waiting for retracement touch: planned levels only
+            entry_val = planned_entry
+            sl_val = (
+                pending_fvg.get("stop_loss")
+                or smc_diag.get("stop_loss")
+            )
+            tp_val = (
+                pending_fvg.get("take_profit")
+                or smc_diag.get("take_profit")
+            )
+            # local_entry_idx remains None because trade has not entered yet!
+            local_entry_idx = None
+        else:
+            entry_val = None
+            sl_val = smc_diag.get("stop_loss") or idm_lvl
+            tp_val = smc_diag.get("take_profit")
+            local_entry_idx = None
+
+        current_px = float(ticker.get("last") or (candles_list[-1][4] if candles_list else 0.0))
 
         return {
             "symbol": sym,
             "timeframe": "15M",
             "macro_trend": smc_diag.get("macro_trend") or chain_diag.get("trend"),
-            "direction": (
-                (open_trade or {}).get("direction")
-                or smc_diag.get("direction")
-                or pending_fvg.get("direction")
-                or ("LONG" if (smc_diag.get("macro_trend") or chain_diag.get("trend")) == "BULLISH" else "SHORT")
-            ),
+            "direction": direction,
             "trade_type": pending_fvg.get("type") or "CONTINUATION_BOS",
             "idm_level": idm_lvl,
             "idm_price": idm_lvl,
             "bos_level": bos_lvl,
             "bos_price": bos_lvl,
             "choch_price": chain_diag.get("choch_level"),
-            "fvg_top": fvg_zone.get("top"),
-            "fvg_bottom": fvg_zone.get("bottom"),
+            "fvg_top": fvg_top_val,
+            "fvg_bottom": fvg_bot_val,
             "entry_price": entry_val,
+            "planned_entry": planned_entry,
             "stop_loss": sl_val,
             "take_profit": tp_val,
+            "is_active_trade": bool(open_trade),
+            "open_trade": open_trade,
+            "current_price": current_px,
+            "setup_stage": chain_diag.get("stage") or smc_diag.get("stage") or "SCANNING",
+            "stage_status": chain_diag.get("stage_status") or smc_diag.get("stage_status") or "WAITING",
             "angle": pending_fvg.get("angle") or chain_diag.get("last_angle"),
             "local_bos_idx": local_bos_idx,
             "local_c1_idx": local_c1_idx,

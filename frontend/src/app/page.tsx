@@ -518,114 +518,81 @@ export default function Dashboard() {
     };
   }, [scannerChartSymbol]);
 
-  const getLiveSmcTradeItem = (symbol: string, monitor?: StrategyMonitor | null): BacktestTrade => {
-    const isEth = symbol === 'ETHUSDT';
-    const currentPrice = monitor?.current_price ?? (isEth ? 2091.68 : 74017.17);
-    const idmLevel = monitor?.idm_level ?? (isEth ? 2151.49 : 75494.01);
-    const bosLevel = monitor?.bos_level ?? (isEth ? 2117.89 : 74477.79);
-    const fvgTop = monitor?.fvg_zone?.top ?? (isEth ? 2119.96 : undefined);
-    const fvgBottom = monitor?.fvg_zone?.bottom ?? (isEth ? 2117.35 : undefined);
-    const sl = monitor?.stop_loss ?? monitor?.fvg_zone?.sl_price ?? idmLevel;
-    const tp = monitor?.take_profit ?? (currentPrice - 2 * Math.abs(sl - currentPrice));
-    const rawDir = monitor?.direction ?? (monitor?.macro_trend === 'BULLISH' ? 'LONG' : 'SHORT');
+  const getLiveChartTradeItem = (
+    symbol: string,
+    row: ScanResult,
+    liveData?: TradeCandleData | null
+  ): BacktestTrade => {
+    const isEth = symbol === 'ETHUSD' || symbol === 'ETHUSDT';
+    const monitor = row.strategy_monitor;
+    const chain = row.chain_monitor || monitor?.chain_of_choch;
+
+    const openTrade = (status?.paper_trades_open || []).find(t => t.symbol === symbol);
+    const isActive = Boolean(openTrade || liveData?.is_active_trade);
+    const activePos = openTrade || liveData?.open_trade;
+
+    const currentPrice = liveData?.current_price ?? row.last_price ?? monitor?.current_price ?? 0;
+    const idmLevel = liveData?.idm_level ?? monitor?.idm_level ?? chain?.idm_level;
+    const bosLevel = liveData?.bos_level ?? monitor?.bos_level ?? chain?.bos_level;
+    const fvgTop = liveData?.fvg_top ?? monitor?.fvg_zone?.top;
+    const fvgBottom = liveData?.fvg_bottom ?? monitor?.fvg_zone?.bottom;
+
+    const rawDir = activePos?.direction
+      ?? liveData?.direction
+      ?? monitor?.direction
+      ?? (monitor?.macro_trend === 'BULLISH' || chain?.trend === 'BULLISH' ? 'LONG' : 'SHORT');
     const direction = rawDir === 'BULLISH' ? 'LONG' : rawDir === 'BEARISH' ? 'SHORT' : rawDir;
+
+    const entryPrice = isActive
+      ? Number(activePos.entry_price)
+      : (liveData?.planned_entry ?? (direction === 'LONG' ? fvgTop : fvgBottom) ?? currentPrice);
+
+    const sl = isActive
+      ? Number(activePos.stop_loss)
+      : (liveData?.stop_loss ?? monitor?.stop_loss ?? idmLevel ?? currentPrice);
+
+    const tp = isActive
+      ? Number(activePos.take_profit)
+      : (liveData?.take_profit ?? monitor?.take_profit ?? (entryPrice ? entryPrice + (direction === 'LONG' ? 1 : -1) * 2 * Math.abs(entryPrice - sl) : currentPrice));
+
+    const pnlDollar = isActive ? Number(activePos.unrealized_pnl ?? 0) : 0;
+    const riskAmount = Number(activePos?.risk_amount ?? 100);
+    const pnlPercent = isActive && riskAmount > 0 ? (pnlDollar / riskAmount) * 1.0 : 0;
+
+    const stageStatus = liveData?.stage_status ?? chain?.stage_status ?? monitor?.stage_status ?? 'WAITING';
+    const stageName = liveData?.setup_stage ?? chain?.stage ?? monitor?.stage ?? 'SCANNING_STRUCTURE';
 
     return {
       trade_num: isEth ? 2 : 1,
       symbol: symbol,
       direction: direction,
-      entry_time: new Date().toISOString().slice(0, 19).replace('T', ' '),
-      entry_price: currentPrice,
-      exit_time: new Date().toISOString().slice(0, 19).replace('T', ' '),
+      entry_time: isActive ? activePos.opened_at : (liveData?.candles?.[liveData.candles.length - 1]?.[0] ?? new Date().toISOString()),
+      entry_price: entryPrice,
+      exit_time: isActive ? 'Active Position' : 'Pending Retracement',
       exit_price: tp,
       stop_loss: sl,
       take_profit: tp,
-      risk_distance: Math.abs(sl - currentPrice),
+      risk_distance: Math.abs(entryPrice - sl),
       rr_ratio: '1:2',
-      result: 'WIN',
-      pnl_percent: 2.0,
-      pnl_dollar: 200.0,
-      running_balance: 10200.0,
-      setup_reason: monitor?.reason ?? `${symbol} 15M SMC Setup with IDM sweep & BOS breakout`,
-      trade_type: 'CONTINUATION_BOS',
-      bos_level: bosLevel,
-      idm_level: idmLevel,
-      fvg_top: fvgTop,
-      fvg_bottom: fvgBottom,
+      result: isActive ? 'ACTIVE_OPEN' : 'LIVE_CANDIDATE',
+      pnl_percent: pnlPercent,
+      pnl_dollar: pnlDollar,
+      running_balance: status?.paper_summary?.balance ?? 10000.0,
+      setup_reason: isActive
+        ? `Active paper position on ${symbol} (${direction} @ $${entryPrice.toLocaleString()})`
+        : `Live ${symbol} 15M Structure: ${stageName.replace(/_/g, ' ')} (${stageStatus})`,
+      trade_type: liveData?.trade_type ?? (chain?.stage?.includes('REVERSAL') ? 'REVERSAL_CHOCH' : 'CONTINUATION_BOS'),
+      bos_level: bosLevel != null ? Number(bosLevel) : undefined,
+      idm_level: idmLevel != null ? Number(idmLevel) : undefined,
+      fvg_top: fvgTop != null ? Number(fvgTop) : undefined,
+      fvg_bottom: fvgBottom != null ? Number(fvgBottom) : undefined,
       timeframe: '15M',
       macro_timeframe: '4H',
-      '4h_trend': monitor?.macro_trend ?? 'BEARISH',
-      four_h_trend: monitor?.macro_trend ?? 'BEARISH',
-      entry_time_ist: new Date().toLocaleTimeString('en-IN', { timeZone: 'Asia/Kolkata', hour12: false }) + ' IST',
+      '4h_trend': liveData?.macro_trend ?? monitor?.macro_trend ?? chain?.trend ?? 'NEUTRAL',
+      four_h_trend: liveData?.macro_trend ?? monitor?.macro_trend ?? chain?.trend ?? 'NEUTRAL',
+      entry_time_ist: isActive ? 'Active Now' : 'Pending Retracement',
       exit_time_ist: 'Target 1:2',
-      angle: 42.5
-    };
-  };
-
-  const getLiveSmcCandleData = (symbol: string, monitor?: StrategyMonitor | null): TradeCandleData | null => {
-    const isEth = symbol === 'ETHUSDT';
-    const baseCandleData = candlesMap?.[isEth ? 'ETHUSDT_LIVE' : 'BTCUSDT_LIVE'] || candlesMap?.[isEth ? 'ETHUSDT_2' : 'BTCUSDT_1'];
-    const currentPrice = monitor?.current_price ?? (isEth ? 2091.68 : 74017.17);
-    const idmLevel = monitor?.idm_level ?? (isEth ? 2151.49 : 75494.01);
-    const bosLevel = monitor?.bos_level ?? (isEth ? 2117.89 : 74477.79);
-    const fvgTop = monitor?.fvg_zone?.top ?? (isEth ? 2119.96 : undefined);
-    const fvgBottom = monitor?.fvg_zone?.bottom ?? (isEth ? 2117.35 : undefined);
-    const sl = monitor?.stop_loss ?? monitor?.fvg_zone?.sl_price ?? idmLevel;
-    const tp = monitor?.take_profit ?? (currentPrice - 2 * Math.abs(sl - currentPrice));
-    const rawDir = monitor?.direction ?? (monitor?.macro_trend === 'BULLISH' ? 'LONG' : 'SHORT');
-    const direction = rawDir === 'BULLISH' ? 'LONG' : rawDir === 'BEARISH' ? 'SHORT' : rawDir;
-
-    if (!baseCandleData) {
-      const syntheticCandles: [string, number, number, number, number][] = [];
-      const now = Date.now();
-      const candleStep = (idmLevel - currentPrice) / 30;
-      for (let i = 29; i >= 0; i--) {
-        const timeStr = new Date(now - i * 15 * 60 * 1000).toISOString().slice(11, 16);
-        const baseP = currentPrice + candleStep * (i / 2);
-        const o = baseP;
-        const c = baseP + (i % 2 === 0 ? 4 : -4);
-        const h = Math.max(o, c) + 6;
-        const l = Math.min(o, c) - 6;
-        syntheticCandles.push([timeStr, o, h, l, c]);
-      }
-      return {
-        candles: syntheticCandles,
-        local_sh_idx: 4,
-        local_idm_idx: 10,
-        local_sweep_idx: 16,
-        local_bos_idx: 22,
-        local_choch_idx: 16,
-        local_choch_break_idx: 22,
-        local_c1_idx: 23,
-        local_c2_idx: 24,
-        local_c3_idx: 25,
-        local_entry_idx: 27,
-        local_exit_idx: 29,
-        sh_price: idmLevel,
-        idm_price: idmLevel,
-        idm_level: idmLevel,
-        bos_price: bosLevel,
-        bos_level: bosLevel,
-        fvg_top: fvgTop,
-        fvg_bottom: fvgBottom,
-        entry_price: currentPrice,
-        stop_loss: sl,
-        take_profit: tp,
-        exit_price: currentPrice,
-        direction: direction,
-        result: 'WIN',
-        angle: 42.5,
-      };
-    }
-
-    return {
-      ...baseCandleData,
-      idm_level: monitor?.idm_level ?? baseCandleData.idm_level,
-      bos_level: monitor?.bos_level ?? baseCandleData.bos_level,
-      fvg_top: monitor?.fvg_zone?.top ?? baseCandleData.fvg_top,
-      fvg_bottom: monitor?.fvg_zone?.bottom ?? baseCandleData.fvg_bottom,
-      entry_price: monitor?.current_price ?? baseCandleData.entry_price,
-      direction: direction,
+      angle: Number(liveData?.angle ?? chain?.last_angle ?? 0),
     };
   };
 
@@ -1118,15 +1085,6 @@ export default function Dashboard() {
             <span>{status?.is_running ? 'Stop Engine' : 'Start Engine'}</span>
           </button>
 
-          {/* Test Paper Order Button */}
-          <button
-            onClick={() => handleManualTrade('BTCUSD', 'BUY')}
-            disabled={!connected}
-            className="hidden sm:flex h-8 px-3 rounded-lg text-xs font-mono font-medium bg-slate-900 text-white hover:bg-slate-800 transition-colors items-center gap-1.5 disabled:opacity-40 disabled:cursor-not-allowed"
-          >
-            <ZapIcon className="w-3 h-3 text-amber-300 flex-shrink-0" />
-            <span>Test Paper</span>
-          </button>
 
           {/* Clock */}
           <div className="hidden lg:flex items-center gap-1.5 text-[11px] font-mono text-slate-500 pl-3 border-l border-slate-200">
@@ -2699,45 +2657,62 @@ export default function Dashboard() {
                                   Macro Bias: <span className="font-semibold text-slate-800">{monitor?.macro_trend || 'BEARISH'}</span>
                                 </div>
                               </div>
-                              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
-                                <div className="p-2 rounded bg-slate-50 border border-slate-100">
-                                  <div className="text-[10px] uppercase text-purple-600 font-medium">15M IDM Level</div>
-                                  <div className="font-mono font-bold text-purple-700 mt-0.5">
-                                    {monitor?.idm_level != null ? `$${monitor.idm_level.toLocaleString()}` : '—'}
+                              {(() => {
+                                const liveCandleData = liveCandlesBySymbol[row.symbol];
+                                const fvgTop = liveCandleData?.fvg_top ?? monitor?.fvg_zone?.top;
+                                const fvgBot = liveCandleData?.fvg_bottom ?? monitor?.fvg_zone?.bottom;
+                                const idmLvl = liveCandleData?.idm_level ?? monitor?.idm_level;
+                                const bosLvl = liveCandleData?.bos_level ?? monitor?.bos_level;
+                                const currPx = liveCandleData?.current_price ?? row.last_price ?? monitor?.current_price;
+                                return (
+                                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
+                                    <div className="p-2 rounded bg-slate-50 border border-slate-100">
+                                      <div className="text-[10px] uppercase text-purple-600 font-medium">15M IDM Level</div>
+                                      <div className="font-mono font-bold text-purple-700 mt-0.5">
+                                        {idmLvl != null ? `$${idmLvl.toLocaleString()}` : '—'}
+                                      </div>
+                                    </div>
+                                    <div className="p-2 rounded bg-slate-50 border border-slate-100">
+                                      <div className="text-[10px] uppercase text-sky-600 font-medium">15M BOS Level</div>
+                                      <div className="font-mono font-bold text-sky-700 mt-0.5">
+                                        {bosLvl != null ? `$${bosLvl.toLocaleString()}` : '—'}
+                                      </div>
+                                    </div>
+                                    <div className="p-2 rounded bg-slate-50 border border-slate-100">
+                                      <div className="text-[10px] uppercase text-amber-600 font-medium">15M FVG Zone</div>
+                                      <div className="font-mono font-semibold text-amber-800 mt-0.5 text-[11px]">
+                                        {fvgTop != null && fvgBot != null
+                                          ? `$${Math.min(fvgTop, fvgBot).toLocaleString()} – $${Math.max(fvgTop, fvgBot).toLocaleString()}`
+                                          : 'Waiting for FVG'}
+                                      </div>
+                                    </div>
+                                    <div className="p-2 rounded bg-slate-50 border border-slate-100">
+                                      <div className="text-[10px] uppercase text-slate-500 font-medium">Live Market Price</div>
+                                      <div className="font-mono font-bold text-slate-900 mt-0.5">
+                                        {currPx != null ? `$${currPx.toLocaleString()}` : '—'}
+                                      </div>
+                                    </div>
                                   </div>
-                                </div>
-                                <div className="p-2 rounded bg-slate-50 border border-slate-100">
-                                  <div className="text-[10px] uppercase text-sky-600 font-medium">15M BOS Level</div>
-                                  <div className="font-mono font-bold text-sky-700 mt-0.5">
-                                    {monitor?.bos_level != null ? `$${monitor.bos_level.toLocaleString()}` : '—'}
-                                  </div>
-                                </div>
-                                <div className="p-2 rounded bg-slate-50 border border-slate-100">
-                                  <div className="text-[10px] uppercase text-amber-600 font-medium">15M FVG Zone</div>
-                                  <div className="font-mono font-semibold text-amber-800 mt-0.5 text-[11px]">
-                                    {monitor?.fvg_zone
-                                      ? `$${monitor.fvg_zone.bottom.toLocaleString()} – $${monitor.fvg_zone.top.toLocaleString()}`
-                                      : 'Waiting for FVG'}
-                                  </div>
-                                </div>
-                                <div className="p-2 rounded bg-slate-50 border border-slate-100">
-                                  <div className="text-[10px] uppercase text-slate-500 font-medium">Current Price</div>
-                                  <div className="font-mono font-bold text-slate-900 mt-0.5">
-                                    {monitor?.current_price != null ? `$${monitor.current_price.toLocaleString()}` : '—'}
-                                  </div>
-                                </div>
-                              </div>
+                                );
+                              })()}
                             </div>
 
                             {/* The Interactive Prepared SMC Chart (Real Live Closed Candles) */}
                             <div className="rounded-xl overflow-hidden border border-slate-200 bg-white shadow-xs">
-                              <TradeChartVisualizer
-                                trade={getLiveSmcTradeItem(row.symbol, monitor)}
-                                candleData={liveCandlesBySymbol[row.symbol] || getLiveSmcCandleData(row.symbol, monitor)}
-                                hasPrev={false}
-                                hasNext={false}
-                                onClose={() => setScannerChartSymbol(null)}
-                              />
+                              {liveCandlesBySymbol[row.symbol] ? (
+                                <TradeChartVisualizer
+                                  trade={getLiveChartTradeItem(row.symbol, row, liveCandlesBySymbol[row.symbol])}
+                                  candleData={liveCandlesBySymbol[row.symbol]}
+                                  hasPrev={false}
+                                  hasNext={false}
+                                  onClose={() => setScannerChartSymbol(null)}
+                                />
+                              ) : (
+                                <div className="p-12 text-center text-xs font-mono text-slate-400 flex flex-col items-center justify-center gap-2">
+                                  <div className="w-5 h-5 border-2 border-indigo-600 border-t-transparent rounded-full animate-spin" />
+                                  <span>Loading live 15M confirmed candles for {row.symbol}...</span>
+                                </div>
+                              )}
                             </div>
                           </div>
                         )}
