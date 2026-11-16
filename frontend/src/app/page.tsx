@@ -493,31 +493,33 @@ export default function Dashboard() {
   const [candlesMap, setCandlesMap] = useState<Record<string, TradeCandleData> | null>(null);
   const [chartMode, setChartMode] = useState<'visualizer' | 'tradingview'>('visualizer');
   const [hoverCurveIdx, setHoverCurveIdx] = useState<number | null>(null);
-  const [scannerChartSymbol, setScannerChartSymbol] = useState<string | null>(null);
+  const [selectedLiveSymbol, setSelectedLiveSymbol] = useState<string>('BTCUSD');
+  const scannerChartSymbol = selectedLiveSymbol;
+  const setScannerChartSymbol = setSelectedLiveSymbol;
 
-  // Fetch real live closed 15M candles + IDM/BOS/CHoCH/FVG overlays when a live symbol chart opens
+  // Fetch real live closed candles + IDM/BOS/CHoCH/FVG overlays when a live symbol is selected
   useEffect(() => {
-    if (!scannerChartSymbol) return;
+    if (!selectedLiveSymbol) return;
     let cancelled = false;
     const fetchLiveCandles = async () => {
       try {
-        const res = await callBackend(`/strategy-monitor/candles?symbol=${encodeURIComponent(scannerChartSymbol)}`);
+        const res = await callBackend(`/strategy-monitor/candles?symbol=${encodeURIComponent(selectedLiveSymbol)}`);
         if (!res.ok) return;
         const data = await res.json();
         if (!cancelled && data && Array.isArray(data.candles) && data.candles.length > 0) {
-          setLiveCandlesBySymbol(prev => ({ ...prev, [scannerChartSymbol]: data }));
+          setLiveCandlesBySymbol(prev => ({ ...prev, [selectedLiveSymbol]: data }));
         }
       } catch {
         // ignore transient poll errors
       }
     };
     fetchLiveCandles();
-    const tid = setInterval(fetchLiveCandles, 15000);
+    const tid = setInterval(fetchLiveCandles, 5000);
     return () => {
       cancelled = true;
       clearInterval(tid);
     };
-  }, [scannerChartSymbol]);
+  }, [selectedLiveSymbol]);
 
   const getLiveChartTradeItem = (
     symbol: string,
@@ -2286,634 +2288,397 @@ export default function Dashboard() {
         </div>
 
         {/* ══════════════════════════════════════════════════════════════════
-            TAB 2: MARKET SCANNER
+            TAB 2: LIVE MARKET ANALYSIS (SMC & CHAIN OF CHOCH)
             ══════════════════════════════════════════════════════════════════ */}
-        {activeTab === 'scanner' && (
-          <div className="bg-white border border-slate-200 rounded-xl overflow-hidden shadow-xs">
-            <div className="px-5 py-3.5 border-b border-slate-100 bg-slate-50/70 flex items-center justify-between flex-wrap gap-3">
-              <div className="flex items-center gap-3 flex-wrap">
-                <span className="text-xs font-semibold text-slate-700 flex items-center gap-2">
-                  <ActivityIcon className="w-3.5 h-3.5 text-slate-700" />
-                  Live Market Analysis &amp; Paper Monitor
-                </span>
-                <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-amber-50 text-amber-800 border border-amber-200 font-semibold">
-                  PAPER MODE ONLY · ZERO REAL ORDERS
-                </span>
-                <span className="text-[10px] font-mono text-slate-500">
-                  Feed: {status?.connection_status?.provider || 'BINANCE_DEMO'} · {status?.connection_status?.mt5_bridge_status === 'STANDBY_MACOS_UNSUPPORTED' ? 'MT5 Bridge: Standby' : 'MT5 Ready'}
-                </span>
-              </div>
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={handleManualScan}
-                  disabled={!connected || scanningNow}
-                  className="h-7 px-2.5 rounded-md text-xs font-mono font-medium bg-slate-900 text-white hover:bg-slate-800 disabled:opacity-40 cursor-pointer"
-                >
-                  {scanningNow ? 'Scanning...' : 'Scan Now'}
-                </button>
-                <button
-                  onClick={handleReconnectFeed}
-                  disabled={!connected}
-                  className="h-7 px-2.5 rounded-md text-xs font-mono font-medium bg-white text-slate-700 border border-slate-200 hover:bg-slate-50 disabled:opacity-40 cursor-pointer"
-                >
-                  Reconnect Feed
-                </button>
-                <span className={`text-[11px] font-mono px-2 py-0.5 rounded-md border font-medium ${status?.is_running ? 'text-emerald-700 border-emerald-200 bg-emerald-50' : 'text-slate-500 border-slate-200 bg-slate-100'}`}>
-                  {status?.is_running ? `Scanning every ${status?.scan_interval}s` : 'Engine idle'}
-                </span>
-              </div>
-            </div>
+        {activeTab === 'scanner' && (() => {
+          const scannerResults = status?.scanner_results || [];
+          const activeRow: ScanResult = scannerResults.find(r => r.symbol === selectedLiveSymbol) || {
+            symbol: selectedLiveSymbol,
+            trend: 'BULLISH',
+            sweep_detected: false,
+            fvg_type: null,
+            setup_score: 50,
+            status: 'WATCHING',
+            last_price: 0,
+            strategy_monitor: null,
+            chain_monitor: null,
+          };
+          const monitor = activeRow.strategy_monitor;
+          const liveCandleData = liveCandlesBySymbol[selectedLiveSymbol];
+          const activePaperTrade = (status?.paper_trades_open || []).find(t => t.symbol === selectedLiveSymbol);
+          const hasBos = liveCandleData?.local_bos_idx != null && liveCandleData?.bos_level != null;
+          const hasFvg = (liveCandleData?.fvg_top != null && liveCandleData?.fvg_bottom != null);
+          const isFvgTouched = monitor?.fvg_touched ?? false;
+          const isInTrade = Boolean(activePaperTrade);
 
-            {/* Paper Account & Connection Telemetry Strip */}
-            <div className="px-5 py-3 border-b border-slate-100 bg-white grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 text-xs font-mono">
-              <div className="p-2.5 rounded-lg bg-slate-50 border border-slate-100">
-                <div className="text-[10px] text-slate-400 uppercase">Paper Balance</div>
-                <div className="font-bold text-slate-900 mt-0.5">
-                  ${(status?.paper_summary?.balance ?? 10000).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                </div>
-              </div>
-              <div className="p-2.5 rounded-lg bg-slate-50 border border-slate-100">
-                <div className="text-[10px] text-slate-400 uppercase">Live Equity</div>
-                <div className="font-bold text-slate-900 mt-0.5">
-                  ${(status?.paper_summary?.equity ?? 10000).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                </div>
-              </div>
-              <div className="p-2.5 rounded-lg bg-slate-50 border border-slate-100">
-                <div className="text-[10px] text-slate-400 uppercase">Unrealized P&amp;L</div>
-                <div className={`font-bold mt-0.5 ${(status?.paper_summary?.total_unrealized_pnl ?? 0) >= 0 ? 'text-emerald-700' : 'text-rose-700'}`}>
-                  {(status?.paper_summary?.total_unrealized_pnl ?? 0) >= 0 ? '+' : ''}${(status?.paper_summary?.total_unrealized_pnl ?? 0).toFixed(2)}
-                </div>
-              </div>
-              <div className="p-2.5 rounded-lg bg-slate-50 border border-slate-100">
-                <div className="text-[10px] text-slate-400 uppercase">Realized P&amp;L</div>
-                <div className={`font-bold mt-0.5 ${(status?.paper_summary?.total_realized_pnl ?? 0) >= 0 ? 'text-emerald-700' : 'text-rose-700'}`}>
-                  {(status?.paper_summary?.total_realized_pnl ?? 0) >= 0 ? '+' : ''}${(status?.paper_summary?.total_realized_pnl ?? 0).toFixed(2)}
-                </div>
-              </div>
-              <div className="p-2.5 rounded-lg bg-slate-50 border border-slate-100">
-                <div className="text-[10px] text-slate-400 uppercase">Paper W/L ({status?.paper_summary?.win_rate ?? 0}%)</div>
-                <div className="font-bold text-slate-800 mt-0.5">
-                  {status?.paper_summary?.wins ?? 0}W / {status?.paper_summary?.losses ?? 0}L ({status?.paper_summary?.open_count ?? 0} Open)
-                </div>
-              </div>
-              <div className="p-2.5 rounded-lg bg-slate-50 border border-slate-100">
-                <div className="text-[10px] text-slate-400 uppercase">Feed Health</div>
-                <div className={`font-bold mt-0.5 ${status?.connection_status?.connected ? 'text-emerald-700' : 'text-rose-700'}`}>
-                  {status?.connection_status?.connected ? `ONLINE (${status?.connection_status?.last_latency_ms ?? 0}ms)` : 'OFFLINE'}
-                </div>
-              </div>
-            </div>
+          const step1Trend = monitor?.macro_trend || activeRow.trend || 'BULLISH';
+          const step2IdmStatus = monitor?.idm_level != null ? 'Swept' : 'Searching';
+          const step3BosStatus = hasBos ? 'Confirmed Body Close' : monitor?.stage === '15M_BOS' ? 'Waiting for Break' : 'Scanning';
+          const step4FvgStatus = isFvgTouched ? 'Touched / Retested' : hasFvg ? 'Formed' : 'Waiting';
+          const step5ExecStatus = isInTrade ? 'In Position' : monitor?.confirm_candle != null ? 'Entry Confirmed' : 'Ready';
 
-            <div className="overflow-x-auto">
-              <table className="w-full border-collapse">
-                <thead>
-                  <tr className="border-b border-slate-200 bg-slate-50/50">
-                    {['Asset', 'Bid / Ask (Spread)', 'Macro Bias (30M)', 'Chain Structure (1M)', 'IDM / BOS / CHoCH', 'Fair value gap', 'Setup Score', 'Status'].map(h => (
+          const summarySentence = (() => {
+            if (isInTrade) {
+              return `Active ${activePaperTrade?.direction} paper position on ${selectedLiveSymbol} @ $${activePaperTrade?.entry_price?.toLocaleString()}. SL: $${activePaperTrade?.stop_loss?.toLocaleString()}, TP: $${activePaperTrade?.take_profit?.toLocaleString()}.`;
+            }
+            if (isFvgTouched) {
+              return `FVG zone touched on ${selectedLiveSymbol}. Waiting for directional candle confirmation for entry.`;
+            }
+            if (hasFvg) {
+              return `1M FVG formed between $${Math.min(liveCandleData?.fvg_top || 0, liveCandleData?.fvg_bottom || 0).toLocaleString()} and $${Math.max(liveCandleData?.fvg_top || 0, liveCandleData?.fvg_bottom || 0).toLocaleString()}. Waiting for price pullback into zone.`;
+            }
+            if (hasBos) {
+              return `1M BOS confirmed at $${liveCandleData?.bos_level?.toLocaleString()}. Imbalance creation pending.`;
+            }
+            if (monitor?.idm_level != null) {
+              return `1M Inducement swept at $${monitor.idm_level.toLocaleString()}. Waiting for 1M candle body close beyond structural anchor to confirm BOS.`;
+            }
+            return `30M Macro Trend is ${step1Trend}. Scanning 1M price action for swing structure and liquidity inducement.`;
+          })();
 
-                      <th key={h} className="px-4 py-2.5 text-left text-xs font-medium text-slate-500 whitespace-nowrap">{h}</th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100">
-                  {(!status?.scanner_results || status.scanner_results.length === 0) ? (
-                    <tr>
-                      <td colSpan={8} className="px-5 py-12 text-center text-xs font-mono text-slate-400">
-                        {connected ? 'Click "Scan Now" or "Start Engine" to inspect XAUUSD, BTCUSD, and ETHUSD...' : 'Connect backend to see live scanner data'}
-                      </td>
-                    </tr>
-                  ) : (
-                    status.scanner_results.map(row => {
-                      const chain = row.chain_monitor || row.strategy_monitor?.chain_of_choch;
-                      const smcMon = row.strategy_monitor;
-                      return (
-                        <tr key={row.symbol} className="hover:bg-slate-50/70 transition-colors">
-                          <td className="px-4 py-3 font-mono font-semibold text-xs text-slate-900">{row.symbol}</td>
-                          <td className="px-4 py-3 font-mono text-xs text-slate-700 tabular-nums">
-                            {row.last_price ? `$${row.last_price.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '—'}
-                            {row.spread != null && (
-                              <span className="block text-[10px] text-slate-400">
-                                Spd: {row.spread.toFixed(2)}
-                              </span>
-                            )}
-                          </td>
-                          <td className="px-4 py-3">
-                            <Badge label={row.trend} color={row.trend === 'BULLISH' ? 'green' : row.trend === 'BEARISH' ? 'red' : 'gray'} />
-                          </td>
-                          <td className="px-4 py-3 font-mono text-xs">
-                            <div className="flex items-center gap-1.5">
-                              <Badge label={chain?.trend || '—'} color={chain?.trend === 'BULLISH' ? 'green' : chain?.trend === 'BEARISH' ? 'red' : 'gray'} />
-                              {chain?.last_angle != null && (
-                                <span className="text-[11px] text-slate-500">{chain.last_angle}°</span>
-                              )}
-                            </div>
-                          </td>
-                          <td className="px-4 py-3 font-mono text-[11px] text-slate-700">
-                            <div>IDM: {(smcMon?.idm_level ?? chain?.idm_level)?.toLocaleString() ?? '—'}</div>
-                            <div>BOS: {(smcMon?.bos_level ?? chain?.bos_level)?.toLocaleString() ?? '—'}</div>
-                            <div>CHoCH: {(smcMon?.choch_level ?? chain?.choch_level)?.toLocaleString() ?? '—'}</div>
-                          </td>
-                          <td className="px-4 py-3">
-                            {row.fvg_type
-                              ? <Badge label={row.fvg_type} color="green" />
-                              : <span className="text-xs text-slate-300">—</span>}
-                          </td>
-                          <td className="px-4 py-3 w-36">
-                            <div className="flex items-center gap-2">
-                              <div className="flex-1 h-1.5 bg-slate-100 rounded-full overflow-hidden">
-                                <div className={`h-full ${row.setup_score >= 70 ? 'bg-emerald-500' : 'bg-slate-400'}`} style={{ width: `${row.setup_score}%` }} />
-                              </div>
-                              <span className="text-xs font-mono font-medium text-slate-700">{row.setup_score}</span>
-                            </div>
-                          </td>
-                          <td className="px-4 py-3">
-                            <Badge label={row.status} color={row.status === 'SIGNAL' ? 'green' : row.status === 'WATCHING' ? 'amber' : 'gray'} />
-                          </td>
-                        </tr>
-                      );
-                    })
-                  )}
-                </tbody>
-              </table>
-            </div>
-
-            {/* LIVE SMC STRATEGY MONITOR */}
-            <div className="border-t border-slate-200">
-              <div className="px-5 py-4 bg-slate-50/70 flex items-center justify-between">
-                <div>
-                  <h3 className="text-sm font-semibold text-slate-900">
-                    Live SMC Strategy Monitor
-                  </h3>
-                  <p className="text-xs text-slate-500 mt-1">
-                    30M bias → 1M IDM → BOS → FVG → Touch → Confirmation
-                  </p>
-
-                </div>
-                <span className="text-[10px] font-mono text-slate-500">
-                  LIVE DIAGNOSTICS
-                </span>
-              </div>
-
-              <div className="p-4 grid grid-cols-1 xl:grid-cols-2 gap-4">
-                {(!status?.scanner_results || status.scanner_results.length === 0) ? (
-                  <div className="col-span-full py-8 text-center text-xs text-slate-400">
-                    Waiting for market scanner data...
-                  </div>
-                ) : (
-                  status.scanner_results.map(row => {
-                    const monitor = row.strategy_monitor;
-                    const statusColor =
-                      monitor?.stage_status === 'READY' ? 'text-emerald-700 bg-emerald-50 border-emerald-200' :
-                      monitor?.stage_status === 'REJECTED' ? 'text-rose-700 bg-rose-50 border-rose-200' :
-                      monitor?.stage_status === 'CONFIRMED' || monitor?.stage_status === 'DETECTED'
-                        ? 'text-blue-700 bg-blue-50 border-blue-200'
-                        : 'text-amber-700 bg-amber-50 border-amber-200';
+          return (
+            <div className="flex flex-col gap-5">
+              {/* ── Top Instrument Selector & Telemetry Bar ── */}
+              <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-xs flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-4">
+                {/* 3 Clean Instrument Tabs */}
+                <div className="flex items-center gap-2 flex-wrap">
+                  {[
+                    { symbol: 'BTCUSD', name: 'Bitcoin (BTC/USD)' },
+                    { symbol: 'ETHUSD', name: 'Ethereum (ETH/USD)' },
+                    { symbol: 'XAUUSD', name: 'Gold (XAU/USD)' },
+                  ].map(asset => {
+                    const row = scannerResults.find(r => r.symbol === asset.symbol);
+                    const mon = row?.strategy_monitor;
+                    const isSelected = selectedLiveSymbol === asset.symbol;
+                    const trend = mon?.macro_trend || row?.trend || 'NEUTRAL';
+                    const lastPx = row?.last_price || mon?.current_price;
 
                     return (
-                      <div
-                        key={`monitor-${row.symbol}`}
-                        className={`border border-slate-200 rounded-xl overflow-hidden bg-white shadow-xs transition-all ${
-                          scannerChartSymbol === row.symbol ? 'xl:col-span-2 ring-2 ring-sky-500/20' : ''
+                      <button
+                        key={asset.symbol}
+                        onClick={() => setSelectedLiveSymbol(asset.symbol)}
+                        className={`px-4 py-2.5 rounded-lg border text-left transition-all flex flex-col gap-0.5 cursor-pointer ${
+                          isSelected
+                            ? 'bg-white border-slate-900 shadow-xs ring-1 ring-slate-900'
+                            : 'bg-slate-50/70 border-slate-200 hover:bg-slate-100 hover:border-slate-300'
                         }`}
                       >
-                        <div className="px-4 py-3 border-b border-slate-100 flex items-center justify-between gap-3 flex-wrap">
-                          <div>
-                            <div className="text-sm font-semibold text-slate-900 flex items-center gap-2">
-                              <span>{row.symbol}</span>
-                              <span className="text-[10px] font-normal text-slate-500 font-mono">
-                                ({monitor?.execution_timeframe || '15M'} Execution)
-                              </span>
-                            </div>
-                          </div>
-
-                          <div className="flex items-center gap-2">
-                            <button
-                              onClick={() => setScannerChartSymbol(scannerChartSymbol === row.symbol ? null : row.symbol)}
-                              className={`h-7 px-3 rounded-md border text-xs font-semibold transition-all flex items-center gap-1.5 cursor-pointer shadow-xs ${
-                                scannerChartSymbol === row.symbol
-                                  ? 'bg-slate-900 text-white border-slate-900'
-                                  : 'bg-sky-600 hover:bg-sky-700 text-white border-sky-600'
-                              }`}
-                              title={`View live SMC Zone (IDM, BOS, FVG) for ${row.symbol}`}
-                            >
-                              <ActivityIcon className="w-3.5 h-3.5" />
-                              <span>{scannerChartSymbol === row.symbol ? '✕ Close SMC Zone' : '📊 View SMC Zone'}</span>
-                            </button>
-                            <span className={`px-2.5 py-1 rounded-md border text-[10px] font-semibold ${statusColor}`}>
-                              {monitor?.stage_status || 'WAITING'}
-                            </span>
-                          </div>
+                        <div className="flex items-center justify-between gap-3">
+                          <span className={`text-xs font-bold ${isSelected ? 'text-slate-900' : 'text-slate-700'}`}>
+                            {asset.name}
+                          </span>
+                          <span
+                            className={`text-[10px] font-mono px-1.5 py-0.2 rounded font-semibold ${
+                              trend === 'BULLISH'
+                                ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                                : trend === 'BEARISH'
+                                ? 'bg-rose-50 text-rose-700 border border-rose-200'
+                                : 'bg-slate-100 text-slate-600'
+                            }`}
+                          >
+                            30M {trend}
+                          </span>
                         </div>
-
-                        {!monitor ? (
-                          <div className="p-4 text-xs text-slate-400">
-                            Strategy diagnostics not available yet.
-                          </div>
-                        ) : (
-                          <div className="p-4 space-y-4">
-                            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                              <div>
-                                <div className="text-[10px] text-slate-400 uppercase">{monitor.macro_timeframe || '30M'} Macro Bias</div>
-                                <div className={`text-xs font-semibold mt-1 ${
-                                  monitor.macro_trend === 'BULLISH' ? 'text-emerald-600' :
-                                  monitor.macro_trend === 'BEARISH' ? 'text-rose-600' : 'text-slate-600'
-                                }`}>
-                                  {monitor.macro_trend || '—'}
-                                </div>
-                              </div>
-                              <div>
-                                <div className="text-[10px] text-slate-400 uppercase">Direction</div>
-                                <div className="text-xs font-semibold text-slate-800 mt-1">
-                                  {monitor.direction || '—'}
-                                </div>
-                              </div>
-                              <div>
-                                <div className="text-[10px] text-slate-400 uppercase">Current Price</div>
-                                <div className="text-xs font-mono font-semibold text-slate-800 mt-1">
-                                  {monitor.current_price != null ? monitor.current_price.toLocaleString() : '—'}
-                                </div>
-                              </div>
-                            </div>
-
-                            <div className="rounded-lg bg-slate-50 p-3">
-                              <div className="text-[10px] uppercase text-slate-400 mb-1">{monitor.macro_timeframe || '30M'} + {monitor.execution_timeframe || '1M'} SMC Stage</div>
-                              <div className="text-xs font-bold text-slate-800">
-                                {(monitor.stage || 'UNKNOWN').replace(/_/g, ' ')}
-                              </div>
-                              <p className="text-xs text-slate-600 mt-1 leading-relaxed">
-                                {monitor.reason}
-                              </p>
-                            </div>
-
-                            {monitor.chain_of_choch && (
-                              <div className="rounded-lg border border-slate-200 bg-white p-3 space-y-2">
-                                <div className="flex items-center justify-between">
-                                  <span className="text-[10px] font-semibold uppercase text-slate-500">
-                                    {monitor.execution_timeframe || '1M'} Chain-of-CHoCH Engine
-                                  </span>
-
-                                  <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-slate-100 text-slate-700">
-                                    {monitor.chain_of_choch.trend} · {monitor.chain_of_choch.stage_status}
-                                    {monitor.chain_of_choch.last_angle != null ? ` · ${monitor.chain_of_choch.last_angle}°` : ''}
-                                  </span>
-                                </div>
-                                <div className="text-xs text-slate-600">
-                                  {monitor.chain_of_choch.reason}
-                                </div>
-                                {monitor.chain_of_choch.rejection_reason && (
-                                  <div className="text-[11px] font-mono text-rose-700 bg-rose-50 border border-rose-200 rounded px-2 py-1">
-                                    Rejection Reason: {monitor.chain_of_choch.rejection_reason}
-                                  </div>
-                                )}
-                              </div>
-                            )}
-
-                            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                              <div>
-                                <div className="text-[10px] text-slate-400 uppercase">IDM Level</div>
-                                <div className="text-xs font-mono font-medium text-slate-800 mt-1">
-                                  {(monitor.idm_level ?? monitor.chain_of_choch?.idm_level) != null
-                                    ? (monitor.idm_level ?? monitor.chain_of_choch?.idm_level)?.toLocaleString()
-                                    : '—'}
-                                </div>
-                              </div>
-                              <div>
-                                <div className="text-[10px] text-slate-400 uppercase">BOS Level</div>
-                                <div className="text-xs font-mono font-medium text-slate-800 mt-1">
-                                  {(monitor.bos_level ?? monitor.chain_of_choch?.bos_level) != null
-                                    ? (monitor.bos_level ?? monitor.chain_of_choch?.bos_level)?.toLocaleString()
-                                    : '—'}
-                                </div>
-                              </div>
-                              <div>
-                                <div className="text-[10px] text-slate-400 uppercase">CHoCH Level</div>
-                                <div className="text-xs font-mono font-medium text-slate-800 mt-1">
-                                  {(monitor.choch_level ?? monitor.chain_of_choch?.choch_level) != null
-                                    ? (monitor.choch_level ?? monitor.chain_of_choch?.choch_level)?.toLocaleString()
-                                    : '—'}
-                                </div>
-                              </div>
-                              <div>
-                                <div className="text-[10px] text-slate-400 uppercase">FVG Touch</div>
-                                <div className={`text-xs font-semibold mt-1 ${
-                                  monitor.fvg_touched ? 'text-emerald-600' : 'text-amber-600'
-                                }`}>
-                                  {monitor.fvg_touched ? 'TOUCHED' : 'WAITING'}
-                                </div>
-                              </div>
-                            </div>
-
-                            {monitor.fvg_zone && (
-                              <div className="rounded-lg border border-blue-100 bg-blue-50/40 p-3">
-                                <div className="text-[10px] font-semibold uppercase text-blue-700 mb-2">
-                                  {monitor.fvg_zone.type} — FVG Zone
-                                </div>
-                                <div className="grid grid-cols-3 gap-2">
-                                  <div>
-                                    <div className="text-[10px] text-slate-500">Top</div>
-                                    <div className="text-xs font-mono font-medium">{monitor.fvg_zone.top.toLocaleString()}</div>
-                                  </div>
-                                  <div>
-                                    <div className="text-[10px] text-slate-500">Bottom</div>
-                                    <div className="text-xs font-mono font-medium">{monitor.fvg_zone.bottom.toLocaleString()}</div>
-                                  </div>
-                                  <div>
-                                    <div className="text-[10px] text-slate-500">Midpoint</div>
-                                    <div className="text-xs font-mono font-medium">{monitor.fvg_zone.midpoint.toLocaleString()}</div>
-                                  </div>
-                                </div>
-                              </div>
-                            )}
-
-                            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 border-t border-slate-100 pt-3">
-                              <div>
-                                <div className="text-[10px] text-slate-400 uppercase">Confirmation Candle</div>
-                                <div className="text-xs font-mono font-medium mt-1">
-                                  {monitor.confirm_candle != null ? `#${monitor.confirm_candle}` : 'Pending'}
-                                </div>
-                              </div>
-                              <div>
-                                <div className="text-[10px] text-slate-400 uppercase">Stop Loss</div>
-                                <div className="text-xs font-mono font-medium mt-1">
-                                  {monitor.stop_loss != null ? monitor.stop_loss.toLocaleString() : '—'}
-                                </div>
-                              </div>
-                              <div>
-                                <div className="text-[10px] text-slate-400 uppercase">Take Profit</div>
-                                <div className="text-xs font-mono font-medium mt-1">
-                                  {monitor.take_profit != null ? monitor.take_profit.toLocaleString() : '—'}
-                                </div>
-                              </div>
-                            </div>
-                          </div>
-                        )}
-
-                        {/* Expandable In-Place SMC Zone Visualizer */}
-                        {scannerChartSymbol === row.symbol && (
-                          <div className="border-t border-slate-200 bg-slate-50/70 p-4 flex flex-col gap-3">
-                            {/* Live SMC Structure Breakdown Banner */}
-                            <div className="rounded-lg bg-white border border-slate-200/80 p-3 shadow-xs">
-                              <div className="flex items-center justify-between flex-wrap gap-2 pb-2 mb-2 border-b border-slate-100">
-                                <div className="flex items-center gap-2">
-                                  <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-                                  <span className="text-xs font-bold text-slate-800">
-                                    {row.symbol} {monitor?.execution_timeframe || '1M'} SMC Prepared Structure & Zones
-                                  </span>
-
-                                  <span className="text-[10px] px-2 py-0.5 rounded bg-sky-50 text-sky-700 border border-sky-200 font-mono">
-                                    {monitor?.stage || 'CONTINUATION_BOS'}
-                                  </span>
-                                </div>
-                                <div className="text-[11px] text-slate-500">
-                                  Macro Bias: <span className="font-semibold text-slate-800">{monitor?.macro_trend || 'BEARISH'}</span>
-                                </div>
-                              </div>
-                              {(() => {
-                                const liveCandleData = liveCandlesBySymbol[row.symbol];
-                                const hasBos = liveCandleData?.local_bos_idx != null && liveCandleData?.bos_level != null;
-                                const fvgTop = liveCandleData?.fvg_top;
-                                const fvgBot = liveCandleData?.fvg_bottom;
-                                const idmLvl = liveCandleData?.idm_level;
-                                const bosLvl = liveCandleData?.bos_level;
-                                const currPx = liveCandleData?.current_price ?? row.last_price ?? monitor?.current_price;
-                                const shPrice = liveCandleData?.recent_swing_high?.price;
-                                const slPrice = liveCandleData?.recent_swing_low?.price;
-
-                                return (
-                                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
-                                    {hasBos ? (
-                                      <>
-                                        <div className="p-2 rounded bg-slate-50 border border-slate-100">
-                                          <div className="text-[10px] uppercase text-purple-600 font-medium">{monitor?.execution_timeframe || '1M'} IDM Level</div>
-                                          <div className="font-mono font-bold text-purple-700 mt-0.5">
-                                            {idmLvl != null ? `$${idmLvl.toLocaleString()}` : '—'}
-                                          </div>
-                                        </div>
-                                        <div className="p-2 rounded bg-slate-50 border border-slate-100">
-                                          <div className="text-[10px] uppercase text-sky-600 font-medium">{monitor?.execution_timeframe || '1M'} BOS Level</div>
-                                          <div className="font-mono font-bold text-sky-700 mt-0.5">
-                                            {bosLvl != null ? `$${bosLvl.toLocaleString()}` : '—'}
-                                          </div>
-                                        </div>
-                                        <div className="p-2 rounded bg-slate-50 border border-slate-100">
-                                          <div className="text-[10px] uppercase text-amber-600 font-medium">{monitor?.execution_timeframe || '1M'} FVG Zone</div>
-
-                                          <div className="font-mono font-semibold text-amber-800 mt-0.5 text-[11px]">
-                                            {fvgTop != null && fvgBot != null
-                                              ? `$${Math.min(fvgTop, fvgBot).toLocaleString()} – $${Math.max(fvgTop, fvgBot).toLocaleString()}`
-                                              : 'Waiting for FVG'}
-                                          </div>
-                                        </div>
-                                      </>
-                                    ) : (
-                                      <>
-                                        <div className="p-2 rounded bg-slate-50 border border-slate-100">
-                                          <div className="text-[10px] uppercase text-sky-600 font-medium">Range High (HH)</div>
-                                          <div className="font-mono font-bold text-sky-700 mt-0.5">
-                                            {shPrice != null ? `$${shPrice.toLocaleString()}` : 'Scanning'}
-                                          </div>
-                                        </div>
-                                        <div className="p-2 rounded bg-slate-50 border border-slate-100">
-                                          <div className="text-[10px] uppercase text-rose-600 font-medium">Range Low (LL)</div>
-                                          <div className="font-mono font-bold text-rose-700 mt-0.5">
-                                            {slPrice != null ? `$${slPrice.toLocaleString()}` : 'Scanning'}
-                                          </div>
-                                        </div>
-                                        <div className="p-2 rounded bg-slate-50 border border-slate-100">
-                                          <div className="text-[10px] uppercase text-amber-600 font-medium">Structure Status</div>
-                                          <div className="font-mono font-bold text-amber-800 mt-0.5 text-[11px]">
-                                            Waiting for Breakout
-                                          </div>
-                                        </div>
-                                      </>
-                                    )}
-                                    <div className="p-2 rounded bg-slate-50 border border-slate-100">
-                                      <div className="text-[10px] uppercase text-slate-500 font-medium">Live Market Price</div>
-                                      <div className="font-mono font-bold text-slate-900 mt-0.5">
-                                        {currPx != null ? `$${currPx.toLocaleString()}` : '—'}
-                                      </div>
-                                    </div>
-                                  </div>
-                                );
-                              })()}
-                            </div>
-
-                            {/* The Interactive Prepared SMC Chart (Real Live Closed Candles) */}
-                            <div className="rounded-xl overflow-hidden border border-slate-200 bg-white shadow-xs">
-                              {liveCandlesBySymbol[row.symbol] ? (
-                                <TradeChartVisualizer
-                                  trade={getLiveChartTradeItem(row.symbol, row, liveCandlesBySymbol[row.symbol])}
-                                  candleData={liveCandlesBySymbol[row.symbol]}
-                                  hasPrev={false}
-                                  hasNext={false}
-                                  onClose={() => setScannerChartSymbol(null)}
-                                />
-                              ) : (
-                                <div className="p-12 text-center text-xs font-mono text-slate-400 flex flex-col items-center justify-center gap-2">
-                                  <div className="w-5 h-5 border-2 border-indigo-600 border-t-transparent rounded-full animate-spin" />
-                                  <span>Loading live 15M confirmed candles for {row.symbol}...</span>
-                                </div>
-                              )}
-                            </div>
-                          </div>
-                        )}
-                      </div>
+                        <div className="flex items-center gap-2 text-xs font-mono tabular-nums">
+                          <span className="font-semibold text-slate-800">
+                            {lastPx ? `$${lastPx.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '—'}
+                          </span>
+                          {row?.spread != null && (
+                            <span className="text-[10px] text-slate-400">
+                              (Spd: {row.spread.toFixed(2)})
+                            </span>
+                          )}
+                        </div>
+                      </button>
                     );
-                  })
+                  })}
+                </div>
+
+                {/* Engine Controls & Account Stats */}
+                <div className="flex items-center gap-3 flex-wrap justify-between lg:justify-end border-t lg:border-t-0 pt-3 lg:pt-0 border-slate-100">
+                  <div className="flex items-center gap-2 text-xs font-mono">
+                    <span className="text-slate-400">Paper Balance:</span>
+                    <span className="font-bold text-slate-900">
+                      ${(status?.paper_summary?.balance ?? 10000).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </span>
+                    <span className="text-slate-300">·</span>
+                    <span className={`font-semibold ${(status?.paper_summary?.total_unrealized_pnl ?? 0) >= 0 ? 'text-emerald-700' : 'text-rose-700'}`}>
+                      {(status?.paper_summary?.total_unrealized_pnl ?? 0) >= 0 ? '+' : ''}${(status?.paper_summary?.total_unrealized_pnl ?? 0).toFixed(2)}
+                    </span>
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={handleManualScan}
+                      disabled={!connected || scanningNow}
+                      className="h-8 px-3 rounded-lg text-xs font-mono font-medium bg-slate-900 text-white hover:bg-slate-800 disabled:opacity-40 cursor-pointer shadow-xs transition-colors"
+                    >
+                      {scanningNow ? 'Scanning...' : 'Scan Now'}
+                    </button>
+                    <button
+                      onClick={handleToggleEngine}
+                      disabled={!connected}
+                      className={`h-8 px-3.5 rounded-lg text-xs font-mono font-semibold transition-colors flex items-center gap-1.5 border disabled:opacity-40 shadow-xs cursor-pointer ${
+                        status?.is_running
+                          ? 'bg-rose-50 text-rose-700 border-rose-200 hover:bg-rose-100'
+                          : 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100'
+                      }`}
+                    >
+                      <span>{status?.is_running ? '■ Stop Engine' : '▶ Start Engine'}</span>
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {/* ── Central Hero Element: TradingView Interactive SMC Chart ── */}
+              <div className="bg-white border border-slate-200 rounded-xl overflow-hidden shadow-xs">
+                {liveCandlesBySymbol[selectedLiveSymbol] ? (
+                  <TradeChartVisualizer
+                    trade={getLiveChartTradeItem(selectedLiveSymbol, activeRow, liveCandlesBySymbol[selectedLiveSymbol])}
+                    candleData={liveCandlesBySymbol[selectedLiveSymbol]}
+                    hasPrev={false}
+                    hasNext={false}
+                  />
+                ) : (
+                  <div className="p-16 text-center text-xs font-mono text-slate-400 flex flex-col items-center justify-center gap-3">
+                    <div className="w-6 h-6 border-2 border-slate-900 border-t-transparent rounded-full animate-spin" />
+                    <span>Loading live 1M candles and SMC levels for {selectedLiveSymbol}...</span>
+                  </div>
                 )}
               </div>
-            </div>
 
-            {/* LIVE PAPER TRADE MONITORING */}
-            <div className="border-t border-slate-200">
-              <div className="px-5 py-3.5 bg-slate-50/70 flex items-center justify-between">
-                <div>
-                  <h3 className="text-sm font-semibold text-slate-900">
-                    Live Paper Trade Monitoring
-                  </h3>
-                  <p className="text-xs text-slate-500 mt-0.5">
-                    Real-time MTM P&amp;L, MFE, MAE, and SL/TP lifecycle (No real broker orders)
-                  </p>
+              {/* ── Step-by-Step Strategy Progression Pipeline ── */}
+              <div className="bg-white border border-slate-200 rounded-xl p-5 shadow-xs flex flex-col gap-4">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-3 border-b border-slate-100">
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-bold text-slate-900">
+                      SMC Rule Progression Flow · {selectedLiveSymbol}
+                    </span>
+                    <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-slate-100 text-slate-600 border border-slate-200">
+                      30M Macro Bias → 1M Execution
+                    </span>
+                  </div>
+                  <span className="text-[11px] font-mono text-slate-500">
+                    Rulebook Reference: IDM Sweep → BOS Close → FVG Retrace → Rule #8 SL
+                  </span>
                 </div>
-                <span className="text-xs font-mono text-slate-600">
-                  {status?.paper_trades_open?.length ?? 0} Open · {status?.paper_trades_closed?.length ?? 0} Closed
-                </span>
+
+                {/* 5 Milestone Stepper */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3 text-xs">
+                  {/* Step 1: 30M Macro Bias */}
+                  <div className="p-3 rounded-lg border border-slate-200/80 bg-slate-50/50 flex flex-col justify-between gap-1">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[10px] font-mono uppercase text-slate-400">1. Macro Bias</span>
+                      <span className={`text-[10px] font-mono font-bold px-1.5 py-0.2 rounded ${step1Trend === 'BULLISH' ? 'bg-emerald-100 text-emerald-800' : 'bg-rose-100 text-rose-800'}`}>
+                        {step1Trend}
+                      </span>
+                    </div>
+                    <div className="font-semibold text-slate-800 mt-1">
+                      {step1Trend === 'BULLISH' ? 'Long Bias' : 'Short Bias'}
+                    </div>
+                    <div className="text-[11px] text-slate-500">
+                      30M closed candle structure
+                    </div>
+                  </div>
+
+                  {/* Step 2: 1M Inducement (IDM) */}
+                  <div className={`p-3 rounded-lg border flex flex-col justify-between gap-1 ${monitor?.idm_level != null ? 'border-purple-200 bg-purple-50/40' : 'border-slate-200/80 bg-slate-50/50'}`}>
+                    <div className="flex items-center justify-between">
+                      <span className="text-[10px] font-mono uppercase text-slate-400">2. Inducement (IDM)</span>
+                      <span className={`text-[10px] font-mono font-bold px-1.5 py-0.2 rounded ${monitor?.idm_level != null ? 'bg-purple-100 text-purple-800' : 'bg-slate-200 text-slate-600'}`}>
+                        {monitor?.idm_level != null ? 'SWEPT' : 'WAITING'}
+                      </span>
+                    </div>
+                    <div className="font-mono font-bold text-slate-900 mt-1">
+                      {monitor?.idm_level != null ? `$${monitor.idm_level.toLocaleString()}` : 'Searching'}
+                    </div>
+                    <div className="text-[11px] text-slate-500">
+                      Liquidity grab before BOS
+                    </div>
+                  </div>
+
+                  {/* Step 3: 1M Break of Structure (BOS) */}
+                  <div className={`p-3 rounded-lg border flex flex-col justify-between gap-1 ${hasBos ? 'border-sky-200 bg-sky-50/40' : 'border-slate-200/80 bg-slate-50/50'}`}>
+                    <div className="flex items-center justify-between">
+                      <span className="text-[10px] font-mono uppercase text-slate-400">3. Structure (BOS)</span>
+                      <span className={`text-[10px] font-mono font-bold px-1.5 py-0.2 rounded ${hasBos ? 'bg-sky-100 text-sky-800' : 'bg-slate-200 text-slate-600'}`}>
+                        {hasBos ? 'CONFIRMED' : 'WAITING'}
+                      </span>
+                    </div>
+                    <div className="font-mono font-bold text-slate-900 mt-1">
+                      {liveCandleData?.bos_level != null ? `$${liveCandleData.bos_level.toLocaleString()}` : monitor?.bos_level != null ? `$${monitor.bos_level.toLocaleString()}` : 'Pending Break'}
+                    </div>
+                    <div className="text-[11px] text-slate-500">
+                      Full candle body close
+                    </div>
+                  </div>
+
+                  {/* Step 4: 1M FVG Retracement */}
+                  <div className={`p-3 rounded-lg border flex flex-col justify-between gap-1 ${isFvgTouched ? 'border-emerald-200 bg-emerald-50/40' : hasFvg ? 'border-amber-200 bg-amber-50/40' : 'border-slate-200/80 bg-slate-50/50'}`}>
+                    <div className="flex items-center justify-between">
+                      <span className="text-[10px] font-mono uppercase text-slate-400">4. FVG Retrace</span>
+                      <span className={`text-[10px] font-mono font-bold px-1.5 py-0.2 rounded ${isFvgTouched ? 'bg-emerald-100 text-emerald-800' : hasFvg ? 'bg-amber-100 text-amber-800' : 'bg-slate-200 text-slate-600'}`}>
+                        {isFvgTouched ? 'TOUCHED' : hasFvg ? 'PENDING TOUCH' : 'WAITING'}
+                      </span>
+                    </div>
+                    <div className="font-mono font-bold text-slate-900 mt-1 text-[11px]">
+                      {hasFvg ? `$${Math.min(liveCandleData?.fvg_top || 0, liveCandleData?.fvg_bottom || 0).toLocaleString()} – $${Math.max(liveCandleData?.fvg_top || 0, liveCandleData?.fvg_bottom || 0).toLocaleString()}` : 'Waiting for FVG'}
+                    </div>
+                    <div className="text-[11px] text-slate-500">
+                      3-candle imbalance zone
+                    </div>
+                  </div>
+
+                  {/* Step 5: Execution & Protection */}
+                  <div className={`p-3 rounded-lg border flex flex-col justify-between gap-1 ${isInTrade ? 'border-emerald-200 bg-emerald-50/40' : 'border-slate-200/80 bg-slate-50/50'}`}>
+                    <div className="flex items-center justify-between">
+                      <span className="text-[10px] font-mono uppercase text-slate-400">5. Execution</span>
+                      <span className={`text-[10px] font-mono font-bold px-1.5 py-0.2 rounded ${isInTrade ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-200 text-slate-600'}`}>
+                        {isInTrade ? 'IN TRADE' : 'IDLE'}
+                      </span>
+                    </div>
+                    <div className="font-mono font-bold text-slate-900 mt-1">
+                      {isInTrade ? `$${activePaperTrade?.entry_price?.toLocaleString()}` : 'Target 1:2 R:R'}
+                    </div>
+                    <div className="text-[11px] text-slate-500">
+                      SL: C1 Extreme · TP: 1:2
+                    </div>
+                  </div>
+                </div>
+
+                {/* Plain English Summary Callout */}
+                <div className="p-3 rounded-lg bg-slate-50 border border-slate-200/80 text-xs font-mono text-slate-700 flex items-center gap-2">
+                  <span className="w-2 h-2 rounded-full bg-slate-900 flex-shrink-0" />
+                  <span>{summarySentence}</span>
+                </div>
               </div>
-              <div className="overflow-x-auto">
-                <table className="w-full border-collapse text-xs font-mono tabular-nums">
-                  <thead>
-                    <tr className="border-b border-slate-200 bg-slate-50/50">
-                      {['Asset', 'Strategy', 'Side', 'Entry', 'Live Price', 'SL / TP', 'Unrealized P&L', 'MFE / MAE', 'Status / Exit', 'Action'].map(h => (
-                        <th key={h} className="px-4 py-2 text-left text-[11px] font-medium text-slate-500 whitespace-nowrap">{h}</th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100">
-                    {[...(status?.paper_trades_open || []), ...(status?.paper_trades_closed || []).slice(0, 10)].length === 0 ? (
-                      <tr>
-                        <td colSpan={10} className="px-5 py-8 text-center text-xs text-slate-400">
-                          No active or closed paper trades yet. Engine will paper-trade valid setups automatically when running.
-                        </td>
-                      </tr>
-                    ) : (
-                      [...(status?.paper_trades_open || []), ...(status?.paper_trades_closed || []).slice(0, 10)].map(pt => {
-                        const pnlVal = pt.status === 'CLOSED' ? pt.realized_pnl : pt.unrealized_pnl;
-                        return (
-                          <tr key={pt.trade_id} className="hover:bg-slate-50/70">
-                            <td className="px-4 py-2.5 font-semibold text-slate-900">{pt.symbol}</td>
-                            <td className="px-4 py-2.5 text-[11px] text-slate-600">{pt.strategy_name}</td>
-                            <td className="px-4 py-2.5">
-                              <Badge label={pt.action_label || pt.direction} color={pt.direction === 'LONG' ? 'green' : 'red'} />
-                            </td>
-                            <td className="px-4 py-2.5">${pt.entry_price.toLocaleString(undefined, { maximumFractionDigits: 2 })}</td>
-                            <td className="px-4 py-2.5 font-semibold">${pt.current_price.toLocaleString(undefined, { maximumFractionDigits: 2 })}</td>
-                            <td className="px-4 py-2.5 text-[11px]">
-                              <span className="text-rose-600">SL {pt.stop_loss.toLocaleString()}</span>
-                              <span className="text-slate-300"> / </span>
-                              <span className="text-emerald-600">TP {pt.take_profit.toLocaleString()}</span>
-                            </td>
-                            <td className={`px-4 py-2.5 font-semibold ${pnlVal >= 0 ? 'text-emerald-700' : 'text-rose-700'}`}>
-                              {pnlVal >= 0 ? '+' : ''}${pnlVal.toFixed(2)}
-                            </td>
-                            <td className="px-4 py-2.5 text-[11px]">
-                              <span className="text-emerald-600">+${(pt.mfe ?? 0).toFixed(2)}</span>
-                              <span className="text-slate-300"> / </span>
-                              <span className="text-rose-600">${(pt.mae ?? 0).toFixed(2)}</span>
-                            </td>
-                            <td className="px-4 py-2.5">
-                              <Badge
-                                label={pt.status === 'CLOSED' ? `${pt.final_result || 'CLOSED'} (${pt.exit_condition || ''})` : pt.lifecycle_stage || 'OPEN'}
-                                color={pt.status === 'OPEN' ? 'cyan' : pt.final_result === 'WIN' ? 'green' : 'red'}
-                              />
-                            </td>
-                            <td className="px-4 py-2.5">
-                              {pt.status === 'OPEN' ? (
-                                <button
-                                  onClick={() => handleClosePaperTrade(pt.trade_id)}
-                                  className="h-6 px-2 text-[11px] font-medium rounded bg-slate-800 text-white hover:bg-slate-700 cursor-pointer"
-                                >
-                                  Close Paper
-                                </button>
-                              ) : (
-                                <span className="text-[10px] text-slate-400">
-                                  {pt.closed_at ? new Date(pt.closed_at).toLocaleTimeString() : '—'}
-                                </span>
-                              )}
+
+              {/* ── Bottom Section: Active Positions & Live Strategy Event Log ── */}
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+                {/* Left: Active & Closed Paper Positions */}
+                <div className="bg-white border border-slate-200 rounded-xl overflow-hidden shadow-xs flex flex-col">
+                  <div className="px-5 py-3.5 border-b border-slate-100 bg-slate-50/70 flex items-center justify-between">
+                    <div>
+                      <h4 className="text-xs font-bold text-slate-900">
+                        Paper Trading Positions
+                      </h4>
+                      <p className="text-[11px] text-slate-500">
+                        Simulated execution lifecycle (Zero real capital risk)
+                      </p>
+                    </div>
+                    <span className="text-[11px] font-mono text-slate-500">
+                      {status?.paper_trades_open?.length ?? 0} Open · {status?.paper_trades_closed?.length ?? 0} Closed
+                    </span>
+                  </div>
+
+                  <div className="overflow-x-auto flex-1">
+                    <table className="w-full border-collapse text-xs font-mono tabular-nums">
+                      <thead>
+                        <tr className="border-b border-slate-100 bg-slate-50/40 text-[11px] text-slate-400">
+                          <th className="px-4 py-2 text-left font-medium">Asset</th>
+                          <th className="px-4 py-2 text-left font-medium">Side</th>
+                          <th className="px-4 py-2 text-right font-medium">Entry</th>
+                          <th className="px-4 py-2 text-right font-medium">Current</th>
+                          <th className="px-4 py-2 text-right font-medium">SL</th>
+                          <th className="px-4 py-2 text-right font-medium">TP</th>
+                          <th className="px-4 py-2 text-right font-medium">Unrealized P&amp;L</th>
+                          <th className="px-4 py-2 text-center font-medium">Status</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100">
+                        {(!status?.paper_trades_open || status.paper_trades_open.length === 0) ? (
+                          <tr>
+                            <td colSpan={8} className="px-4 py-8 text-center text-xs text-slate-400">
+                              No open paper positions. Strategy engine is evaluating live structure.
                             </td>
                           </tr>
-                        );
-                      })
-                    )}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-
-            {/* REAL-TIME SIGNALS & STRATEGY REASONING */}
-            <div className="border-t border-slate-200">
-              <div className="px-5 py-3.5 bg-slate-50/70 flex items-center justify-between">
-                <div>
-                  <h3 className="text-sm font-semibold text-slate-900">
-                    Real-Time Signals &amp; Rejection Log
-                  </h3>
-                  <p className="text-xs text-slate-500 mt-0.5">
-                    Structured IDM, BOS, CHoCH, FVG reasoning and rejection explanations
-                  </p>
-                </div>
-                <span className="text-xs font-mono text-slate-500">
-                  Latest {status?.recent_signals?.length ?? 0} Events
-                </span>
-              </div>
-              <div className="divide-y divide-slate-100 max-h-96 overflow-y-auto">
-                {(!status?.recent_signals || status.recent_signals.length === 0) ? (
-                  <div className="px-5 py-8 text-center text-xs font-mono text-slate-400">
-                    No triggered signals or rejected setups recorded yet.
+                        ) : (
+                          status.paper_trades_open.map(pt => {
+                            const pnl = Number(pt.unrealized_pnl ?? 0);
+                            return (
+                              <tr key={pt.trade_id} className="hover:bg-slate-50/70 transition-colors">
+                                <td className="px-4 py-2.5 font-bold text-slate-900">{pt.symbol}</td>
+                                <td className="px-4 py-2.5">
+                                  <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${pt.direction === 'LONG' ? 'bg-emerald-50 text-emerald-700' : 'bg-rose-50 text-rose-700'}`}>
+                                    {pt.direction}
+                                  </span>
+                                </td>
+                                <td className="px-4 py-2.5 text-right font-medium">${Number(pt.entry_price).toLocaleString()}</td>
+                                <td className="px-4 py-2.5 text-right">${Number(pt.current_price || pt.entry_price).toLocaleString()}</td>
+                                <td className="px-4 py-2.5 text-right text-rose-600">${Number(pt.stop_loss).toLocaleString()}</td>
+                                <td className="px-4 py-2.5 text-right text-emerald-600">${Number(pt.take_profit).toLocaleString()}</td>
+                                <td className={`px-4 py-2.5 text-right font-bold ${pnl >= 0 ? 'text-emerald-700' : 'text-rose-700'}`}>
+                                  {pnl >= 0 ? '+' : ''}${pnl.toFixed(2)}
+                                </td>
+                                <td className="px-4 py-2.5 text-center">
+                                  <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-cyan-50 text-cyan-800 border border-cyan-200">
+                                    ACTIVE
+                                  </span>
+                                </td>
+                              </tr>
+                            );
+                          })
+                        )}
+                      </tbody>
+                    </table>
                   </div>
-                ) : (
-                  status.recent_signals.map(sig => (
-                    <div key={sig.signal_id} className="px-5 py-3 text-xs space-y-1.5 hover:bg-slate-50/60">
-                      <div className="flex items-center justify-between flex-wrap gap-2">
-                        <div className="flex items-center gap-2 font-mono">
-                          <span className="font-bold text-slate-900">{sig.symbol}</span>
-                          <Badge label={sig.action_label || sig.direction} color={sig.direction === 'LONG' ? 'green' : 'red'} />
-                          <span className="px-1.5 py-0.5 rounded bg-slate-100 text-slate-700 text-[10px]">{sig.strategy_name}</span>
-                          <Badge
-                            label={sig.setup_status}
-                            color={sig.setup_status === 'ENTRY_TRIGGERED' ? 'green' : sig.setup_status === 'REJECTED' ? 'red' : 'amber'}
-                          />
-                        </div>
-                        <span className="text-[11px] font-mono text-slate-400">
-                          {new Date(sig.signal_timestamp).toLocaleString()}
-                        </span>
-                      </div>
-                      <p className="text-slate-700 leading-relaxed">{sig.reasoning}</p>
-                      {sig.rejection_reason && (
-                        <div className="text-[11px] font-mono text-rose-700">
-                          Rejection Reason: {sig.rejection_reason}
-                        </div>
-                      )}
-                      {sig.setup_status === 'ENTRY_TRIGGERED' && (
-                        <div className="flex flex-wrap gap-3 text-[11px] font-mono text-slate-600 pt-0.5">
-                          <span>Entry: ${sig.entry_price?.toLocaleString()}</span>
-                          <span>SL: ${sig.stop_loss?.toLocaleString()}</span>
-                          <span>TP: ${sig.take_profit?.toLocaleString()}</span>
-                          <span>R:R 1:{sig.risk_reward_ratio ?? 2}</span>
-                          {sig.idm_level != null && <span>IDM: {sig.idm_level}</span>}
-                          {sig.bos_level != null && <span>BOS: {sig.bos_level}</span>}
-                          {sig.fvg_bottom != null && sig.fvg_top != null && (
-                            <span>FVG: [{sig.fvg_bottom}–{sig.fvg_top}]</span>
-                          )}
-                          {sig.ai_decision && (
-                            <span className="text-indigo-700">AI: {sig.ai_decision} ({sig.ai_confidence ?? 0}%)</span>
-                          )}
-                        </div>
-                      )}
+                </div>
+
+                {/* Right: Live Strategy Decision & Event Log */}
+                <div className="bg-white border border-slate-200 rounded-xl overflow-hidden shadow-xs flex flex-col">
+                  <div className="px-5 py-3.5 border-b border-slate-100 bg-slate-50/70 flex items-center justify-between">
+                    <div>
+                      <h4 className="text-xs font-bold text-slate-900">
+                        Live Strategy Decision &amp; Event Log
+                      </h4>
+                      <p className="text-[11px] text-slate-500">
+                        Chronological audit of structural detections and triggers
+                      </p>
                     </div>
-                  ))
-                )}
+                    <span className="text-[11px] font-mono text-slate-500">
+                      {status?.recent_signals?.length ?? 0} Events
+                    </span>
+                  </div>
+
+                  <div className="divide-y divide-slate-100 max-h-72 overflow-y-auto">
+                    {(!status?.recent_signals || status.recent_signals.length === 0) ? (
+                      <div className="px-5 py-8 text-center text-xs font-mono text-slate-400">
+                        No structural events recorded yet. Start engine to begin evaluation.
+                      </div>
+                    ) : (
+                      status.recent_signals.map(sig => (
+                        <div key={sig.signal_id} className="px-5 py-2.5 text-xs space-y-1 hover:bg-slate-50/60 transition-colors">
+                          <div className="flex items-center justify-between gap-2 flex-wrap">
+                            <div className="flex items-center gap-2 font-mono">
+                              <span className="font-bold text-slate-900">{sig.symbol}</span>
+                              <span className={`px-1.5 py-0.2 rounded text-[10px] font-bold ${sig.direction === 'LONG' ? 'bg-emerald-50 text-emerald-700' : 'bg-rose-50 text-rose-700'}`}>
+                                {sig.direction}
+                              </span>
+                              <span className="px-1.5 py-0.2 rounded bg-slate-100 text-slate-600 text-[10px] font-medium">
+                                {sig.strategy_name}
+                              </span>
+                            </div>
+                            <span className="text-[10px] font-mono text-slate-400">
+                              {new Date(sig.signal_timestamp).toLocaleTimeString()}
+                            </span>
+                          </div>
+                          <p className="text-slate-600 text-[11px] leading-relaxed">
+                            {sig.reasoning}
+                          </p>
+                          {sig.rejection_reason && (
+                            <div className="text-[10px] font-mono text-rose-600">
+                              Rejection: {sig.rejection_reason}
+                            </div>
+                          )}
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </div>
               </div>
             </div>
-          </div>
-        )}
+          );
+        })()}
 
         {/* ══════════════════════════════════════════════════════════════════
             TAB 3: OPEN ORDERS
