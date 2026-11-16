@@ -107,8 +107,15 @@ class PaperTradeMonitor:
             logger.warning(f"[PaperMonitor] Invalid risk geometry for {signal.signal_id}: entry={entry}, sl={sl}")
             return None
 
+        # Sanity guard: prevent tiny risk distance on 1M wicks from generating astronomical position sizes
+        min_risk_dist = max(entry * 0.0003, 0.25)
+        effective_risk_dist = max(risk_dist, min_risk_dist)
+
         risk_amount = round(self.balance * (self.risk_percent / 100.0), 2)
-        position_size = risk_amount / risk_dist
+        raw_position_size = risk_amount / effective_risk_dist
+        # Cap notional value to 10x account equity to guarantee realistic institutional execution
+        max_notional = self.balance * 10.0
+        position_size = min(raw_position_size, max_notional / entry)
 
         init_price = entry
         if live_ticker and live_ticker.get("connected"):
@@ -129,10 +136,11 @@ class PaperTradeMonitor:
             "entry_price": round(entry, 5),
             "stop_loss": round(sl, 5),
             "take_profit": round(tp, 5),
-            "risk_distance": round(risk_dist, 5),
+            "risk_distance": round(effective_risk_dist, 5),
             "risk_amount": risk_amount,
             "position_size": round(position_size, 6),
             "current_price": round(init_price, 5),
+            "touch_price": round(entry, 5),
             "unrealized_pnl": 0.0,
             "unrealized_r": 0.0,
             "realized_pnl": 0.0,

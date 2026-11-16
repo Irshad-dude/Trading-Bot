@@ -150,8 +150,9 @@ export default function TradeChartVisualizer({
   const candleSpacing = baseSpacing * zoom;
   const candleBodyWidth = Math.max(4, Math.min(24, candleSpacing * 0.72));
 
-  const isLiveCandidate = trade.result === 'LIVE_CANDIDATE' || candleData?.is_active_trade === false;
-  const isLiveActive = trade.result === 'ACTIVE_OPEN' || candleData?.is_active_trade === true;
+  const isInspectingTrade = trade.result === 'WIN' || trade.result === 'LOSS' || trade.result === 'ACTIVE_OPEN';
+  const isLiveActive = trade.result === 'ACTIVE_OPEN' || (candleData?.is_active_trade === true && trade.result !== 'LIVE_CANDIDATE');
+  const isLiveCandidate = !isInspectingTrade && (trade.result === 'LIVE_CANDIDATE' || candleData?.is_active_trade === false);
   const isBacktest = !isLiveCandidate && !isLiveActive;
 
   // Auto-center view on the entry setup candle or latest live candle
@@ -276,11 +277,19 @@ export default function TradeChartVisualizer({
     return paddingLeft + idx * candleSpacing + candleSpacing / 2 + panX;
   };
 
-  // Effective price levels (snapped strictly to candle data)
-  const effectiveEntryPrice = candleData?.entry_price ?? (isLiveCandidate ? 0 : trade.entry_price);
-  const effectiveStopLoss = candleData?.stop_loss ?? (isLiveCandidate ? 0 : trade.stop_loss);
-  const effectiveTakeProfit = candleData?.take_profit ?? (isLiveCandidate ? 0 : trade.take_profit);
-  const effectiveExitPrice = candleData?.exit_price ?? (isLiveCandidate ? 0 : trade.exit_price);
+  // Effective price levels (snapped strictly to candle data or explicit trade levels)
+  const effectiveEntryPrice = (trade.entry_price && trade.entry_price > 0)
+    ? trade.entry_price
+    : (candleData?.entry_price && candleData.entry_price > 0 ? candleData.entry_price : 0);
+  const effectiveStopLoss = (trade.stop_loss && trade.stop_loss > 0)
+    ? trade.stop_loss
+    : (candleData?.stop_loss && candleData.stop_loss > 0 ? candleData.stop_loss : 0);
+  const effectiveTakeProfit = (trade.take_profit && trade.take_profit > 0)
+    ? trade.take_profit
+    : (candleData?.take_profit && candleData.take_profit > 0 ? candleData.take_profit : 0);
+  const effectiveExitPrice = (trade.exit_price && trade.exit_price > 0)
+    ? trade.exit_price
+    : (candleData?.exit_price && candleData.exit_price > 0 ? candleData.exit_price : 0);
 
   // Positions for Trade Levels
   const entryY = effectiveEntryPrice > 0 ? getY(effectiveEntryPrice) : 0;
@@ -302,16 +311,19 @@ export default function TradeChartVisualizer({
   const slH = Math.abs(entryY - slY);
 
   // ── Canonical Structural Anchor Points (Separation of Concerns: Strategy Engine -> Visualizer) ──
-  // ── Canonical Structural Anchor Points (Separation of Concerns: Strategy Engine -> Visualizer) ──
   const localShIdx = isLiveCandidate
     ? (candleData?.local_sh_idx ?? null)
     : (candleData?.local_sh_idx ?? Math.max(0, entryIdx - 14));
-  const shPrice = candleData?.sh_price ?? candleData?.bos_level ?? candleData?.recent_swing_high?.price ?? trade.bos_level ?? (trade as any).sh_price ?? 0;
+  const shPrice = (trade.bos_level && trade.bos_level > 0)
+    ? trade.bos_level
+    : (candleData?.sh_price ?? candleData?.bos_level ?? candleData?.recent_swing_high?.price ?? (trade as any).sh_price ?? 0);
 
   const localIdmIdx = isLiveCandidate
     ? (candleData?.local_idm_idx ?? null)
     : (candleData?.local_idm_idx ?? Math.max(0, entryIdx - 10));
-  const idmPrice = candleData?.idm_price ?? candleData?.idm_level ?? trade.idm_level ?? 0;
+  const idmPrice = (trade.idm_level && trade.idm_level > 0)
+    ? trade.idm_level
+    : (candleData?.idm_price ?? candleData?.idm_level ?? 0);
 
   const localSweepIdx = isLiveCandidate
     ? (candleData?.local_sweep_idx ?? null)
@@ -338,18 +350,13 @@ export default function TradeChartVisualizer({
   const localExitIdx = isLiveCandidate ? (candleData?.local_exit_idx ?? null) : (candleData?.local_exit_idx ?? exitIdx);
 
   // Strict BOS Validation matching TradingView SMC Rules
-  // In live candidate view, a BOS is confirmed if a breakout level is established
-  const hasBos = isLiveCandidate
-    ? Boolean(
-        ((candleData?.bos_price ?? 0) > 0 || (candleData?.bos_level ?? 0) > 0) &&
-        (localBosIdx !== null || (candleData?.setup_stage && candleData.setup_stage !== 'SCANNING_STRUCTURE'))
-      )
-    : Boolean(shPrice > 0);
+  const hasBos = Boolean(
+    shPrice > 0 ||
+    ((candleData?.bos_price ?? 0) > 0 || (candleData?.bos_level ?? 0) > 0)
+  );
 
   // IDM is valid whenever identified or swept in the current structural regime
-  const hasIdm = isLiveCandidate
-    ? Boolean(idmPrice > 0)
-    : Boolean(idmPrice > 0);
+  const hasIdm = Boolean(idmPrice > 0);
 
   const pendingBosLevel = !hasBos && (candleData?.recent_swing_high?.price ?? (shPrice > 0 ? shPrice : 0));
   const bosDisplayPrice = hasBos ? (shPrice || (candleData?.bos_price ?? 0)) : (pendingBosLevel || 0);
@@ -357,15 +364,15 @@ export default function TradeChartVisualizer({
   const idmY = hasIdm ? getY(idmPrice) : 0;
 
   // FVG (Fair Value Gap) Boundary Zone Calculations
-  const fvgTopVal = candleData?.fvg_top ?? (isLiveCandidate ? undefined : trade.fvg_top);
-  const fvgBottomVal = candleData?.fvg_bottom ?? (isLiveCandidate ? undefined : trade.fvg_bottom);
-  const hasFvg = isLiveCandidate
-    ? Boolean(fvgTopVal !== undefined && fvgBottomVal !== undefined && fvgTopVal > 0 && fvgBottomVal > 0)
-    : Boolean(fvgTopVal !== undefined && fvgBottomVal !== undefined && fvgTopVal > 0 && fvgBottomVal > 0);
+  const fvgTopVal = (trade.fvg_top && trade.fvg_top > 0)
+    ? trade.fvg_top
+    : (candleData?.fvg_top && candleData.fvg_top > 0 ? candleData.fvg_top : undefined);
+  const fvgBottomVal = (trade.fvg_bottom && trade.fvg_bottom > 0)
+    ? trade.fvg_bottom
+    : (candleData?.fvg_bottom && candleData.fvg_bottom > 0 ? candleData.fvg_bottom : undefined);
+  const hasFvg = Boolean(fvgTopVal !== undefined && fvgBottomVal !== undefined && fvgTopVal > 0 && fvgBottomVal > 0);
 
-  const hasPlannedLevels = isLiveCandidate
-    ? Boolean(hasFvg && effectiveEntryPrice > 0 && effectiveStopLoss > 0 && effectiveTakeProfit > 0)
-    : Boolean(effectiveEntryPrice > 0 && effectiveStopLoss > 0 && effectiveTakeProfit > 0);
+  const hasPlannedLevels = Boolean(effectiveEntryPrice > 0 && effectiveStopLoss > 0 && effectiveTakeProfit > 0);
 
   const fvgTopPrice = hasFvg && fvgTopVal !== undefined && fvgBottomVal !== undefined ? Math.max(fvgTopVal, fvgBottomVal) : 0;
   const fvgBottomPrice = hasFvg && fvgTopVal !== undefined && fvgBottomVal !== undefined ? Math.min(fvgTopVal, fvgBottomVal) : 0;
@@ -387,7 +394,7 @@ export default function TradeChartVisualizer({
 
   // FVG Box Horizontal Boundaries (from C1 wick across wait candles to Entry touch or current live candle)
   const rightBoundaryIdx = isLiveCandidate ? Math.max(0, candleCount - 1) : (localEntryIdx ?? candleCount - 1);
-  const fvgC1X = localC1Idx !== null ? getX(localC1Idx) : getX(0);
+  const fvgC1X = localC1Idx !== null ? getX(localC1Idx) : getX(Math.max(0, rightBoundaryIdx - 3));
   const fvgBoxX1 = Math.min(fvgC1X, getX(rightBoundaryIdx)) - candleBodyWidth / 2;
   const fvgBoxX2 = Math.max(fvgC1X, getX(rightBoundaryIdx)) + candleBodyWidth / 2;
   const fvgBoxW = Math.max(candleSpacing * 2, fvgBoxX2 - fvgBoxX1);
@@ -494,6 +501,15 @@ export default function TradeChartVisualizer({
         rawY: slY,
         bg: '#be123c',
         border: '#fda4af',
+        text: '#ffffff',
+      }] : []),
+      ...(effectiveExitPrice > 0 && (trade.result === 'WIN' || trade.result === 'LOSS' || trade.result === 'BREAKEVEN') ? [{
+        id: 'exit',
+        label: `EXIT (${trade.result})`,
+        price: effectiveExitPrice,
+        rawY: getY(effectiveExitPrice),
+        bg: trade.result === 'WIN' ? '#065f46' : '#9f1239',
+        border: '#ffffff',
         text: '#ffffff',
       }] : []),
       ...(isLiveCandidate && !hasBos && candleData?.recent_swing_high ? [{
@@ -905,6 +921,10 @@ export default function TradeChartVisualizer({
                 )}
                 {hasPlannedLevels && (
                   <>
+                    <span className="px-2 py-0.5 rounded bg-amber-100 text-amber-900 border border-amber-300 font-bold text-[10px] flex items-center gap-1.5 shadow-2xs">
+                      <span className="w-1.5 h-1.5 rounded-full bg-amber-600" />
+                      Touching Point (${effectiveEntryPrice.toLocaleString()})
+                    </span>
                     <span className="px-2 py-0.5 rounded bg-emerald-100 text-emerald-900 border border-emerald-300 font-bold text-[10px] flex items-center gap-1.5 shadow-2xs">
                       <span className="w-1.5 h-1.5 rounded-full bg-emerald-600" />
                       {isLiveCandidate ? 'Planned Entry' : `${candleData?.timeframe || '1M'} Entry`} (${effectiveEntryPrice.toLocaleString()})
@@ -1164,7 +1184,7 @@ export default function TradeChartVisualizer({
                 )}
 
                 {/* ── 5. FVG Imbalance Gap Box (Starts at Candle 1, extends across wait candles to Entry touch) ── */}
-                {hasFvg && localC1Idx !== null && (
+                {hasFvg && (
                   <g className="fvg-clean-box">
                     {/* Soft amber highlight box with guaranteed min visual height */}
                     <rect
@@ -1238,6 +1258,19 @@ export default function TradeChartVisualizer({
                   </g>
                 )}
 
+                {/* ── 6A. Retracement Touching Point Marker (Where Price Retraced into FVG) ── */}
+                {hasPlannedLevels && effectiveEntryPrice > 0 && (
+                  <g className="touch-point-marker">
+                    <circle cx={getX(localEntryIdx ?? entryIdx)} cy={entryY} r={7} fill="none" stroke="#f59e0b" strokeWidth={2} />
+                    <circle cx={getX(localEntryIdx ?? entryIdx)} cy={entryY} r={3.5} fill="#f59e0b" />
+                    <g transform={`translate(${getX(localEntryIdx ?? entryIdx)}, ${entryY + (isLong ? 18 : -14)})`}>
+                      <rect x={-55} y={-8} width={110} height={16} rx={3} fill="#78350f" stroke="#fde68a" strokeWidth={0.8} />
+                      <text x={0} y={3.5} textAnchor="middle" fill="#fef3c7" fontSize="7.5" fontFamily="monospace" fontWeight="bold">
+                        Touching Point ${effectiveEntryPrice.toFixed(1)}
+                      </text>
+                    </g>
+                  </g>
+                )}
 
                 {/* ── 6B. Entry Level Segment ── */}
                 {hasPlannedLevels && (
@@ -1264,11 +1297,11 @@ export default function TradeChartVisualizer({
                 )}
 
                 {/* ── 7. Stop Loss Segment (Anchored strictly to Candle 1 Low / High - Rule #8) ── */}
-                {hasPlannedLevels && localC1Idx !== null && (
+                {hasPlannedLevels && (
                   <g className="sl-clean-segment">
-                    <circle cx={getX(localC1Idx)} cy={slY} r={4} fill="#ef4444" stroke="#ffffff" strokeWidth={1.5} />
+                    <circle cx={getX(localC1Idx ?? Math.max(0, (localEntryIdx ?? entryIdx) - 3))} cy={slY} r={4} fill="#ef4444" stroke="#ffffff" strokeWidth={1.5} />
                     <line
-                      x1={getX(localC1Idx)}
+                      x1={getX(localC1Idx ?? Math.max(0, (localEntryIdx ?? entryIdx) - 3))}
                       y1={slY}
                       x2={isLiveCandidate ? getX(candleCount - 1) + 40 : getX(localExitIdx ?? exitIdx)}
                       y2={slY}
@@ -1276,7 +1309,7 @@ export default function TradeChartVisualizer({
                       strokeWidth={2}
                       strokeDasharray="4 2"
                     />
-                    <g transform={`translate(${getX(localC1Idx)}, ${slY + (isLong ? 15 : -8)})`}>
+                    <g transform={`translate(${getX(localC1Idx ?? Math.max(0, (localEntryIdx ?? entryIdx) - 3))}, ${slY + (isLong ? 15 : -8)})`}>
                       <rect x={-4} y={-8} width={isLiveCandidate ? 124 : 102} height={16} rx={3} fill="#be123c" fillOpacity={0.95} />
                       <text x={isLiveCandidate ? 58 : 47} y={3.5} textAnchor="middle" fill="#ffffff" fontSize="8" fontFamily="monospace" fontWeight="bold">
                         {isLiveCandidate ? `PLANNED SL $${effectiveStopLoss.toFixed(1)} (C1)` : `SL $${effectiveStopLoss.toFixed(1)} (C1 ${isLong ? 'Low' : 'High'})`}

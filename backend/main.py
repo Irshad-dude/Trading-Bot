@@ -158,9 +158,19 @@ class ClosePaperTradeRequest(BaseModel):
 
 @app.post("/api/paper-trades/close")
 async def close_paper_trade(req: ClosePaperTradeRequest):
-    closed = paper_monitor.close_manual(req.trade_id)
+    # Fetch fresh live ticker so manual close exits at exact real-time market Bid/Ask
+    trade = next((t for t in paper_monitor.open_trades if t["trade_id"] == req.trade_id), None)
+    exit_px = None
+    if trade:
+        sym = fetcher.normalize_canonical_symbol(trade["symbol"])
+        ticker = await asyncio.to_thread(fetcher.get_live_ticker, sym)
+        if ticker and ticker.get("connected"):
+            # LONG sells at Bid; SHORT buys to cover at Ask
+            exit_px = float(ticker.get("bid") if trade["direction"] == "LONG" else ticker.get("ask")) or float(ticker.get("last") or 0.0)
+    closed = paper_monitor.close_manual(req.trade_id, exit_price=exit_px)
     if closed:
         live_service._sync_bot_state_from_store()
+        bot.add_log(f"MANUAL CLOSED PAPER TRADE {req.trade_id} ({closed['symbol']}) @ ${closed['exit_price']} (PnL: ${closed['realized_pnl']:+.2f})")
         return {"status": "closed", "trade": closed, "summary": paper_monitor.get_summary()}
     return {"status": "not_found", "message": f"Open paper trade {req.trade_id} not found"}
 
@@ -268,13 +278,20 @@ async def control_engine(req: ControlRequest):
 class ManualTradeRequest(BaseModel):
     symbol: str
     direction: str   # "LONG" | "SHORT" | "BUY" | "SELL"
+    entry_price: Optional[float] = None
+    stop_loss: Optional[float] = None
+    take_profit: Optional[float] = None
+    idm_level: Optional[float] = None
+    bos_level: Optional[float] = None
+    fvg_top: Optional[float] = None
+    fvg_bottom: Optional[float] = None
 
 
 @app.post("/api/trade/manual")
 async def manual_trade(req: ManualTradeRequest):
     """
     When PAPER_TRADING_ONLY is True (safety lock), simulates a manual paper trade
-    at live Bid/Ask instead of sending any order to Binance or MT5.
+    using exact SMC detected levels or live Bid/Ask (zero real capital risked).
     """
     sym = fetcher.normalize_canonical_symbol(req.symbol)
     ticker = await asyncio.to_thread(fetcher.get_live_ticker, sym)
@@ -284,18 +301,29 @@ async def manual_trade(req: ManualTradeRequest):
     side_norm = req.direction.upper()
     direction = "LONG" if side_norm in ("LONG", "BUY") else "SHORT"
     action_label = "BUY" if direction == "LONG" else "SELL"
-    entry = float(ticker["ask"] if direction == "LONG" else ticker["bid"]) or float(ticker["last"])
-    sl_dist = max(entry * 0.005, 0.5)
-    sl = entry - sl_dist if direction == "LONG" else entry + sl_dist
-    tp = entry + (sl_dist * 2.0) if direction == "LONG" else entry - (sl_dist * 2.0)
+
+    market_px = float(ticker.get("ask") if direction == "LONG" else ticker.get("bid")) or float(ticker.get("last") or 0.0)
+    entry = float(req.entry_price or market_px)
+
+    if req.stop_loss and req.stop_loss > 0:
+        sl = float(req.stop_loss)
+    else:
+        sl_dist = max(entry * 0.005, 0.5)
+        sl = entry - sl_dist if direction == "LONG" else entry + sl_dist
+
+    if req.take_profit and req.take_profit > 0:
+        tp = float(req.take_profit)
+    else:
+        sl_dist = abs(entry - sl)
+        tp = entry + (sl_dist * 2.0) if direction == "LONG" else entry - (sl_dist * 2.0)
 
     from backend.strategy.coordinator import StrategySignal
 
     sig = StrategySignal(
         signal_id=f"MANUAL_{sym}_{datetime.utcnow().strftime('%Y%m%d%H%M%S%f')}",
-        strategy_name="MANUAL_PAPER",
+        strategy_name="MANUAL_SMC_PAPER",
         symbol=sym,
-        timeframe="LIVE_TICK",
+        timeframe="1M",
         market_trend="MANUAL",
         direction=direction,
         action_label=action_label,
@@ -303,11 +331,15 @@ async def manual_trade(req: ManualTradeRequest):
         stop_loss=sl,
         take_profit=tp,
         risk_reward_ratio=2.0,
+        idm_level=req.idm_level,
+        bos_level=req.bos_level,
+        fvg_top=req.fvg_top,
+        fvg_bottom=req.fvg_bottom,
         signal_timestamp=datetime.utcnow().isoformat(),
         setup_status="ENTRY_TRIGGERED",
-        reasoning=f"Manual UI paper order triggered on {sym} ({action_label} @ {entry:.2f}).",
+        reasoning=f"Manual execution triggered on {sym} ({action_label} @ {entry:.2f} | SL {sl:.2f} | TP {tp:.2f}).",
         spread_at_signal=float(ticker.get("spread") or 0.0),
-        ai_decision="MANUAL_PAPER",
+        ai_decision="MANUAL_CONFIRMED",
         ai_confidence=100,
     )
     trade = paper_monitor.process_signal(sig, live_ticker=ticker)

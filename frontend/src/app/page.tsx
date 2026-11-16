@@ -260,6 +260,7 @@ interface PaperTradeRecord {
   entry_price: number;
   stop_loss: number;
   take_profit: number;
+  risk_distance?: number;
   risk_amount: number;
   position_size: number;
   current_price: number;
@@ -276,6 +277,11 @@ interface PaperTradeRecord {
   reasoning?: string;
   opened_at: string;
   closed_at?: string | null;
+  bos_level?: number | null;
+  idm_level?: number | null;
+  fvg_top?: number | null;
+  fvg_bottom?: number | null;
+  touch_price?: number | null;
 }
 
 interface PaperSummary {
@@ -327,13 +333,14 @@ interface BotStatus {
 
 // ─── Backend API Client (Dual-Route: Proxied Same-Origin + Direct Fallback) ──
 async function callBackend(endpoint: string, options?: RequestInit): Promise<Response> {
+  const cleanEndpoint = endpoint.startsWith('/api') ? endpoint.slice(4) : (endpoint.startsWith('/') ? endpoint : `/${endpoint}`);
   try {
-    const res = await fetch(`/api/backend${endpoint}`, options);
+    const res = await fetch(`/api/backend${cleanEndpoint}`, options);
     if (res.ok) return res;
   } catch {
     // ignore and try direct fallback
   }
-  return fetch(`http://127.0.0.1:8000/api${endpoint}`, options);
+  return fetch(`http://127.0.0.1:8000/api${cleanEndpoint}`, options);
 }
 
 // ─── Hooks ───────────────────────────────────────────────────────────────────
@@ -521,14 +528,115 @@ export default function Dashboard() {
     };
   }, [selectedLiveSymbol]);
 
+  const [selectedPaperTrade, setSelectedPaperTrade] = useState<PaperTradeRecord | null>(null);
+  const [paperTableTab, setPaperTableTab] = useState<'open' | 'closed'>('open');
+  const [executingTrade, setExecutingTrade] = useState<boolean>(false);
+  const [closingTradeId, setClosingTradeId] = useState<string | null>(null);
+
+  const handleManualTradeExecution = async (customParams?: {
+    symbol?: string;
+    direction?: string;
+    entry_price?: number;
+    stop_loss?: number;
+    take_profit?: number;
+    idm_level?: number;
+    bos_level?: number;
+    fvg_top?: number;
+    fvg_bottom?: number;
+  }) => {
+    try {
+      setExecutingTrade(true);
+      const liveCandleData = liveCandlesBySymbol[selectedLiveSymbol];
+      const activeRow = (status?.scanner_results || []).find(r => r.symbol === selectedLiveSymbol);
+      const mon = activeRow?.strategy_monitor;
+      const trend = mon?.macro_trend || activeRow?.trend || 'BULLISH';
+      const dir = customParams?.direction || (trend === 'BEARISH' ? 'SHORT' : 'LONG');
+      const entry = customParams?.entry_price || liveCandleData?.planned_entry || liveCandleData?.current_price || activeRow?.last_price || 0;
+      const sl = customParams?.stop_loss || liveCandleData?.stop_loss;
+      const tp = customParams?.take_profit || liveCandleData?.take_profit;
+
+      const res = await callBackend('/api/trade/manual', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          symbol: customParams?.symbol || selectedLiveSymbol,
+          direction: dir,
+          entry_price: entry,
+          stop_loss: sl,
+          take_profit: tp,
+          idm_level: customParams?.idm_level || liveCandleData?.idm_level || mon?.idm_level,
+          bos_level: customParams?.bos_level || liveCandleData?.bos_level || mon?.bos_level,
+          fvg_top: customParams?.fvg_top || liveCandleData?.fvg_top,
+          fvg_bottom: customParams?.fvg_bottom || liveCandleData?.fvg_bottom,
+        }),
+      });
+      const data = await res.json();
+      if (data?.trade) {
+        setSelectedPaperTrade(data.trade);
+      }
+      await refreshStatus();
+    } catch (err) {
+      console.error('Failed to execute paper trade:', err);
+    } finally {
+      setExecutingTrade(false);
+    }
+  };
+
   const getLiveChartTradeItem = (
     symbol: string,
     row: ScanResult,
-    liveData?: TradeCandleData | null
+    liveData?: TradeCandleData | null,
+    paperTrade?: PaperTradeRecord | null
   ): BacktestTrade => {
     const isEth = symbol === 'ETHUSD' || symbol === 'ETHUSDT';
     const monitor = row.strategy_monitor;
     const chain = row.chain_monitor || monitor?.chain_of_choch;
+
+    // If an active or completed paper trade is selected for inspection, map it directly
+    if (paperTrade) {
+      const isLong = paperTrade.direction === 'LONG' || paperTrade.direction === 'BUY';
+      const pnl = paperTrade.status === 'OPEN'
+        ? Number(paperTrade.unrealized_pnl ?? 0)
+        : Number(paperTrade.realized_pnl ?? 0);
+      const riskAmt = Number(paperTrade.risk_amount ?? 100);
+      const pnlPct = riskAmt > 0 ? (pnl / riskAmt) * 1.0 : 0;
+      const res = paperTrade.status === 'OPEN'
+        ? 'ACTIVE_OPEN'
+        : (paperTrade.final_result === 'WIN' ? 'WIN' : 'LOSS');
+
+      return {
+        trade_num: isEth ? 2 : 1,
+        symbol: paperTrade.symbol,
+        direction: isLong ? 'LONG' : 'SHORT',
+        entry_time: paperTrade.opened_at,
+        entry_price: Number(paperTrade.entry_price),
+        exit_time: paperTrade.status === 'OPEN' ? 'Active Position' : (paperTrade.closed_at || 'Closed'),
+        exit_price: Number(paperTrade.exit_price ?? paperTrade.take_profit),
+        stop_loss: Number(paperTrade.stop_loss),
+        take_profit: Number(paperTrade.take_profit),
+        risk_distance: Number(paperTrade.risk_distance ?? Math.abs(paperTrade.entry_price - paperTrade.stop_loss)),
+        rr_ratio: '1:2',
+        result: res,
+        pnl_percent: pnlPct,
+        pnl_dollar: pnl,
+        running_balance: status?.paper_summary?.balance ?? 10000.0,
+        setup_reason: paperTrade.status === 'OPEN'
+          ? `[INSPECTING OPEN POSITION] ${paperTrade.symbol} ${paperTrade.direction} @ $${Number(paperTrade.entry_price).toLocaleString()} | SL $${Number(paperTrade.stop_loss).toLocaleString()} | TP $${Number(paperTrade.take_profit).toLocaleString()}`
+          : `[INSPECTING COMPLETED TRADE] ${paperTrade.symbol} ${paperTrade.direction} @ $${Number(paperTrade.entry_price).toLocaleString()} -> Exit $${Number(paperTrade.exit_price || paperTrade.take_profit).toLocaleString()} (${paperTrade.exit_condition || paperTrade.final_result})`,
+        trade_type: paperTrade.strategy_name?.includes('CHOCH') ? 'REVERSAL_CHOCH' : 'CONTINUATION_BOS',
+        bos_level: paperTrade.bos_level != null ? Number(paperTrade.bos_level) : (liveData?.bos_level ? Number(liveData.bos_level) : undefined),
+        idm_level: paperTrade.idm_level != null ? Number(paperTrade.idm_level) : (liveData?.idm_level ? Number(liveData.idm_level) : undefined),
+        fvg_top: paperTrade.fvg_top != null ? Number(paperTrade.fvg_top) : (liveData?.fvg_top ? Number(liveData.fvg_top) : undefined),
+        fvg_bottom: paperTrade.fvg_bottom != null ? Number(paperTrade.fvg_bottom) : (liveData?.fvg_bottom ? Number(liveData.fvg_bottom) : undefined),
+        timeframe: paperTrade.timeframe || liveData?.timeframe || '1M',
+        macro_timeframe: liveData?.macro_timeframe || '30M',
+        '4h_trend': paperTrade.market_trend || liveData?.macro_trend || monitor?.macro_trend || 'NEUTRAL',
+        four_h_trend: paperTrade.market_trend || liveData?.macro_trend || monitor?.macro_trend || 'NEUTRAL',
+        entry_time_ist: 'Inspecting Trade',
+        exit_time_ist: paperTrade.status === 'OPEN' ? 'Target 1:2' : (paperTrade.final_result || 'Exit'),
+        angle: Number(liveData?.angle ?? chain?.last_angle ?? 0),
+      };
+    }
 
     const openTrade = (status?.paper_trades_open || []).find(t => t.symbol === symbol);
     const isActive = Boolean(openTrade || liveData?.is_active_trade);
@@ -1001,17 +1109,22 @@ export default function Dashboard() {
 
   const handleClosePaperTrade = async (tradeId: string) => {
     try {
-      const res = await callBackend('/paper-trades/close', {
+      setClosingTradeId(tradeId);
+      const res = await callBackend('/api/paper-trades/close', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ trade_id: tradeId }),
       });
       const data = await res.json();
+      if (selectedPaperTrade?.trade_id === tradeId && data?.trade) {
+        setSelectedPaperTrade(data.trade);
+      }
       await refreshStatus();
       setTradeToast(data.status === 'closed' ? `Closed paper trade ${tradeId}` : data.message || 'Close failed');
     } catch {
       setTradeToast('Failed to close paper trade');
     } finally {
+      setClosingTradeId(null);
       setTimeout(() => setTradeToast(null), 3500);
     }
   };
@@ -2431,10 +2544,46 @@ export default function Dashboard() {
               </div>
 
               {/* ── Central Hero Element: TradingView Interactive SMC Chart ── */}
-              <div className="bg-white border border-slate-200 rounded-xl overflow-hidden shadow-xs">
+              <div id="live-hero-chart" className="bg-white border border-slate-200 rounded-xl overflow-hidden shadow-xs">
+                {selectedPaperTrade && (
+                  <div className="bg-sky-50 border-b border-sky-200 px-5 py-3 flex flex-wrap items-center justify-between gap-3">
+                    <div className="flex items-center gap-3 flex-wrap">
+                      <span className={`px-2 py-0.5 rounded text-[10px] font-bold font-mono uppercase ${
+                        selectedPaperTrade.status === 'OPEN' ? 'bg-sky-200 text-sky-900 border border-sky-300' : 'bg-slate-200 text-slate-800 border border-slate-300'
+                      }`}>
+                        Inspecting {selectedPaperTrade.status === 'OPEN' ? 'Open Position' : 'Completed Trade'}
+                      </span>
+                      <span className="font-bold text-slate-900 text-xs font-mono">
+                        {selectedPaperTrade.symbol} · {selectedPaperTrade.direction}
+                      </span>
+                      <span className="text-xs text-slate-600 font-mono">
+                        Entry: ${Number(selectedPaperTrade.entry_price).toLocaleString()} | SL: ${Number(selectedPaperTrade.stop_loss).toLocaleString()} | TP: ${Number(selectedPaperTrade.take_profit).toLocaleString()}
+                      </span>
+                      {selectedPaperTrade.exit_price && (
+                        <span className="text-xs font-mono font-bold text-slate-700">
+                          Exit: ${Number(selectedPaperTrade.exit_price).toLocaleString()} ({selectedPaperTrade.final_result || selectedPaperTrade.exit_condition})
+                        </span>
+                      )}
+                      <span className={`text-xs font-bold font-mono ${(selectedPaperTrade.status === 'OPEN' ? selectedPaperTrade.unrealized_pnl : selectedPaperTrade.realized_pnl) >= 0 ? 'text-emerald-700' : 'text-rose-700'}`}>
+                        PnL: {(selectedPaperTrade.status === 'OPEN' ? selectedPaperTrade.unrealized_pnl : selectedPaperTrade.realized_pnl) >= 0 ? '+' : ''}${(selectedPaperTrade.status === 'OPEN' ? selectedPaperTrade.unrealized_pnl : selectedPaperTrade.realized_pnl).toFixed(2)}
+                      </span>
+                    </div>
+                    <button
+                      onClick={() => setSelectedPaperTrade(null)}
+                      className="px-3 py-1 rounded-md text-xs font-mono font-semibold bg-white border border-slate-300 text-slate-700 hover:bg-slate-100 cursor-pointer shadow-2xs"
+                    >
+                      ✕ Return to Live Scanner
+                    </button>
+                  </div>
+                )}
                 {liveCandlesBySymbol[selectedLiveSymbol] ? (
                   <TradeChartVisualizer
-                    trade={getLiveChartTradeItem(selectedLiveSymbol, activeRow, liveCandlesBySymbol[selectedLiveSymbol])}
+                    trade={getLiveChartTradeItem(
+                      selectedLiveSymbol,
+                      activeRow,
+                      liveCandlesBySymbol[selectedLiveSymbol],
+                      selectedPaperTrade?.symbol === selectedLiveSymbol ? selectedPaperTrade : null
+                    )}
                     candleData={liveCandlesBySymbol[selectedLiveSymbol]}
                     hasPrev={false}
                     hasNext={false}
@@ -2530,18 +2679,37 @@ export default function Dashboard() {
                   </div>
 
                   {/* Step 5: Execution & Protection */}
-                  <div className={`p-3 rounded-lg border flex flex-col justify-between gap-1 ${isInTrade ? 'border-emerald-200 bg-emerald-50/40' : 'border-slate-200/80 bg-slate-50/50'}`}>
+                  <div className={`p-3 rounded-lg border flex flex-col justify-between gap-2 ${isInTrade ? 'border-emerald-200 bg-emerald-50/40' : 'border-slate-200/80 bg-slate-50/50'}`}>
                     <div className="flex items-center justify-between">
                       <span className="text-[10px] font-mono uppercase text-slate-400">5. Execution</span>
                       <span className={`text-[10px] font-mono font-bold px-1.5 py-0.2 rounded ${isInTrade ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-200 text-slate-600'}`}>
-                        {isInTrade ? 'IN TRADE' : 'IDLE'}
+                        {isInTrade ? 'IN TRADE' : 'READY'}
                       </span>
                     </div>
-                    <div className="font-mono font-bold text-slate-900 mt-1">
-                      {isInTrade ? `$${activePaperTrade?.entry_price?.toLocaleString()}` : 'Target 1:2 R:R'}
+                    <div className="font-mono font-bold text-slate-900 mt-0.5">
+                      {isInTrade ? `$${activePaperTrade?.entry_price?.toLocaleString()}` : (liveCandleData?.planned_entry ? `$${Number(liveCandleData.planned_entry).toLocaleString()}` : 'Target 1:2 R:R')}
                     </div>
                     <div className="text-[11px] text-slate-500">
                       SL: C1 Extreme · TP: 1:2
+                    </div>
+                    <div className="pt-1">
+                      {isInTrade && activePaperTrade ? (
+                        <button
+                          onClick={() => handleClosePaperTrade(activePaperTrade.trade_id)}
+                          disabled={closingTradeId === activePaperTrade.trade_id}
+                          className="w-full py-1.5 px-2 rounded-md bg-rose-600 hover:bg-rose-700 text-white font-mono text-[11px] font-bold shadow-xs cursor-pointer disabled:opacity-50 transition-colors"
+                        >
+                          {closingTradeId === activePaperTrade.trade_id ? 'Closing...' : 'Complete / Close Trade'}
+                        </button>
+                      ) : (
+                        <button
+                          onClick={() => handleManualTradeExecution()}
+                          disabled={executingTrade || !status?.is_running}
+                          className="w-full py-1.5 px-2 rounded-md bg-emerald-600 hover:bg-emerald-700 text-white font-mono text-[11px] font-bold shadow-xs cursor-pointer disabled:opacity-50 transition-colors"
+                        >
+                          {executingTrade ? 'Executing...' : 'Make This Trade (Paper)'}
+                        </button>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -2557,70 +2725,202 @@ export default function Dashboard() {
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
                 {/* Left: Active & Closed Paper Positions */}
                 <div className="bg-white border border-slate-200 rounded-xl overflow-hidden shadow-xs flex flex-col">
-                  <div className="px-5 py-3.5 border-b border-slate-100 bg-slate-50/70 flex items-center justify-between">
+                  <div className="px-5 py-3.5 border-b border-slate-100 bg-slate-50/70 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                     <div>
                       <h4 className="text-xs font-bold text-slate-900">
                         Paper Trading Positions
                       </h4>
                       <p className="text-[11px] text-slate-500">
-                        Simulated execution lifecycle (Zero real capital risk)
+                        Click any position to inspect Break of Structure, IDM, FVG, Retest &amp; Levels
                       </p>
                     </div>
-                    <span className="text-[11px] font-mono text-slate-500">
-                      {status?.paper_trades_open?.length ?? 0} Open · {status?.paper_trades_closed?.length ?? 0} Closed
-                    </span>
+                    {/* Tabs for Open vs Closed */}
+                    <div className="flex items-center gap-1 bg-slate-100 p-0.5 rounded-lg border border-slate-200 text-xs font-mono">
+                      <button
+                        onClick={() => setPaperTableTab('open')}
+                        className={`px-2.5 py-1 rounded-md font-bold transition-all cursor-pointer ${
+                          paperTableTab === 'open'
+                            ? 'bg-white text-slate-900 shadow-2xs'
+                            : 'text-slate-600 hover:text-slate-900'
+                        }`}
+                      >
+                        Open ({status?.paper_trades_open?.length ?? 0})
+                      </button>
+                      <button
+                        onClick={() => setPaperTableTab('closed')}
+                        className={`px-2.5 py-1 rounded-md font-bold transition-all cursor-pointer ${
+                          paperTableTab === 'closed'
+                            ? 'bg-white text-slate-900 shadow-2xs'
+                            : 'text-slate-600 hover:text-slate-900'
+                        }`}
+                      >
+                        Completed ({status?.paper_trades_closed?.length ?? 0})
+                      </button>
+                    </div>
                   </div>
 
                   <div className="overflow-x-auto flex-1">
-                    <table className="w-full border-collapse text-xs font-mono tabular-nums">
-                      <thead>
-                        <tr className="border-b border-slate-100 bg-slate-50/40 text-[11px] text-slate-400">
-                          <th className="px-4 py-2 text-left font-medium">Asset</th>
-                          <th className="px-4 py-2 text-left font-medium">Side</th>
-                          <th className="px-4 py-2 text-right font-medium">Entry</th>
-                          <th className="px-4 py-2 text-right font-medium">Current</th>
-                          <th className="px-4 py-2 text-right font-medium">SL</th>
-                          <th className="px-4 py-2 text-right font-medium">TP</th>
-                          <th className="px-4 py-2 text-right font-medium">Unrealized P&amp;L</th>
-                          <th className="px-4 py-2 text-center font-medium">Status</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-slate-100">
-                        {(!status?.paper_trades_open || status.paper_trades_open.length === 0) ? (
-                          <tr>
-                            <td colSpan={8} className="px-4 py-8 text-center text-xs text-slate-400">
-                              No open paper positions. Strategy engine is evaluating live structure.
-                            </td>
+                    {paperTableTab === 'open' ? (
+                      <table className="w-full border-collapse text-xs font-mono tabular-nums">
+                        <thead>
+                          <tr className="border-b border-slate-100 bg-slate-50/40 text-[11px] text-slate-400">
+                            <th className="px-3.5 py-2 text-left font-medium">Asset</th>
+                            <th className="px-3 py-2 text-left font-medium">Side</th>
+                            <th className="px-3 py-2 text-right font-medium">Entry</th>
+                            <th className="px-3 py-2 text-right font-medium">Current</th>
+                            <th className="px-3 py-2 text-right font-medium">SL</th>
+                            <th className="px-3 py-2 text-right font-medium">TP</th>
+                            <th className="px-3 py-2 text-right font-medium">Unrealized P&amp;L</th>
+                            <th className="px-3.5 py-2 text-right font-medium">Actions</th>
                           </tr>
-                        ) : (
-                          status.paper_trades_open.map(pt => {
-                            const pnl = Number(pt.unrealized_pnl ?? 0);
-                            return (
-                              <tr key={pt.trade_id} className="hover:bg-slate-50/70 transition-colors">
-                                <td className="px-4 py-2.5 font-bold text-slate-900">{pt.symbol}</td>
-                                <td className="px-4 py-2.5">
-                                  <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${pt.direction === 'LONG' ? 'bg-emerald-50 text-emerald-700' : 'bg-rose-50 text-rose-700'}`}>
-                                    {pt.direction}
-                                  </span>
-                                </td>
-                                <td className="px-4 py-2.5 text-right font-medium">${Number(pt.entry_price).toLocaleString()}</td>
-                                <td className="px-4 py-2.5 text-right">${Number(pt.current_price || pt.entry_price).toLocaleString()}</td>
-                                <td className="px-4 py-2.5 text-right text-rose-600">${Number(pt.stop_loss).toLocaleString()}</td>
-                                <td className="px-4 py-2.5 text-right text-emerald-600">${Number(pt.take_profit).toLocaleString()}</td>
-                                <td className={`px-4 py-2.5 text-right font-bold ${pnl >= 0 ? 'text-emerald-700' : 'text-rose-700'}`}>
-                                  {pnl >= 0 ? '+' : ''}${pnl.toFixed(2)}
-                                </td>
-                                <td className="px-4 py-2.5 text-center">
-                                  <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-cyan-50 text-cyan-800 border border-cyan-200">
-                                    ACTIVE
-                                  </span>
-                                </td>
-                              </tr>
-                            );
-                          })
-                        )}
-                      </tbody>
-                    </table>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100">
+                          {(!status?.paper_trades_open || status.paper_trades_open.length === 0) ? (
+                            <tr>
+                              <td colSpan={8} className="px-4 py-8 text-center text-xs text-slate-400">
+                                No open paper positions. Strategy engine is evaluating live structure.
+                              </td>
+                            </tr>
+                          ) : (
+                            status.paper_trades_open.map(pt => {
+                              const pnl = Number(pt.unrealized_pnl ?? 0);
+                              const isSelected = selectedPaperTrade?.trade_id === pt.trade_id;
+                              return (
+                                <tr
+                                  key={pt.trade_id}
+                                  onClick={() => {
+                                    setSelectedPaperTrade(pt);
+                                    setSelectedLiveSymbol(pt.symbol);
+                                    document.getElementById('live-hero-chart')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                                  }}
+                                  className={`transition-colors cursor-pointer ${
+                                    isSelected
+                                      ? 'bg-sky-50 ring-1 ring-sky-400 font-semibold'
+                                      : 'hover:bg-slate-50/70'
+                                  }`}
+                                >
+                                  <td className="px-3.5 py-2.5 font-bold text-slate-900">{pt.symbol}</td>
+                                  <td className="px-3 py-2.5">
+                                    <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${pt.direction === 'LONG' ? 'bg-emerald-50 text-emerald-700' : 'bg-rose-50 text-rose-700'}`}>
+                                      {pt.direction}
+                                    </span>
+                                  </td>
+                                  <td className="px-3 py-2.5 text-right font-medium">${Number(pt.entry_price).toLocaleString()}</td>
+                                  <td className="px-3 py-2.5 text-right">${Number(pt.current_price || pt.entry_price).toLocaleString()}</td>
+                                  <td className="px-3 py-2.5 text-right text-rose-600">${Number(pt.stop_loss).toLocaleString()}</td>
+                                  <td className="px-3 py-2.5 text-right text-emerald-600">${Number(pt.take_profit).toLocaleString()}</td>
+                                  <td className={`px-3 py-2.5 text-right font-bold ${pnl >= 0 ? 'text-emerald-700' : 'text-rose-700'}`}>
+                                    {pnl >= 0 ? '+' : ''}${pnl.toFixed(2)}
+                                  </td>
+                                  <td className="px-3.5 py-2.5 text-right" onClick={e => e.stopPropagation()}>
+                                    <div className="flex items-center justify-end gap-1.5">
+                                      <button
+                                        onClick={() => {
+                                          setSelectedPaperTrade(pt);
+                                          setSelectedLiveSymbol(pt.symbol);
+                                          document.getElementById('live-hero-chart')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                                        }}
+                                        className="px-2 py-1 rounded bg-sky-50 text-sky-700 hover:bg-sky-100 border border-sky-200 text-[10px] font-bold transition-colors cursor-pointer"
+                                      >
+                                        Inspect
+                                      </button>
+                                      <button
+                                        onClick={() => handleClosePaperTrade(pt.trade_id)}
+                                        disabled={closingTradeId === pt.trade_id}
+                                        className="px-2 py-1 rounded bg-rose-50 text-rose-700 hover:bg-rose-100 border border-rose-200 text-[10px] font-bold transition-colors cursor-pointer disabled:opacity-50"
+                                      >
+                                        {closingTradeId === pt.trade_id ? 'Closing...' : 'Close'}
+                                      </button>
+                                    </div>
+                                  </td>
+                                </tr>
+                              );
+                            })
+                          )}
+                        </tbody>
+                      </table>
+                    ) : (
+                      <table className="w-full border-collapse text-xs font-mono tabular-nums">
+                        <thead>
+                          <tr className="border-b border-slate-100 bg-slate-50/40 text-[11px] text-slate-400">
+                            <th className="px-3.5 py-2 text-left font-medium">Asset</th>
+                            <th className="px-3 py-2 text-left font-medium">Side</th>
+                            <th className="px-3 py-2 text-right font-medium">Entry</th>
+                            <th className="px-3 py-2 text-right font-medium">Exit</th>
+                            <th className="px-3 py-2 text-right font-medium">SL</th>
+                            <th className="px-3 py-2 text-right font-medium">TP</th>
+                            <th className="px-3 py-2 text-right font-medium">Realized P&amp;L</th>
+                            <th className="px-3 py-2 text-center font-medium">Result</th>
+                            <th className="px-3.5 py-2 text-right font-medium">Actions</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100">
+                          {(!status?.paper_trades_closed || status.paper_trades_closed.length === 0) ? (
+                            <tr>
+                              <td colSpan={9} className="px-4 py-8 text-center text-xs text-slate-400">
+                                No completed paper trades yet.
+                              </td>
+                            </tr>
+                          ) : (
+                            status.paper_trades_closed.map(pt => {
+                              const pnl = Number(pt.realized_pnl ?? 0);
+                              const isWin = pt.final_result === 'WIN';
+                              const isSelected = selectedPaperTrade?.trade_id === pt.trade_id;
+                              return (
+                                <tr
+                                  key={pt.trade_id}
+                                  onClick={() => {
+                                    setSelectedPaperTrade(pt);
+                                    setSelectedLiveSymbol(pt.symbol);
+                                    document.getElementById('live-hero-chart')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                                  }}
+                                  className={`transition-colors cursor-pointer ${
+                                    isSelected
+                                      ? 'bg-sky-50 ring-1 ring-sky-400 font-semibold'
+                                      : 'hover:bg-slate-50/70'
+                                  }`}
+                                >
+                                  <td className="px-3.5 py-2.5 font-bold text-slate-900">{pt.symbol}</td>
+                                  <td className="px-3 py-2.5">
+                                    <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${pt.direction === 'LONG' ? 'bg-emerald-50 text-emerald-700' : 'bg-rose-50 text-rose-700'}`}>
+                                      {pt.direction}
+                                    </span>
+                                  </td>
+                                  <td className="px-3 py-2.5 text-right font-medium">${Number(pt.entry_price).toLocaleString()}</td>
+                                  <td className="px-3 py-2.5 text-right font-medium">${Number(pt.exit_price || pt.take_profit).toLocaleString()}</td>
+                                  <td className="px-3 py-2.5 text-right text-rose-600">${Number(pt.stop_loss).toLocaleString()}</td>
+                                  <td className="px-3 py-2.5 text-right text-emerald-600">${Number(pt.take_profit).toLocaleString()}</td>
+                                  <td className={`px-3 py-2.5 text-right font-bold ${pnl >= 0 ? 'text-emerald-700' : 'text-rose-700'}`}>
+                                    {pnl >= 0 ? '+' : ''}${pnl.toFixed(2)}
+                                  </td>
+                                  <td className="px-3 py-2.5 text-center">
+                                    <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold border ${
+                                      isWin
+                                        ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                                        : 'bg-rose-50 text-rose-700 border-rose-200'
+                                    }`}>
+                                      {pt.final_result || pt.exit_condition || 'CLOSED'}
+                                    </span>
+                                  </td>
+                                  <td className="px-3.5 py-2.5 text-right" onClick={e => e.stopPropagation()}>
+                                    <button
+                                      onClick={() => {
+                                        setSelectedPaperTrade(pt);
+                                        setSelectedLiveSymbol(pt.symbol);
+                                        document.getElementById('live-hero-chart')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                                      }}
+                                      className="px-2 py-1 rounded bg-sky-50 text-sky-700 hover:bg-sky-100 border border-sky-200 text-[10px] font-bold transition-colors cursor-pointer"
+                                    >
+                                      Inspect
+                                    </button>
+                                  </td>
+                                </tr>
+                              );
+                            })
+                          )}
+                        </tbody>
+                      </table>
+                    )}
                   </div>
                 </div>
 
