@@ -155,14 +155,16 @@ export default function TradeChartVisualizer({
   const isLiveCandidate = !isInspectingTrade && (trade.result === 'LIVE_CANDIDATE' || candleData?.is_active_trade === false);
   const isBacktest = !isLiveCandidate && !isLiveActive;
 
-  // Auto-center view on the entry setup candle or latest live candle
+  // Auto-center view on the active candles and entry setup
   useEffect(() => {
-    const centerIdx = isLiveCandidate ? Math.max(0, candleCount - 8) : entryIdx;
+    const centerIdx = (isLiveCandidate || trade.result === 'ACTIVE_OPEN' || isLiveActive)
+      ? Math.max(0, candleCount - 12)
+      : (candleData?.local_entry_idx ?? Math.max(0, candleCount - 8));
     const targetCandleX = paddingLeft + centerIdx * candleSpacing + candleSpacing / 2;
     const desiredCenter = paddingLeft + chartWidth * 0.45;
     const targetPan = desiredCenter - targetCandleX;
     setPanX(targetPan);
-  }, [trade.trade_num, trade.symbol, entryIdx, candleSpacing, chartWidth, isLiveCandidate, candleCount]);
+  }, [trade.trade_num, trade.symbol, entryIdx, candleSpacing, chartWidth, isLiveCandidate, trade.result, isLiveActive, candleCount]);
 
   // Drag, Touch and Wheel event handlers for smooth sliding
   const handleMouseDown = (e: React.MouseEvent) => {
@@ -291,13 +293,56 @@ export default function TradeChartVisualizer({
     ? trade.exit_price
     : (candleData?.exit_price && candleData.exit_price > 0 ? candleData.exit_price : 0);
 
+  // ── True Candle-Snapped Alignment Engine (Anti-Air Guarantee) ──
+  // Resolves the REAL candle where entry/touch happened, where C1/FVG formed, and where live position extends
+  const realEntryIdx = useMemo(() => {
+    if (candles.length === 0 || effectiveEntryPrice <= 0) {
+      return isLiveCandidate ? Math.max(0, candleCount - 1) : Math.max(0, candleCount - 8);
+    }
+    if (candleData?.local_entry_idx != null && candleData.local_entry_idx >= 0 && candleData.local_entry_idx < candleCount) {
+      return candleData.local_entry_idx;
+    }
+    // Search visible candles from newest to oldest for candle touching entry price
+    let bestIdx = -1;
+    let minDiff = Infinity;
+    for (let i = candleCount - 1; i >= 0; i--) {
+      const [, , h, l] = candles[i];
+      if (effectiveEntryPrice >= l && effectiveEntryPrice <= h) {
+        return i; // Exact candle wick/body touch!
+      }
+      const diff = Math.min(Math.abs(h - effectiveEntryPrice), Math.abs(l - effectiveEntryPrice));
+      if (diff < minDiff) {
+        minDiff = diff;
+        bestIdx = i;
+      }
+    }
+    return bestIdx !== -1 ? bestIdx : Math.max(0, candleCount - 1);
+  }, [candles, effectiveEntryPrice, candleData?.local_entry_idx, candleCount, isLiveCandidate]);
+
+  const realC1Idx = useMemo(() => {
+    if (candleData?.local_c1_idx != null && candleData.local_c1_idx >= 0 && candleData.local_c1_idx < candleCount) {
+      return candleData.local_c1_idx;
+    }
+    return Math.max(0, realEntryIdx - 3);
+  }, [candleData?.local_c1_idx, realEntryIdx, candleCount]);
+
+  const realExitIdx = useMemo(() => {
+    if (trade.result === 'ACTIVE_OPEN' || isLiveActive) {
+      return Math.max(0, candleCount - 1);
+    }
+    if (candleData?.local_exit_idx != null && candleData.local_exit_idx >= 0 && candleData.local_exit_idx < candleCount) {
+      return candleData.local_exit_idx;
+    }
+    return Math.min(candleCount - 1, realEntryIdx + 6);
+  }, [trade.result, isLiveActive, candleData?.local_exit_idx, candleCount, realEntryIdx]);
+
   // Positions for Trade Levels
   const entryY = effectiveEntryPrice > 0 ? getY(effectiveEntryPrice) : 0;
   const slY = effectiveStopLoss > 0 ? getY(effectiveStopLoss) : 0;
   const tpY = effectiveTakeProfit > 0 ? getY(effectiveTakeProfit) : 0;
 
-  const entryX = getX(entryIdx);
-  const exitX = getX(exitIdx);
+  const entryX = getX(realEntryIdx);
+  const exitX = getX(realExitIdx);
   const boxWidth = Math.max(candleSpacing, exitX - entryX);
 
   const isWin = trade.result === 'WIN';
@@ -310,44 +355,18 @@ export default function TradeChartVisualizer({
   const slTop = Math.min(entryY, slY);
   const slH = Math.abs(entryY - slY);
 
-  // ── Canonical Structural Anchor Points (Separation of Concerns: Strategy Engine -> Visualizer) ──
-  const localShIdx = isLiveCandidate
-    ? (candleData?.local_sh_idx ?? null)
-    : (candleData?.local_sh_idx ?? Math.max(0, entryIdx - 14));
   const shPrice = (trade.bos_level && trade.bos_level > 0)
     ? trade.bos_level
     : (candleData?.sh_price ?? candleData?.bos_level ?? candleData?.recent_swing_high?.price ?? (trade as any).sh_price ?? 0);
 
-  const localIdmIdx = isLiveCandidate
-    ? (candleData?.local_idm_idx ?? null)
-    : (candleData?.local_idm_idx ?? Math.max(0, entryIdx - 10));
   const idmPrice = (trade.idm_level && trade.idm_level > 0)
     ? trade.idm_level
     : (candleData?.idm_price ?? candleData?.idm_level ?? 0);
 
-  const localSweepIdx = isLiveCandidate
-    ? (candleData?.local_sweep_idx ?? null)
-    : (candleData?.local_sweep_idx ?? Math.max(0, entryIdx - 8));
-  const sweepPrice = candleData?.sweep_price ?? idmPrice;
-
-  const localBosIdx = isLiveCandidate
-    ? (candleData?.local_bos_idx ?? null)
-    : (candleData?.local_bos_idx ?? Math.max(0, entryIdx - 5));
-  const bosPrice = candleData?.bos_price ?? candleData?.bos_level ?? shPrice;
-
-  const localChochIdx = isLiveCandidate
-    ? (candleData?.local_choch_idx ?? null)
-    : (candleData?.local_choch_idx ?? localShIdx);
   const chochPrice = candleData?.choch_price ?? trade.choch_price ?? 0;
-  const hasChoch = chochPrice > 0 && (localChochIdx !== null || isLiveCandidate);
+  const hasChoch = chochPrice > 0;
   const chochY = hasChoch ? getY(chochPrice) : 0;
   const isReversal = trade.trade_type === 'REVERSAL_CHOCH' || candleData?.trade_type === 'REVERSAL_CHOCH';
-  const localC1Idx = isLiveCandidate ? (candleData?.local_c1_idx ?? null) : (candleData?.local_c1_idx ?? Math.max(0, entryIdx - 3));
-  const localC2Idx = isLiveCandidate ? (candleData?.local_c2_idx ?? null) : (candleData?.local_c2_idx ?? (candleData?.local_bos_idx ?? Math.max(0, entryIdx - 2)));
-  const localC3Idx = isLiveCandidate ? (candleData?.local_c3_idx ?? null) : (candleData?.local_c3_idx ?? Math.max(0, entryIdx - 1));
-  const localChochBreakIdx = candleData?.local_choch_break_idx ?? localC2Idx;
-  const localEntryIdx = isLiveCandidate ? (candleData?.local_entry_idx ?? null) : (candleData?.local_entry_idx ?? entryIdx);
-  const localExitIdx = isLiveCandidate ? (candleData?.local_exit_idx ?? null) : (candleData?.local_exit_idx ?? exitIdx);
 
   // Strict BOS Validation matching TradingView SMC Rules
   const hasBos = Boolean(
@@ -392,11 +411,10 @@ export default function TradeChartVisualizer({
   const displayFvgH = fvgH;
   const displayFvgBottomY = fvgBottomY;
 
-  // FVG Box Horizontal Boundaries (from C1 wick across wait candles to Entry touch or current live candle)
-  const rightBoundaryIdx = isLiveCandidate ? Math.max(0, candleCount - 1) : (localEntryIdx ?? candleCount - 1);
-  const fvgC1X = localC1Idx !== null ? getX(localC1Idx) : getX(Math.max(0, rightBoundaryIdx - 3));
-  const fvgBoxX1 = Math.min(fvgC1X, getX(rightBoundaryIdx)) - candleBodyWidth / 2;
-  const fvgBoxX2 = Math.max(fvgC1X, getX(rightBoundaryIdx)) + candleBodyWidth / 2;
+  // FVG Box Horizontal Boundaries: covers from C1 wick across to real Entry touch candle
+  const fvgC1X = getX(realC1Idx);
+  const fvgBoxX1 = Math.min(fvgC1X, getX(realEntryIdx)) - candleBodyWidth / 2;
+  const fvgBoxX2 = Math.max(fvgC1X, getX(realEntryIdx)) + candleBodyWidth / 2;
   const fvgBoxW = Math.max(candleSpacing * 2, fvgBoxX2 - fvgBoxX1);
 
   // Price ticks on right axis
@@ -1044,11 +1062,11 @@ export default function TradeChartVisualizer({
                 {/* ── TradingView-style Risk/Reward Position Boxes (Active & Backtest Trades Only) ── */}
                 {!isLiveCandidate && (
                   <>
-                    {/* Green Target Zone: from localEntryIdx to localExitIdx */}
+                    {/* Green Target Zone: from realEntryIdx to realExitIdx */}
                     <rect
-                      x={getX(localEntryIdx ?? entryIdx)}
+                      x={getX(realEntryIdx)}
                       y={Math.min(entryY, tpY)}
-                      width={Math.max(candleSpacing, getX(localExitIdx ?? exitIdx) - getX(localEntryIdx ?? entryIdx))}
+                      width={Math.max(candleSpacing, getX(realExitIdx) - getX(realEntryIdx))}
                       height={Math.max(2, Math.abs(entryY - tpY))}
                       fill="url(#tpGradientLight)"
                       stroke="#10b981"
@@ -1056,11 +1074,11 @@ export default function TradeChartVisualizer({
                       strokeDasharray="2 2"
                       rx={2}
                     />
-                    {/* Red Risk Zone: from localEntryIdx to localExitIdx */}
+                    {/* Red Risk Zone: from realEntryIdx to realExitIdx */}
                     <rect
-                      x={getX(localEntryIdx ?? entryIdx)}
+                      x={getX(realEntryIdx)}
                       y={Math.min(entryY, slY)}
-                      width={Math.max(candleSpacing, getX(localExitIdx ?? exitIdx) - getX(localEntryIdx ?? entryIdx))}
+                      width={Math.max(candleSpacing, getX(realExitIdx) - getX(realEntryIdx))}
                       height={Math.max(2, Math.abs(entryY - slY))}
                       fill="url(#slGradientLight)"
                       stroke="#ef4444"
@@ -1071,112 +1089,63 @@ export default function TradeChartVisualizer({
                   </>
                 )}
 
-                {/* ── 1. SMC Real-Wick Zigzag (Snaps directly to exact candle wicks) ── */}
-                {hasBos && hasIdm && localShIdx !== null && localIdmIdx !== null && localSweepIdx !== null && localBosIdx !== null && (
-                  <g className="smc-real-zigzag" opacity={0.88}>
-                    <polyline
-                      points={
-                        isLiveCandidate
-                          ? `
-                            ${getX(localShIdx)},${getY(shPrice)}
-                            ${getX(localIdmIdx)},${getY(idmPrice)}
-                            ${getX(localSweepIdx)},${getY(sweepPrice)}
-                            ${getX(localBosIdx)},${getY(bosPrice)}
-                          `
-                          : `
-                            ${getX(localShIdx)},${getY(shPrice)}
-                            ${getX(localIdmIdx)},${getY(idmPrice)}
-                            ${getX(localSweepIdx)},${getY(sweepPrice)}
-                            ${getX(localBosIdx)},${getY(bosPrice)}
-                            ${getX(localEntryIdx ?? entryIdx)},${entryY}
-                            ${getX(localExitIdx ?? exitIdx)},${isWin ? tpY : slY}
-                          `
-                      }
-                      fill="none"
-                      stroke="#38bdf8"
-                      strokeWidth={2}
-                      strokeDasharray="4 2"
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                    />
-                    {/* Small vertex dots strictly anchored to real candle coordinates */}
-                    <circle cx={getX(localShIdx)} cy={getY(shPrice)} r={3.5} fill="#0284c7" stroke="#ffffff" strokeWidth={1} />
-                    <circle cx={getX(localIdmIdx)} cy={getY(idmPrice)} r={3.5} fill="#9333ea" stroke="#ffffff" strokeWidth={1} />
-                    <circle cx={getX(localSweepIdx)} cy={getY(sweepPrice)} r={3.5} fill="#a855f7" stroke="#ffffff" strokeWidth={1} />
-                    <circle cx={getX(localBosIdx)} cy={getY(bosPrice)} r={3.5} fill="#0284c7" stroke="#ffffff" strokeWidth={1} />
-                    {!isLiveCandidate && localEntryIdx !== null && (
-                      <circle cx={getX(localEntryIdx)} cy={entryY} r={3.5} fill="#16a34a" stroke="#ffffff" strokeWidth={1} />
-                    )}
-                  </g>
-                )}
-
-                {/* ── 2. Peak Tag: 1st Higher High / Lower Low ── */}
-                {hasBos && localShIdx !== null && (
-                  <g transform={`translate(${getX(localShIdx)}, ${getY(shPrice) + (isLong ? -14 : 16)})`}>
-                    <rect x={-36} y={-9} width={72} height={18} rx={4} fill="#0f172a" stroke="#ffffff" strokeWidth={1} filter="drop-shadow(0 1px 3px rgba(0,0,0,0.2))" />
-                    <text x={0} y={3.5} textAnchor="middle" fill="#ffffff" fontSize="9" fontFamily="monospace" fontWeight="bold">
-                      {isLong ? '1st HH' : '1st LL'}
-                    </text>
-                  </g>
-                )}
-
-                {/* ── 3. BOS Segment ── */}
+                {/* ── BOS Horizontal Structure Line (TradingView SMC Reference) ── */}
                 {(hasBos || pendingBosLevel > 0) && (
                   <g className="bos-clean-segment">
                     <line
-                      x1={localShIdx !== null ? getX(localShIdx) : getX(0)}
+                      x1={paddingLeft}
                       y1={bosY}
-                      x2={hasBos && localBosIdx !== null ? getX(localBosIdx) : getX(candleCount - 1) + 20}
+                      x2={chartWidth + paddingLeft}
                       y2={bosY}
                       stroke="#0284c7"
-                      strokeWidth={2}
-                      strokeDasharray={hasBos ? "none" : "5 3"}
+                      strokeWidth={1.8}
+                      strokeDasharray={hasBos ? "5 3" : "2 2"}
                     />
-                    <g transform={`translate(${((localShIdx !== null ? getX(localShIdx) : getX(0)) + (hasBos && localBosIdx !== null ? getX(localBosIdx) : getX(candleCount - 1) + 20)) / 2}, ${bosY + (isLong ? -12 : 14)})`}>
-                      <rect x={-52} y={-9} width={104} height={18} rx={3} fill="#0284c7" stroke="#bae6fd" strokeWidth={0.8} />
-                      <text x={0} y={3.5} textAnchor="middle" fill="#ffffff" fontSize="8.5" fontFamily="monospace" fontWeight="bold">
+                    <g transform={`translate(${chartWidth + paddingLeft - 50}, ${bosY + (isLong ? -11 : 13)})`}>
+                      <rect x={-45} y={-8} width={90} height={16} rx={3} fill="#0284c7" stroke="#bae6fd" strokeWidth={0.8} />
+                      <text x={0} y={3.5} textAnchor="middle" fill="#ffffff" fontSize="8" fontFamily="monospace" fontWeight="bold">
                         {hasBos ? `BOS $${bosDisplayPrice.toFixed(1)}` : `BOS Trigger $${bosDisplayPrice.toFixed(1)}`}
                       </text>
                     </g>
                   </g>
                 )}
 
-                {/* ── 4. IDM Segment (Begins at Pullback, ends at Sweep Candle or live bar) ── */}
+                {/* ── IDM Horizontal Inducement Line (TradingView SMC Reference) ── */}
                 {hasIdm && idmPrice > 0 && (
                   <g className="idm-clean-segment">
                     <line
-                      x1={localIdmIdx !== null ? getX(localIdmIdx) : getX(0)}
+                      x1={paddingLeft}
                       y1={idmY}
-                      x2={localSweepIdx !== null ? getX(localSweepIdx) : getX(candleCount - 1) + 20}
+                      x2={chartWidth + paddingLeft}
                       y2={idmY}
                       stroke="#9333ea"
-                      strokeWidth={2}
+                      strokeWidth={1.8}
                       strokeDasharray="4 3"
                     />
-                    <g transform={`translate(${((localIdmIdx !== null ? getX(localIdmIdx) : getX(0)) + (localSweepIdx !== null ? getX(localSweepIdx) : getX(candleCount - 1) + 20)) / 2}, ${idmY + (isLong ? 15 : -11)})`}>
-                      <rect x={-46} y={-9} width={92} height={18} rx={3} fill="#9333ea" stroke="#e9d5ff" strokeWidth={0.8} />
-                      <text x={0} y={3.5} textAnchor="middle" fill="#ffffff" fontSize="8.5" fontFamily="monospace" fontWeight="bold">
+                    <g transform={`translate(${chartWidth + paddingLeft - 145}, ${idmY + (isLong ? 13 : -11)})`}>
+                      <rect x={-40} y={-8} width={80} height={16} rx={3} fill="#9333ea" stroke="#e9d5ff" strokeWidth={0.8} />
+                      <text x={0} y={3.5} textAnchor="middle" fill="#ffffff" fontSize="8" fontFamily="monospace" fontWeight="bold">
                         IDM ${idmPrice.toFixed(1)}
                       </text>
                     </g>
                   </g>
                 )}
 
-                {/* ── 4B. CHoCH Segment (Change of Character Level) ── */}
-                {hasChoch && localChochIdx !== null && (
+                {/* ── CHoCH Horizontal Line (Change of Character Reference) ── */}
+                {hasChoch && (
                   <g className="choch-clean-segment">
                     <line
-                      x1={getX(localChochIdx)}
+                      x1={paddingLeft}
                       y1={chochY}
-                      x2={getX(isReversal ? (localChochBreakIdx ?? localChochIdx) : (localBosIdx ?? localChochIdx))}
+                      x2={chartWidth + paddingLeft}
                       y2={chochY}
                       stroke="#ea580c"
-                      strokeWidth={2}
+                      strokeWidth={1.8}
                       strokeDasharray="4 3"
                     />
-                    <g transform={`translate(${(getX(localChochIdx) + getX(isReversal ? (localChochBreakIdx ?? localChochIdx) : (localBosIdx ?? localChochIdx))) / 2}, ${chochY + (isLong ? 15 : -11)})`}>
-                      <rect x={-52} y={-9} width={104} height={18} rx={3} fill="#ea580c" stroke="#ffedd5" strokeWidth={0.8} />
-                      <text x={0} y={3.5} textAnchor="middle" fill="#ffffff" fontSize="8.5" fontFamily="monospace" fontWeight="bold">
+                    <g transform={`translate(${chartWidth + paddingLeft - 235}, ${chochY + (isLong ? 13 : -11)})`}>
+                      <rect x={-45} y={-8} width={90} height={16} rx={3} fill="#ea580c" stroke="#ffedd5" strokeWidth={0.8} />
+                      <text x={0} y={3.5} textAnchor="middle" fill="#ffffff" fontSize="8" fontFamily="monospace" fontWeight="bold">
                         CHoCH ${chochPrice.toFixed(1)}
                       </text>
                     </g>
@@ -1235,35 +1204,33 @@ export default function TradeChartVisualizer({
                   </g>
                 )}
 
-                {/* ── Retrace Waiting Zone between C3 and Entry (Mitigation Wait) ── */}
-                {hasFvg && localEntryIdx !== null && localC3Idx !== null && localEntryIdx > localC3Idx && (
+                {/* ── Retrace Waiting Zone between C1/FVG and Entry (Mitigation Wait) ── */}
+                {hasFvg && realEntryIdx > realC1Idx + 2 && (
                   <g className="smc-retrace-wait-zone" opacity={0.9}>
                     <line
-                      x1={getX(localC3Idx) + candleBodyWidth / 2}
+                      x1={getX(realC1Idx + 2) + candleBodyWidth / 2}
                       y1={(rawFvgTopY + rawFvgBottomY) / 2}
-                      x2={getX(localEntryIdx) - candleBodyWidth / 2}
+                      x2={getX(realEntryIdx) - candleBodyWidth / 2}
                       y2={(rawFvgTopY + rawFvgBottomY) / 2}
                       stroke="#d97706"
                       strokeWidth={1.4}
                       strokeDasharray="3 3"
                     />
-                    {localEntryIdx - localC3Idx >= 2 && (
-                      <g transform={`translate(${(getX(localC3Idx) + getX(localEntryIdx)) / 2}, ${(rawFvgTopY + rawFvgBottomY) / 2})`}>
-                        <rect x={-52} y={-8} width={104} height={16} rx={3} fill="#fffbeb" stroke="#fde68a" strokeWidth={0.8} filter="drop-shadow(0 1px 2px rgba(0,0,0,0.08))" />
-                        <text x={0} y={3.5} textAnchor="middle" fill="#92400e" fontSize="7.5" fontFamily="monospace" fontWeight="bold">
-                          Wait Retrace ({localEntryIdx - localC3Idx} bars)
-                        </text>
-                      </g>
-                    )}
+                    <g transform={`translate(${(getX(realC1Idx + 2) + getX(realEntryIdx)) / 2}, ${(rawFvgTopY + rawFvgBottomY) / 2})`}>
+                      <rect x={-52} y={-8} width={104} height={16} rx={3} fill="#fffbeb" stroke="#fde68a" strokeWidth={0.8} filter="drop-shadow(0 1px 2px rgba(0,0,0,0.08))" />
+                      <text x={0} y={3.5} textAnchor="middle" fill="#92400e" fontSize="7.5" fontFamily="monospace" fontWeight="bold">
+                        Wait Retrace ({realEntryIdx - realC1Idx - 2} bars)
+                      </text>
+                    </g>
                   </g>
                 )}
 
                 {/* ── 6A. Retracement Touching Point Marker (Where Price Retraced into FVG) ── */}
                 {hasPlannedLevels && effectiveEntryPrice > 0 && (
                   <g className="touch-point-marker">
-                    <circle cx={getX(localEntryIdx ?? entryIdx)} cy={entryY} r={7} fill="none" stroke="#f59e0b" strokeWidth={2} />
-                    <circle cx={getX(localEntryIdx ?? entryIdx)} cy={entryY} r={3.5} fill="#f59e0b" />
-                    <g transform={`translate(${getX(localEntryIdx ?? entryIdx)}, ${entryY + (isLong ? 18 : -14)})`}>
+                    <circle cx={getX(realEntryIdx)} cy={entryY} r={7} fill="none" stroke="#f59e0b" strokeWidth={2} />
+                    <circle cx={getX(realEntryIdx)} cy={entryY} r={3.5} fill="#f59e0b" />
+                    <g transform={`translate(${getX(realEntryIdx)}, ${entryY + (isLong ? 18 : -14)})`}>
                       <rect x={-55} y={-8} width={110} height={16} rx={3} fill="#78350f" stroke="#fde68a" strokeWidth={0.8} />
                       <text x={0} y={3.5} textAnchor="middle" fill="#fef3c7" fontSize="7.5" fontFamily="monospace" fontWeight="bold">
                         Touching Point ${effectiveEntryPrice.toFixed(1)}
@@ -1276,18 +1243,18 @@ export default function TradeChartVisualizer({
                 {hasPlannedLevels && (
                   <g className="entry-clean-segment">
                     <line
-                      x1={isLiveCandidate ? getX(localC3Idx ?? 0) : getX(localEntryIdx ?? entryIdx)}
+                      x1={isLiveCandidate ? getX(realC1Idx) : getX(realEntryIdx)}
                       y1={entryY}
-                      x2={isLiveCandidate ? getX(candleCount - 1) + 40 : getX(localExitIdx ?? exitIdx)}
+                      x2={isLiveCandidate ? getX(candleCount - 1) + 40 : getX(realExitIdx)}
                       y2={entryY}
                       stroke={isLiveCandidate ? "#d97706" : "#16a34a"}
                       strokeWidth={1.8}
                       strokeDasharray={isLiveCandidate ? "4 3" : "3 2"}
                     />
-                    {!isLiveCandidate && localEntryIdx !== null && (
-                      <circle cx={getX(localEntryIdx)} cy={entryY} r={4} fill="#16a34a" stroke="#ffffff" strokeWidth={1.5} />
+                    {!isLiveCandidate && (
+                      <circle cx={getX(realEntryIdx)} cy={entryY} r={4} fill="#16a34a" stroke="#ffffff" strokeWidth={1.5} />
                     )}
-                    <g transform={`translate(${isLiveCandidate ? Math.max(getX(localC3Idx ?? 0) + 6, getX(candleCount - 1) - 60) : getX(localEntryIdx ?? entryIdx) + 6}, ${entryY - 8})`}>
+                    <g transform={`translate(${isLiveCandidate ? Math.max(getX(realC1Idx) + 6, getX(candleCount - 1) - 60) : getX(realEntryIdx) + 6}, ${entryY - 8})`}>
                       <rect x={0} y={0} width={isLiveCandidate ? 116 : 82} height={16} rx={3} fill={isLiveCandidate ? "#d97706" : "#16a34a"} fillOpacity={0.92} />
                       <text x={isLiveCandidate ? 58 : 41} y={11} textAnchor="middle" fill="#ffffff" fontSize="8" fontFamily="monospace" fontWeight="bold">
                         {isLiveCandidate ? `PLANNED ENTRY $${effectiveEntryPrice.toFixed(1)}` : `ENTRY $${effectiveEntryPrice.toFixed(1)}`}
@@ -1299,17 +1266,17 @@ export default function TradeChartVisualizer({
                 {/* ── 7. Stop Loss Segment (Anchored strictly to Candle 1 Low / High - Rule #8) ── */}
                 {hasPlannedLevels && (
                   <g className="sl-clean-segment">
-                    <circle cx={getX(localC1Idx ?? Math.max(0, (localEntryIdx ?? entryIdx) - 3))} cy={slY} r={4} fill="#ef4444" stroke="#ffffff" strokeWidth={1.5} />
+                    <circle cx={getX(realC1Idx)} cy={slY} r={4} fill="#ef4444" stroke="#ffffff" strokeWidth={1.5} />
                     <line
-                      x1={getX(localC1Idx ?? Math.max(0, (localEntryIdx ?? entryIdx) - 3))}
+                      x1={getX(realC1Idx)}
                       y1={slY}
-                      x2={isLiveCandidate ? getX(candleCount - 1) + 40 : getX(localExitIdx ?? exitIdx)}
+                      x2={isLiveCandidate ? getX(candleCount - 1) + 40 : getX(realExitIdx)}
                       y2={slY}
                       stroke="#ef4444"
                       strokeWidth={2}
                       strokeDasharray="4 2"
                     />
-                    <g transform={`translate(${getX(localC1Idx ?? Math.max(0, (localEntryIdx ?? entryIdx) - 3))}, ${slY + (isLong ? 15 : -8)})`}>
+                    <g transform={`translate(${getX(realC1Idx)}, ${slY + (isLong ? 15 : -8)})`}>
                       <rect x={-4} y={-8} width={isLiveCandidate ? 124 : 102} height={16} rx={3} fill="#be123c" fillOpacity={0.95} />
                       <text x={isLiveCandidate ? 58 : 47} y={3.5} textAnchor="middle" fill="#ffffff" fontSize="8" fontFamily="monospace" fontWeight="bold">
                         {isLiveCandidate ? `PLANNED SL $${effectiveStopLoss.toFixed(1)} (C1)` : `SL $${effectiveStopLoss.toFixed(1)} (C1 ${isLong ? 'Low' : 'High'})`}
@@ -1318,22 +1285,22 @@ export default function TradeChartVisualizer({
                   </g>
                 )}
 
-                {/* ── 8. Take Profit Segment (Begins at Entry or C3, extends to Exit or live edge - Rule #9) ── */}
+                {/* ── 8. Take Profit Segment (Begins at Entry or C1, extends to Exit or live edge - Rule #9) ── */}
                 {hasPlannedLevels && (
                   <g className="tp-clean-segment">
                     <line
-                      x1={isLiveCandidate ? getX(localC3Idx ?? 0) : getX(localEntryIdx ?? entryIdx)}
+                      x1={isLiveCandidate ? getX(realC1Idx) : getX(realEntryIdx)}
                       y1={tpY}
-                      x2={isLiveCandidate ? getX(candleCount - 1) + 40 : getX(localExitIdx ?? exitIdx)}
+                      x2={isLiveCandidate ? getX(candleCount - 1) + 40 : getX(realExitIdx)}
                       y2={tpY}
                       stroke="#10b981"
                       strokeWidth={2}
                       strokeDasharray="4 2"
                     />
-                    {!isLiveCandidate && localExitIdx !== null && (
-                      <circle cx={getX(localExitIdx)} cy={tpY} r={4} fill="#10b981" stroke="#ffffff" strokeWidth={1.5} />
+                    {!isLiveCandidate && (
+                      <circle cx={getX(realExitIdx)} cy={tpY} r={4} fill="#10b981" stroke="#ffffff" strokeWidth={1.5} />
                     )}
-                    <g transform={`translate(${isLiveCandidate ? Math.max(getX(localC3Idx ?? 0) + 6, getX(candleCount - 1) - 60) : getX(localEntryIdx ?? entryIdx)}, ${tpY + (isLong ? -8 : 15)})`}>
+                    <g transform={`translate(${isLiveCandidate ? Math.max(getX(realC1Idx) + 6, getX(candleCount - 1) - 60) : getX(realEntryIdx)}, ${tpY + (isLong ? -8 : 15)})`}>
                       <rect x={0} y={-8} width={isLiveCandidate ? 116 : 96} height={16} rx={3} fill="#15803d" fillOpacity={0.95} />
                       <text x={isLiveCandidate ? 58 : 48} y={3.5} textAnchor="middle" fill="#ffffff" fontSize="8" fontFamily="monospace" fontWeight="bold">
                         {isLiveCandidate ? `PLANNED TP $${effectiveTakeProfit.toFixed(1)} (1:2)` : `TP $${effectiveTakeProfit.toFixed(1)} (1:2 R:R)`}
@@ -1421,8 +1388,8 @@ export default function TradeChartVisualizer({
               const bodyTop = Math.min(yO, yC);
               const bodyH = Math.max(1.5, Math.abs(yO - yC));
 
-              const isTradeCandle = idx >= entryIdx && idx <= exitIdx;
-              const isEntryCandle = idx === entryIdx;
+              const isTradeCandle = idx >= realEntryIdx && idx <= realExitIdx;
+              const isEntryCandle = idx === realEntryIdx;
               const isHovered = hoverIdx === idx;
 
               return (
@@ -1484,8 +1451,8 @@ export default function TradeChartVisualizer({
             })}
 
             {/* ── Entry Marker (Clean TradingView Arrow & Tag) ── */}
-            {showDrawings && candleData && (!isLiveCandidate || isLiveActive) && localEntryIdx !== null && (
-              <g transform={`translate(${getX(localEntryIdx)}, ${entryY})`}>
+            {showDrawings && candleData && (!isLiveCandidate || isLiveActive) && (
+              <g transform={`translate(${getX(realEntryIdx)}, ${entryY})`}>
                 <circle r={4} fill="#16a34a" stroke="#ffffff" strokeWidth={1.5} />
                 <path
                   d={isLong ? "M0 10 L0 5 M-3 7 L0 4 L3 7" : "M0 -10 L0 -5 M-3 -7 L0 -4 L3 -7"}
@@ -1503,33 +1470,67 @@ export default function TradeChartVisualizer({
               </g>
             )}
 
-            {/* ── Exit Marker (Result & Flag) ── */}
-            {showDrawings && candleData && !isLiveCandidate && localExitIdx !== null && (
-              <g transform={`translate(${getX(localExitIdx)}, ${isWin ? tpY : slY})`}>
-                <circle r={5} fill={isWin ? '#10b981' : '#f43f5e'} stroke="#ffffff" strokeWidth={1.5} />
-                <g transform="translate(8, -10)">
-                  <rect
-                    width={80}
-                    height={20}
-                    rx={4}
-                    fill={isWin ? '#15803d' : '#be123c'}
-                    stroke="#ffffff"
-                    strokeWidth={1}
-                    filter="drop-shadow(0 1px 3px rgba(0,0,0,0.15))"
-                  />
-                  <text
-                    x={40}
-                    y={13.5}
-                    textAnchor="middle"
-                    fill="#ffffff"
-                    fontSize="9"
-                    fontFamily="monospace"
-                    fontWeight="bold"
-                  >
-                    {isWin ? '🏆 WIN (+2R)' : '🛑 LOSS (-1R)'}
-                  </text>
-                </g>
-              </g>
+            {/* ── Position Status / Exit Marker ── */}
+            {showDrawings && candleData && !isLiveCandidate && (
+              <>
+                {trade.result === 'ACTIVE_OPEN' || isLiveActive ? (
+                  /* Active Open Trade Indicator - Never show false Loss! */
+                  <g transform={`translate(${getX(realExitIdx)}, ${entryY})`}>
+                    <circle r={5} fill="#0ea5e9" stroke="#ffffff" strokeWidth={1.5} />
+                    <g transform="translate(8, -10)">
+                      <rect
+                        width={124}
+                        height={20}
+                        rx={4}
+                        fill="#0284c7"
+                        stroke="#bae6fd"
+                        strokeWidth={1}
+                        filter="drop-shadow(0 1px 3px rgba(0,0,0,0.15))"
+                      />
+                      <text
+                        x={62}
+                        y={13.5}
+                        textAnchor="middle"
+                        fill="#ffffff"
+                        fontSize="8.5"
+                        fontFamily="monospace"
+                        fontWeight="bold"
+                      >
+                        ● IN TRADE (Open)
+                      </text>
+                    </g>
+                  </g>
+                ) : (
+                  /* Completed Trade Exit Flag (WIN / LOSS / BREAKEVEN) */
+                  (trade.result === 'WIN' || trade.result === 'LOSS' || trade.result === 'BREAKEVEN') && (
+                    <g transform={`translate(${getX(realExitIdx)}, ${isWin ? tpY : slY})`}>
+                      <circle r={5} fill={isWin ? '#10b981' : '#f43f5e'} stroke="#ffffff" strokeWidth={1.5} />
+                      <g transform="translate(8, -10)">
+                        <rect
+                          width={80}
+                          height={20}
+                          rx={4}
+                          fill={isWin ? '#15803d' : '#be123c'}
+                          stroke="#ffffff"
+                          strokeWidth={1}
+                          filter="drop-shadow(0 1px 3px rgba(0,0,0,0.15))"
+                        />
+                        <text
+                          x={40}
+                          y={13.5}
+                          textAnchor="middle"
+                          fill="#ffffff"
+                          fontSize="9"
+                          fontFamily="monospace"
+                          fontWeight="bold"
+                        >
+                          {isWin ? '🏆 WIN (+2R)' : trade.result === 'BREAKEVEN' ? '⚖️ BREAKEVEN' : '🛑 LOSS (-1R)'}
+                        </text>
+                      </g>
+                    </g>
+                  )
+                )}
+              </>
             )}
           </g>
           {/* ── END OF CLIPPED SLIDING CHART AREA ── */}
