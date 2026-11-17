@@ -27,9 +27,9 @@ SYMBOL_PROVIDER_MAP = {
 }
 
 # Strategy Analysis & Execution Timeframes
-# User-Configured Testing Resolution: 30M Macro Trend Analysis, 1M Trade Execution
+# User-Configured Testing Resolution: 30M Macro Trend Analysis, 5M Trade Execution
 HTF_TIMEFRAME = os.getenv("HTF_TIMEFRAME", "30m")
-LTF_TIMEFRAME = os.getenv("LTF_TIMEFRAME", "1m")
+LTF_TIMEFRAME = os.getenv("LTF_TIMEFRAME", "5m")
 
 CONTEXT_HTF_LIMIT = int(os.getenv("CONTEXT_HTF_LIMIT", 200))
 CONTEXT_LTF_LIMIT = int(os.getenv("CONTEXT_LTF_LIMIT", 500))

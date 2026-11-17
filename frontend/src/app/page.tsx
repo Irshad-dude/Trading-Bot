@@ -628,7 +628,7 @@ export default function Dashboard() {
         idm_level: paperTrade.idm_level != null ? Number(paperTrade.idm_level) : (liveData?.idm_level ? Number(liveData.idm_level) : undefined),
         fvg_top: paperTrade.fvg_top != null ? Number(paperTrade.fvg_top) : (liveData?.fvg_top ? Number(liveData.fvg_top) : undefined),
         fvg_bottom: paperTrade.fvg_bottom != null ? Number(paperTrade.fvg_bottom) : (liveData?.fvg_bottom ? Number(liveData.fvg_bottom) : undefined),
-        timeframe: paperTrade.timeframe || liveData?.timeframe || '1M',
+        timeframe: paperTrade.timeframe || liveData?.timeframe || '5M',
         macro_timeframe: liveData?.macro_timeframe || '30M',
         '4h_trend': paperTrade.market_trend || liveData?.macro_trend || monitor?.macro_trend || 'NEUTRAL',
         four_h_trend: paperTrade.market_trend || liveData?.macro_trend || monitor?.macro_trend || 'NEUTRAL',
@@ -681,7 +681,7 @@ export default function Dashboard() {
       direction: direction,
       entry_time: isActive ? activePos.opened_at : (liveData?.candles?.[liveData.candles.length - 1]?.[0] ?? new Date().toISOString()),
       entry_price: entryPrice,
-      exit_time: isActive ? 'Active Position' : (hasActiveSetup ? 'Pending Retracement' : `Scanning ${liveData?.timeframe || '1M'} Structure`),
+      exit_time: isActive ? 'Active Position' : (hasActiveSetup ? 'Pending Retracement' : `Scanning ${liveData?.timeframe || '5M'} Structure`),
       exit_price: tp,
       stop_loss: sl,
       take_profit: tp,
@@ -694,14 +694,14 @@ export default function Dashboard() {
       setup_reason: isActive
         ? `Active paper position on ${symbol} (${direction} @ $${entryPrice.toLocaleString()})`
         : hasActiveSetup
-        ? `Candidate ${liveData?.timeframe || '1M'} Setup (${stageName.replace(/_/g, ' ')}) waiting for entry touch @ $${entryPrice.toLocaleString()}`
-        : `Live ${liveData?.timeframe || '1M'} Market Scanning: No confirmed Break of Structure (BOS) yet · Price oscillating in swing range`,
+        ? `Candidate ${liveData?.timeframe || '5M'} Setup (${stageName.replace(/_/g, ' ')}) waiting for entry touch @ $${entryPrice.toLocaleString()}`
+        : `Live ${liveData?.timeframe || '5M'} Market Scanning: No confirmed Break of Structure (BOS) yet · Price oscillating in swing range`,
       trade_type: liveData?.trade_type ?? (chain?.stage?.includes('REVERSAL') ? 'REVERSAL_CHOCH' : 'CONTINUATION_BOS'),
       bos_level: bosLevel != null ? Number(bosLevel) : undefined,
       idm_level: idmLevel != null ? Number(idmLevel) : undefined,
       fvg_top: fvgTop != null ? Number(fvgTop) : undefined,
       fvg_bottom: fvgBottom != null ? Number(fvgBottom) : undefined,
-      timeframe: liveData?.timeframe ?? '1M',
+      timeframe: liveData?.timeframe ?? '5M',
       macro_timeframe: liveData?.macro_timeframe ?? '30M',
       '4h_trend': liveData?.macro_trend ?? monitor?.macro_trend ?? chain?.trend ?? 'NEUTRAL',
       four_h_trend: liveData?.macro_trend ?? monitor?.macro_trend ?? chain?.trend ?? 'NEUTRAL',
@@ -2437,16 +2437,17 @@ export default function Dashboard() {
             if (isFvgTouched) {
               return `FVG zone touched on ${selectedLiveSymbol}. Waiting for directional candle confirmation for entry.`;
             }
+            const ltfLabel = liveCandleData?.timeframe || '5M';
             if (hasFvg) {
-              return `1M FVG formed between $${Math.min(liveCandleData?.fvg_top || 0, liveCandleData?.fvg_bottom || 0).toLocaleString()} and $${Math.max(liveCandleData?.fvg_top || 0, liveCandleData?.fvg_bottom || 0).toLocaleString()}. Waiting for price pullback into zone.`;
+              return `${ltfLabel} FVG formed between $${Math.min(liveCandleData?.fvg_top || 0, liveCandleData?.fvg_bottom || 0).toLocaleString()} and $${Math.max(liveCandleData?.fvg_top || 0, liveCandleData?.fvg_bottom || 0).toLocaleString()}. Waiting for price pullback into zone.`;
             }
             if (hasBos) {
-              return `1M BOS confirmed at $${liveCandleData?.bos_level?.toLocaleString()}. Imbalance creation pending.`;
+              return `${ltfLabel} BOS confirmed at $${liveCandleData?.bos_level?.toLocaleString()}. Imbalance creation pending.`;
             }
             if (monitor?.idm_level != null) {
-              return `1M Inducement swept at $${monitor.idm_level.toLocaleString()}. Waiting for 1M candle body close beyond structural anchor to confirm BOS.`;
+              return `${ltfLabel} Inducement swept at $${monitor.idm_level.toLocaleString()}. Waiting for ${ltfLabel} candle body close beyond structural anchor to confirm BOS.`;
             }
-            return `30M Macro Trend is ${step1Trend}. Scanning 1M price action for swing structure and liquidity inducement.`;
+            return `30M Macro Trend is ${step1Trend}. Scanning ${ltfLabel} price action for swing structure and liquidity inducement.`;
           })();
 
           return (
@@ -2591,7 +2592,7 @@ export default function Dashboard() {
                 ) : (
                   <div className="p-16 text-center text-xs font-mono text-slate-400 flex flex-col items-center justify-center gap-3">
                     <div className="w-6 h-6 border-2 border-slate-900 border-t-transparent rounded-full animate-spin" />
-                    <span>Loading live 1M candles and SMC levels for {selectedLiveSymbol}...</span>
+                    <span>Loading live {liveCandleData?.timeframe || '5M'} candles and SMC levels for {selectedLiveSymbol}...</span>
                   </div>
                 )}
               </div>
@@ -2604,7 +2605,7 @@ export default function Dashboard() {
                       SMC Rule Progression Flow · {selectedLiveSymbol}
                     </span>
                     <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-slate-100 text-slate-600 border border-slate-200">
-                      30M Macro Bias → 1M Execution
+                      30M Macro Bias → {liveCandleData?.timeframe || '5M'} Execution
                     </span>
                   </div>
                   <span className="text-[11px] font-mono text-slate-500">
@@ -2630,7 +2631,7 @@ export default function Dashboard() {
                     </div>
                   </div>
 
-                  {/* Step 2: 1M Inducement (IDM) */}
+                  {/* Step 2: Inducement (IDM) */}
                   <div className={`p-3 rounded-lg border flex flex-col justify-between gap-1 ${monitor?.idm_level != null ? 'border-purple-200 bg-purple-50/40' : 'border-slate-200/80 bg-slate-50/50'}`}>
                     <div className="flex items-center justify-between">
                       <span className="text-[10px] font-mono uppercase text-slate-400">2. Inducement (IDM)</span>
@@ -2646,7 +2647,7 @@ export default function Dashboard() {
                     </div>
                   </div>
 
-                  {/* Step 3: 1M Break of Structure (BOS) */}
+                  {/* Step 3: Break of Structure (BOS) */}
                   <div className={`p-3 rounded-lg border flex flex-col justify-between gap-1 ${hasBos ? 'border-sky-200 bg-sky-50/40' : 'border-slate-200/80 bg-slate-50/50'}`}>
                     <div className="flex items-center justify-between">
                       <span className="text-[10px] font-mono uppercase text-slate-400">3. Structure (BOS)</span>
@@ -2662,7 +2663,7 @@ export default function Dashboard() {
                     </div>
                   </div>
 
-                  {/* Step 4: 1M FVG Retracement */}
+                  {/* Step 4: FVG Retracement */}
                   <div className={`p-3 rounded-lg border flex flex-col justify-between gap-1 ${isFvgTouched ? 'border-emerald-200 bg-emerald-50/40' : hasFvg ? 'border-amber-200 bg-amber-50/40' : 'border-slate-200/80 bg-slate-50/50'}`}>
                     <div className="flex items-center justify-between">
                       <span className="text-[10px] font-mono uppercase text-slate-400">4. FVG Retrace</span>

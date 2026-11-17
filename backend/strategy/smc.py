@@ -512,7 +512,7 @@ class SMCEngine:
         Uses the same detection methods as scan_for_setups().
         This method is for dashboard visibility only.
         """
-        ltf_tf = os.getenv("LTF_TIMEFRAME", "1m").upper()
+        ltf_tf = os.getenv("LTF_TIMEFRAME", "5m").upper()
         htf_tf = os.getenv("HTF_TIMEFRAME", "30m").upper()
         result: Dict[str, Any] = {
             "symbol": symbol,
@@ -556,15 +556,15 @@ class SMCEngine:
             df_15m, trend, swing_highs, swing_lows
         )
         if not inducement:
-            result["stage"] = "15M_IDM"
+            result["stage"] = f"{ltf_tf}_IDM"
             result["stage_status"] = "WAITING"
-            result["reason"] = "4H bias detected; waiting for a valid 15M inducement sweep."
+            result["reason"] = f"{htf_tf} bias detected; waiting for a valid {ltf_tf} inducement sweep."
             return result
 
         direction = inducement["direction"]
         result["direction"] = direction
         result["idm_level"] = float(inducement["idm_price"])
-        result["stage"] = "15M_IDM"
+        result["stage"] = f"{ltf_tf}_IDM"
         result["stage_status"] = "CONFIRMED"
         result["reason"] = f"{direction} inducement sweep confirmed."
 
@@ -572,7 +572,7 @@ class SMCEngine:
             df_15m, trend, inducement, swing_highs, swing_lows
         )
         if not bos:
-            result["stage"] = "15M_BOS"
+            result["stage"] = f"{ltf_tf}_BOS"
             result["stage_status"] = "WAITING"
             result["reason"] = "IDM swept; waiting for a candle close beyond the structural anchor."
             return result
@@ -580,7 +580,7 @@ class SMCEngine:
         direction = bos["direction"]
         result["direction"] = direction
         result["bos_level"] = float(bos["anchor_price"])
-        result["stage"] = "15M_BOS"
+        result["stage"] = f"{ltf_tf}_BOS"
         result["stage_status"] = "CONFIRMED"
         result["reason"] = f"{direction} BOS confirmed by candle close."
 
@@ -588,7 +588,7 @@ class SMCEngine:
             df_15m, bos["bos_index"], direction
         )
         if not fvg:
-            result["stage"] = "15M_FVG"
+            result["stage"] = f"{ltf_tf}_FVG"
             result["stage_status"] = "WAITING"
             result["reason"] = "BOS confirmed; waiting for a valid BOS-based FVG."
             return result
@@ -601,7 +601,7 @@ class SMCEngine:
             "index": int(fvg["index"]),
             "sl_price": float(fvg["sl_price"]),
         }
-        result["stage"] = "15M_FVG"
+        result["stage"] = f"{ltf_tf}_FVG"
         result["stage_status"] = "DETECTED"
         result["reason"] = "Valid BOS-based FVG detected."
 

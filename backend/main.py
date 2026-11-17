@@ -122,7 +122,7 @@ async def run_strategy_monitor_scan():
 
 @app.get("/api/strategy-monitor/candles")
 async def get_strategy_monitor_candles(symbol: str = "BTCUSD", timeframe: Optional[str] = None):
-    """Returns closed LTF candles (1M default for rapid testing) + live ticker + structural levels."""
+    """Returns closed LTF candles (5M execution default) + live ticker + structural levels."""
     try:
         return await asyncio.to_thread(live_service.get_live_candles_payload, symbol, 120, timeframe)
     except Exception as e:

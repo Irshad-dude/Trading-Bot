@@ -598,7 +598,7 @@ class UnifiedStrategyCoordinator:
             }
 
         htf_tf = os.getenv("HTF_TIMEFRAME", "30m").upper()
-        ltf_tf = os.getenv("LTF_TIMEFRAME", "1m").upper()
+        ltf_tf = os.getenv("LTF_TIMEFRAME", "5m").upper()
         timeframe_label = f"{htf_tf} + {ltf_tf}"
 
         df_htf = _normalize_ts_df(htf_in)
