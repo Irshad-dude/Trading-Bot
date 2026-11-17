@@ -564,6 +564,9 @@ class SMCEngine:
         direction = inducement["direction"]
         result["direction"] = direction
         result["idm_level"] = float(inducement["idm_price"])
+        result["anchor_idx"] = int(inducement.get("anchor_idx", 0))
+        result["idm_idx"] = int(inducement.get("idm_idx", 0))
+        result["swept_idx"] = int(inducement.get("swept_idx", 0))
         result["stage"] = f"{ltf_tf}_IDM"
         result["stage_status"] = "CONFIRMED"
         result["reason"] = f"{direction} inducement sweep confirmed."
@@ -580,6 +583,7 @@ class SMCEngine:
         direction = bos["direction"]
         result["direction"] = direction
         result["bos_level"] = float(bos["anchor_price"])
+        result["bos_idx"] = int(bos.get("bos_index", 0))
         result["stage"] = f"{ltf_tf}_BOS"
         result["stage_status"] = "CONFIRMED"
         result["reason"] = f"{direction} BOS confirmed by candle close."
@@ -599,6 +603,9 @@ class SMCEngine:
             "bottom": float(fvg["bottom"]),
             "midpoint": float(fvg["midpoint"]),
             "index": int(fvg["index"]),
+            "c1_idx": int(fvg.get("c1_idx") or (fvg["index"] - 1)),
+            "c2_idx": int(fvg.get("c2_idx") or fvg["index"]),
+            "c3_idx": int(fvg.get("c3_idx") or (fvg["index"] + 1)),
             "sl_price": float(fvg["sl_price"]),
         }
         result["stage"] = f"{ltf_tf}_FVG"

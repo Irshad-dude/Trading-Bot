@@ -95,6 +95,7 @@ export interface TradeCandleData {
   current_price?: number;
   setup_stage?: string;
   stage_status?: string;
+  fvg_touched?: boolean;
   recent_swing_high?: { index: number; price: number; timestamp?: string } | null;
   recent_swing_low?: { index: number; price: number; timestamp?: string } | null;
 }
@@ -355,43 +356,72 @@ export default function TradeChartVisualizer({
   const slTop = Math.min(entryY, slY);
   const slH = Math.abs(entryY - slY);
 
-  const shPrice = (trade.bos_level && trade.bos_level > 0)
-    ? trade.bos_level
-    : (candleData?.sh_price ?? candleData?.bos_level ?? candleData?.recent_swing_high?.price ?? (trade as any).sh_price ?? 0);
+  // ── Step-by-Step SMC Strategy Gating (Rule #10: Progressive Milestone & Anti-Air Rules) ──
 
+  // Stage 3 Confirmation: Confirmed Break of Structure (BOS)
+  // BOS exists ONLY when price actually closed beyond the structural anchor.
+  // Never fall back to a mere swing high: a swing high is NOT a BOS!
+  const confirmedBosPrice = (trade.bos_level && trade.bos_level > 0)
+    ? trade.bos_level
+    : (candleData?.bos_level && candleData.bos_level > 0
+        ? candleData.bos_level
+        : (candleData?.bos_price && candleData.bos_price > 0 ? candleData.bos_price : 0));
+
+  const hasBos = Boolean(confirmedBosPrice > 0);
+  const bosDisplayPrice = confirmedBosPrice;
+  const bosY = hasBos ? getY(bosDisplayPrice) : 0;
+
+  // Stage 2 Confirmation: Inducement (IDM)
+  // IDM exists ONLY when the first pullback is swept in the current structural regime.
   const idmPrice = (trade.idm_level && trade.idm_level > 0)
     ? trade.idm_level
-    : (candleData?.idm_price ?? candleData?.idm_level ?? 0);
+    : (candleData?.idm_price && candleData.idm_price > 0
+        ? candleData.idm_price
+        : (candleData?.idm_level && candleData.idm_level > 0 ? candleData.idm_level : 0));
+  const hasIdm = Boolean(idmPrice > 0);
+  const idmY = hasIdm ? getY(idmPrice) : 0;
 
   const chochPrice = candleData?.choch_price ?? trade.choch_price ?? 0;
   const hasChoch = chochPrice > 0;
   const chochY = hasChoch ? getY(chochPrice) : 0;
   const isReversal = trade.trade_type === 'REVERSAL_CHOCH' || candleData?.trade_type === 'REVERSAL_CHOCH';
 
-  // Strict BOS Validation matching TradingView SMC Rules
-  const hasBos = Boolean(
-    shPrice > 0 ||
-    ((candleData?.bos_price ?? 0) > 0 || (candleData?.bos_level ?? 0) > 0)
-  );
-
-  // IDM is valid whenever identified or swept in the current structural regime
-  const hasIdm = Boolean(idmPrice > 0);
-
-  const pendingBosLevel = !hasBos && (candleData?.recent_swing_high?.price ?? (shPrice > 0 ? shPrice : 0));
-  const bosDisplayPrice = hasBos ? (shPrice || (candleData?.bos_price ?? 0)) : (pendingBosLevel || 0);
-  const bosY = (hasBos || pendingBosLevel > 0) ? getY(bosDisplayPrice) : 0;
-  const idmY = hasIdm ? getY(idmPrice) : 0;
-
-  // FVG (Fair Value Gap) Boundary Zone Calculations
+  // Stage 4 Confirmation: Fair Value Gap (FVG)
+  // SMC Rule: FVG zone is formed by displacement ONLY after a confirmed Break of Structure
   const fvgTopVal = (trade.fvg_top && trade.fvg_top > 0)
     ? trade.fvg_top
     : (candleData?.fvg_top && candleData.fvg_top > 0 ? candleData.fvg_top : undefined);
   const fvgBottomVal = (trade.fvg_bottom && trade.fvg_bottom > 0)
     ? trade.fvg_bottom
     : (candleData?.fvg_bottom && candleData.fvg_bottom > 0 ? candleData.fvg_bottom : undefined);
-  const hasFvg = Boolean(fvgTopVal !== undefined && fvgBottomVal !== undefined && fvgTopVal > 0 && fvgBottomVal > 0);
+  const hasFvg = Boolean(
+    hasBos &&
+    fvgTopVal !== undefined &&
+    fvgBottomVal !== undefined &&
+    fvgTopVal > 0 &&
+    fvgBottomVal > 0
+  );
 
-  const hasPlannedLevels = Boolean(effectiveEntryPrice > 0 && effectiveStopLoss > 0 && effectiveTakeProfit > 0);
+  // Stage 5 Confirmation: Touching Point & Planned Entry / SL / TP
+  // Entry, SL, and TP are ONLY revealed once price touches the FVG zone, or during active/closed trades
+  const isTouchConfirmed = Boolean(
+    trade.result === 'ACTIVE_OPEN' ||
+    trade.result === 'WIN' ||
+    trade.result === 'LOSS' ||
+    candleData?.is_active_trade ||
+    candleData?.fvg_touched === true ||
+    candleData?.setup_stage === 'FVG_TOUCH' ||
+    candleData?.setup_stage === 'ENTRY_CONFIRMATION' ||
+    candleData?.setup_stage === 'ACTIVE_TRADE'
+  );
+
+  const hasPlannedLevels = Boolean(
+    hasFvg &&
+    isTouchConfirmed &&
+    effectiveEntryPrice > 0 &&
+    effectiveStopLoss > 0 &&
+    effectiveTakeProfit > 0
+  );
 
   const fvgTopPrice = hasFvg && fvgTopVal !== undefined && fvgBottomVal !== undefined ? Math.max(fvgTopVal, fvgBottomVal) : 0;
   const fvgBottomPrice = hasFvg && fvgTopVal !== undefined && fvgBottomVal !== undefined ? Math.min(fvgTopVal, fvgBottomVal) : 0;
@@ -450,20 +480,12 @@ export default function TradeChartVisualizer({
         border: '#86efac',
         text: '#ffffff',
       }] : []),
-      ...(hasBos ? [{
+      ...(hasBos && confirmedBosPrice > 0 ? [{
         id: 'bos',
         label: 'BOS',
-        price: shPrice || (candleData?.bos_price ?? 0),
+        price: confirmedBosPrice,
         rawY: bosY,
         bg: '#0369a1',
-        border: '#7dd3fc',
-        text: '#ffffff',
-      }] : pendingBosLevel > 0 ? [{
-        id: 'bos_pending',
-        label: 'BOS TRIGGER',
-        price: pendingBosLevel,
-        rawY: bosY,
-        bg: '#0284c7',
         border: '#7dd3fc',
         text: '#ffffff',
       }] : []),
@@ -579,7 +601,7 @@ export default function TradeChartVisualizer({
       adjustedY: positions[idx],
       isShifted: Math.abs(positions[idx] - b.rawY) > 3,
     }));
-  }, [showDrawings, isLiveCandidate, hasPlannedLevels, effectiveTakeProfit, tpY, hasBos, shPrice, candleData, bosY, hasFvg, fvgTopPrice, rawFvgTopY, effectiveEntryPrice, entryY, fvgBottomPrice, rawFvgBottomY, hasIdm, idmPrice, idmY, hasChoch, chochPrice, chochY, effectiveStopLoss, slY, chartHeight, paddingY]);
+  }, [showDrawings, isLiveCandidate, hasPlannedLevels, effectiveTakeProfit, tpY, hasBos, confirmedBosPrice, candleData, bosY, hasFvg, fvgTopPrice, rawFvgTopY, effectiveEntryPrice, entryY, fvgBottomPrice, rawFvgBottomY, hasIdm, idmPrice, idmY, hasChoch, chochPrice, chochY, effectiveStopLoss, slY, chartHeight, paddingY]);
 
   const activeCandle = hoverIdx !== null && candles[hoverIdx] ? candles[hoverIdx] : null;
 
@@ -868,7 +890,7 @@ export default function TradeChartVisualizer({
                 </span>
                 <span className="text-slate-500">→</span>
                 <span className="px-2 py-0.5 rounded bg-sky-950 text-sky-300 border border-sky-700 font-bold">
-                  ③ BOS Break {hasBos ? `($${shPrice?.toLocaleString()})` : ''}
+                  ③ BOS Break {hasBos && confirmedBosPrice > 0 ? `($${confirmedBosPrice?.toLocaleString()})` : ''}
                 </span>
                 <span className="text-slate-500">→</span>
                 <span className="px-2 py-0.5 rounded bg-amber-950 text-amber-300 border border-amber-700 font-bold">
@@ -898,13 +920,13 @@ export default function TradeChartVisualizer({
                 {candleData?.recent_swing_high && (
                   <span className="px-2 py-0.5 rounded bg-sky-100 text-sky-900 border border-sky-300 font-bold text-[10px] flex items-center gap-1.5 shadow-2xs">
                     <span className="w-1.5 h-1.5 rounded-full bg-sky-600" />
-                    Swing High (${candleData.recent_swing_high.price.toFixed(1)})
+                    {isLong ? 'HH' : 'LH'} (${candleData.recent_swing_high.price.toFixed(1)})
                   </span>
                 )}
                 {candleData?.recent_swing_low && (
                   <span className="px-2 py-0.5 rounded bg-rose-100 text-rose-900 border border-rose-300 font-bold text-[10px] flex items-center gap-1.5 shadow-2xs">
                     <span className="w-1.5 h-1.5 rounded-full bg-rose-600" />
-                    Swing Low (${candleData.recent_swing_low.price.toFixed(1)})
+                    {isLong ? 'HL' : 'LL'} (${candleData.recent_swing_low.price.toFixed(1)})
                   </span>
                 )}
                 <span className="px-2 py-0.5 rounded bg-slate-200 text-slate-700 border border-slate-300 font-semibold text-[10px] flex items-center gap-1">
@@ -925,10 +947,10 @@ export default function TradeChartVisualizer({
                     IDM Line (${idmPrice?.toFixed(1)})
                   </span>
                 )}
-                {(hasBos || pendingBosLevel > 0) && (
+                {hasBos && confirmedBosPrice > 0 && (
                   <span className="px-2 py-0.5 rounded bg-sky-100 text-sky-900 border border-sky-300 font-bold text-[10px] flex items-center gap-1.5 shadow-2xs">
                     <span className="w-1.5 h-1.5 rounded-full bg-sky-600" />
-                    {hasBos ? `BOS Line ($${shPrice?.toFixed(1)})` : `BOS Trigger ($${bosDisplayPrice?.toFixed(1)})`}
+                    BOS Line (${confirmedBosPrice?.toFixed(1)})
                   </span>
                 )}
                 {hasFvg && (
@@ -1090,46 +1112,68 @@ export default function TradeChartVisualizer({
                 )}
 
                 {/* ── BOS Horizontal Structure Line (TradingView SMC Reference) ── */}
-                {(hasBos || pendingBosLevel > 0) && (
-                  <g className="bos-clean-segment">
-                    <line
-                      x1={paddingLeft}
-                      y1={bosY}
-                      x2={chartWidth + paddingLeft}
-                      y2={bosY}
-                      stroke="#0284c7"
-                      strokeWidth={1.8}
-                      strokeDasharray={hasBos ? "5 3" : "2 2"}
-                    />
-                    <g transform={`translate(${chartWidth + paddingLeft - 50}, ${bosY + (isLong ? -11 : 13)})`}>
-                      <rect x={-45} y={-8} width={90} height={16} rx={3} fill="#0284c7" stroke="#bae6fd" strokeWidth={0.8} />
-                      <text x={0} y={3.5} textAnchor="middle" fill="#ffffff" fontSize="8" fontFamily="monospace" fontWeight="bold">
-                        {hasBos ? `BOS $${bosDisplayPrice.toFixed(1)}` : `BOS Trigger $${bosDisplayPrice.toFixed(1)}`}
-                      </text>
+                {hasBos && confirmedBosPrice > 0 && (() => {
+                  const bosStartX = candleData?.local_sh_idx != null
+                    ? getX(candleData.local_sh_idx)
+                    : (isLiveCandidate ? getX(Math.max(0, candleCount - 15)) : getX(realC1Idx));
+                  const bosEndX = candleData?.local_bos_idx != null
+                    ? getX(candleData.local_bos_idx)
+                    : getX(candleCount - 1);
+                  const badgeX = Math.min(chartWidth + paddingLeft - 50, Math.max(bosStartX + 45, (bosStartX + bosEndX) / 2));
+                  return (
+                    <g className="bos-clean-segment">
+                      <line
+                        x1={bosStartX}
+                        y1={bosY}
+                        x2={bosEndX}
+                        y2={bosY}
+                        stroke="#0284c7"
+                        strokeWidth={1.8}
+                        strokeDasharray="5 3"
+                      />
+                      <circle cx={bosStartX} cy={bosY} r={3.5} fill="#0284c7" stroke="#ffffff" strokeWidth={1} />
+                      <circle cx={bosEndX} cy={bosY} r={3.5} fill="#0284c7" stroke="#ffffff" strokeWidth={1} />
+                      <g transform={`translate(${badgeX}, ${bosY + (isLong ? -11 : 13)})`}>
+                        <rect x={-45} y={-8} width={90} height={16} rx={3} fill="#0284c7" stroke="#bae6fd" strokeWidth={0.8} />
+                        <text x={0} y={3.5} textAnchor="middle" fill="#ffffff" fontSize="8" fontFamily="monospace" fontWeight="bold">
+                          BOS ${confirmedBosPrice.toFixed(1)}
+                        </text>
+                      </g>
                     </g>
-                  </g>
-                )}
+                  );
+                })()}
 
                 {/* ── IDM Horizontal Inducement Line (TradingView SMC Reference) ── */}
-                {hasIdm && idmPrice > 0 && (
-                  <g className="idm-clean-segment">
-                    <line
-                      x1={paddingLeft}
-                      y1={idmY}
-                      x2={chartWidth + paddingLeft}
-                      y2={idmY}
-                      stroke="#9333ea"
-                      strokeWidth={1.8}
-                      strokeDasharray="4 3"
-                    />
-                    <g transform={`translate(${chartWidth + paddingLeft - 145}, ${idmY + (isLong ? 13 : -11)})`}>
-                      <rect x={-40} y={-8} width={80} height={16} rx={3} fill="#9333ea" stroke="#e9d5ff" strokeWidth={0.8} />
-                      <text x={0} y={3.5} textAnchor="middle" fill="#ffffff" fontSize="8" fontFamily="monospace" fontWeight="bold">
-                        IDM ${idmPrice.toFixed(1)}
-                      </text>
+                {hasIdm && idmPrice > 0 && (() => {
+                  const idmStartX = candleData?.local_idm_idx != null
+                    ? getX(candleData.local_idm_idx)
+                    : (isLiveCandidate ? getX(Math.max(0, candleCount - 12)) : getX(Math.max(0, realC1Idx - 2)));
+                  const idmEndX = candleData?.local_sweep_idx != null
+                    ? getX(candleData.local_sweep_idx)
+                    : getX(candleCount - 1);
+                  const badgeX = Math.min(chartWidth + paddingLeft - 45, Math.max(idmStartX + 40, (idmStartX + idmEndX) / 2));
+                  return (
+                    <g className="idm-clean-segment">
+                      <line
+                        x1={idmStartX}
+                        y1={idmY}
+                        x2={idmEndX}
+                        y2={idmY}
+                        stroke="#9333ea"
+                        strokeWidth={1.8}
+                        strokeDasharray="4 3"
+                      />
+                      <circle cx={idmStartX} cy={idmY} r={3} fill="#9333ea" stroke="#ffffff" strokeWidth={1} />
+                      <circle cx={idmEndX} cy={idmY} r={3.5} fill="#9333ea" stroke="#ffffff" strokeWidth={1} />
+                      <g transform={`translate(${badgeX}, ${idmY + (isLong ? 13 : -11)})`}>
+                        <rect x={-40} y={-8} width={80} height={16} rx={3} fill="#9333ea" stroke="#e9d5ff" strokeWidth={0.8} />
+                        <text x={0} y={3.5} textAnchor="middle" fill="#ffffff" fontSize="8" fontFamily="monospace" fontWeight="bold">
+                          IDM ${idmPrice.toFixed(1)}
+                        </text>
+                      </g>
                     </g>
-                  </g>
-                )}
+                  );
+                })()}
 
                 {/* ── CHoCH Horizontal Line (Change of Character Reference) ── */}
                 {hasChoch && (
@@ -1245,7 +1289,7 @@ export default function TradeChartVisualizer({
                     <line
                       x1={isLiveCandidate ? getX(realC1Idx) : getX(realEntryIdx)}
                       y1={entryY}
-                      x2={isLiveCandidate ? getX(candleCount - 1) + 40 : getX(realExitIdx)}
+                      x2={isLiveCandidate ? getX(candleCount - 1) : getX(realExitIdx)}
                       y2={entryY}
                       stroke={isLiveCandidate ? "#d97706" : "#16a34a"}
                       strokeWidth={1.8}
@@ -1270,7 +1314,7 @@ export default function TradeChartVisualizer({
                     <line
                       x1={getX(realC1Idx)}
                       y1={slY}
-                      x2={isLiveCandidate ? getX(candleCount - 1) + 40 : getX(realExitIdx)}
+                      x2={isLiveCandidate ? getX(candleCount - 1) : getX(realExitIdx)}
                       y2={slY}
                       stroke="#ef4444"
                       strokeWidth={2}
@@ -1291,7 +1335,7 @@ export default function TradeChartVisualizer({
                     <line
                       x1={isLiveCandidate ? getX(realC1Idx) : getX(realEntryIdx)}
                       y1={tpY}
-                      x2={isLiveCandidate ? getX(candleCount - 1) + 40 : getX(realExitIdx)}
+                      x2={isLiveCandidate ? getX(candleCount - 1) : getX(realExitIdx)}
                       y2={tpY}
                       stroke="#10b981"
                       strokeWidth={2}
@@ -1309,62 +1353,66 @@ export default function TradeChartVisualizer({
                   </g>
                 )}
 
-                {/* ── Live Market Trading Range (TradingView SMC style when scanning without BOS) ── */}
+                {/* ── Confirmed Swing Points on Candles (Strictly Anchored to Candle Wicks - No Rays in the Air) ── */}
                 {isLiveCandidate && !hasBos && (
-                  <g className="live-market-swing-range">
-                    {/* Confirmed Swing High Horizontal Range Boundary */}
-                    {candleData?.recent_swing_high && (
-                      <g className="recent-swing-high">
-                        <line
-                          x1={getX(candleData.recent_swing_high.index)}
-                          y1={getY(candleData.recent_swing_high.price)}
-                          x2={getX(candleCount - 1) + 45}
-                          y2={getY(candleData.recent_swing_high.price)}
-                          stroke="#0284c7"
-                          strokeWidth={1.6}
-                          strokeDasharray="4 3"
-                        />
+                  <g className="live-market-swing-anchors">
+                    {/* Confirmed Swing High (HH / LH) Anchored Directly on Candle Wick Tip */}
+                    {candleData?.recent_swing_high && candleData.recent_swing_high.index < candleCount && (
+                      <g className="recent-swing-high-anchor">
+                        {/* Anchor Dot on the High Wick Tip */}
                         <circle
                           cx={getX(candleData.recent_swing_high.index)}
                           cy={getY(candleData.recent_swing_high.price)}
-                          r={3.5}
+                          r={4}
                           fill="#0284c7"
                           stroke="#ffffff"
-                          strokeWidth={1}
+                          strokeWidth={1.5}
                         />
-                        <g transform={`translate(${getX(candleData.recent_swing_high.index)}, ${getY(candleData.recent_swing_high.price) - 13})`}>
-                          <rect x={-45} y={-8} width={90} height={16} rx={3} fill="#0284c7" fillOpacity={0.92} />
+                        {/* Small Vertical Pointer Tick from Wick Tip to Badge */}
+                        <line
+                          x1={getX(candleData.recent_swing_high.index)}
+                          y1={getY(candleData.recent_swing_high.price)}
+                          x2={getX(candleData.recent_swing_high.index)}
+                          y2={getY(candleData.recent_swing_high.price) - 8}
+                          stroke="#0284c7"
+                          strokeWidth={1.5}
+                        />
+                        {/* Compact Badge Directly Above Wick Tip */}
+                        <g transform={`translate(${getX(candleData.recent_swing_high.index)}, ${getY(candleData.recent_swing_high.price) - 16})`}>
+                          <rect x={-42} y={-8} width={84} height={16} rx={3} fill="#0284c7" fillOpacity={0.95} stroke="#bae6fd" strokeWidth={0.8} />
                           <text x={0} y={3.5} textAnchor="middle" fill="#ffffff" fontSize="8" fontFamily="monospace" fontWeight="bold">
-                            Swing High ${candleData.recent_swing_high.price.toFixed(1)}
+                            {isLong ? 'HH' : 'LH'} ${candleData.recent_swing_high.price.toFixed(1)}
                           </text>
                         </g>
                       </g>
                     )}
 
-                    {/* Confirmed Swing Low Horizontal Range Boundary */}
-                    {candleData?.recent_swing_low && (
-                      <g className="recent-swing-low">
-                        <line
-                          x1={getX(candleData.recent_swing_low.index)}
-                          y1={getY(candleData.recent_swing_low.price)}
-                          x2={getX(candleCount - 1) + 45}
-                          y2={getY(candleData.recent_swing_low.price)}
-                          stroke="#e11d48"
-                          strokeWidth={1.6}
-                          strokeDasharray="4 3"
-                        />
+                    {/* Confirmed Swing Low (HL / LL) Anchored Directly on Candle Wick Tip */}
+                    {candleData?.recent_swing_low && candleData.recent_swing_low.index < candleCount && (
+                      <g className="recent-swing-low-anchor">
+                        {/* Anchor Dot on the Low Wick Tip */}
                         <circle
                           cx={getX(candleData.recent_swing_low.index)}
                           cy={getY(candleData.recent_swing_low.price)}
-                          r={3.5}
-                          fill="#e11d48"
+                          r={4}
+                          fill="#be123c"
                           stroke="#ffffff"
-                          strokeWidth={1}
+                          strokeWidth={1.5}
                         />
-                        <g transform={`translate(${getX(candleData.recent_swing_low.index)}, ${getY(candleData.recent_swing_low.price) + 15})`}>
-                          <rect x={-45} y={-8} width={90} height={16} rx={3} fill="#be123c" fillOpacity={0.92} />
+                        {/* Small Vertical Pointer Tick from Wick Tip to Badge */}
+                        <line
+                          x1={getX(candleData.recent_swing_low.index)}
+                          y1={getY(candleData.recent_swing_low.price)}
+                          x2={getX(candleData.recent_swing_low.index)}
+                          y2={getY(candleData.recent_swing_low.price) + 8}
+                          stroke="#be123c"
+                          strokeWidth={1.5}
+                        />
+                        {/* Compact Badge Directly Below Wick Tip */}
+                        <g transform={`translate(${getX(candleData.recent_swing_low.index)}, ${getY(candleData.recent_swing_low.price) + 16})`}>
+                          <rect x={-42} y={-8} width={84} height={16} rx={3} fill="#be123c" fillOpacity={0.95} stroke="#fecdd3" strokeWidth={0.8} />
                           <text x={0} y={3.5} textAnchor="middle" fill="#ffffff" fontSize="8" fontFamily="monospace" fontWeight="bold">
-                            Swing Low ${candleData.recent_swing_low.price.toFixed(1)}
+                            {isLong ? 'HL' : 'LL'} ${candleData.recent_swing_low.price.toFixed(1)}
                           </text>
                         </g>
                       </g>

@@ -461,19 +461,6 @@ class LiveMarketService:
                         "timestamp": df_ltf.iloc[s]["timestamp"].strftime("%Y-%m-%dT%H:%M:%SZ"),
                     }
 
-                if highs[s] == wh.max():
-                    recent_sh = {
-                        "index": int(s),
-                        "price": round(float(highs[s]), 4),
-                        "timestamp": df_ltf.iloc[s]["timestamp"].strftime("%Y-%m-%dT%H:%M:%SZ"),
-                    }
-                if lows[s] == wl.min():
-                    recent_sl = {
-                        "index": int(s),
-                        "price": round(float(lows[s]), 4),
-                        "timestamp": df_ltf.iloc[s]["timestamp"].strftime("%Y-%m-%dT%H:%M:%SZ"),
-                    }
-
         has_active_setup = bool(open_trade) or bool(pending_fvg)
 
         direction = (
@@ -530,6 +517,71 @@ class LiveMarketService:
             setup_stage = "FVG_TOUCH"
             stage_status = "WAITING"
             angle_val = pending_fvg.get("angle")
+
+        elif smc_diag and smc_diag.get("stage") not in ("INSUFFICIENT_DATA", "30M_BIAS", "5M_SWINGS", None):
+            # Step-by-step SMC structure progression
+            smc_stage = smc_diag.get("stage") or "SCANNING_STRUCTURE"
+            stage_status = smc_diag.get("stage_status") or "WAITING"
+            setup_stage = smc_stage
+
+            local_sh_idx = None
+            local_idm_idx = None
+            local_sweep_idx = None
+            local_bos_idx = None
+            local_c1_idx = None
+            local_c2_idx = None
+            local_c3_idx = None
+            local_entry_idx = None
+            choch_lvl = None
+            angle_val = chain_diag.get("last_angle")
+
+            # 1. IDM: Only set if IDM has actually formed/swept
+            if smc_diag.get("idm_level") is not None and (
+                ("IDM" in smc_stage and stage_status == "CONFIRMED")
+                or any(s in smc_stage for s in ["BOS", "FVG", "TOUCH", "CONFIRMATION"])
+            ):
+                idm_lvl = float(smc_diag["idm_level"])
+                local_idm_idx = _shift_idx(smc_diag.get("idm_idx"))
+                local_sweep_idx = _shift_idx(smc_diag.get("swept_idx"))
+            else:
+                idm_lvl = None
+
+            # 2. BOS: Only set if BOS has actually occurred (closed candle body beyond anchor)
+            if smc_diag.get("bos_level") is not None and (
+                ("BOS" in smc_stage and stage_status == "CONFIRMED")
+                or any(s in smc_stage for s in ["FVG", "TOUCH", "CONFIRMATION"])
+            ):
+                bos_lvl = float(smc_diag["bos_level"])
+                local_sh_idx = _shift_idx(smc_diag.get("anchor_idx"))
+                local_bos_idx = _shift_idx(smc_diag.get("bos_idx"))
+            else:
+                bos_lvl = None
+            sh_price = bos_lvl
+
+            # 3. FVG: Only set if BOS occurred and FVG formed
+            fvg_zone = smc_diag.get("fvg_zone")
+            if fvg_zone and bos_lvl is not None and any(s in smc_stage for s in ["FVG", "TOUCH", "CONFIRMATION"]):
+                fvg_top_val = float(fvg_zone["top"])
+                fvg_bot_val = float(fvg_zone["bottom"])
+                local_c1_idx = _shift_idx(fvg_zone.get("c1_idx"))
+                local_c2_idx = _shift_idx(fvg_zone.get("c2_idx"))
+                local_c3_idx = _shift_idx(fvg_zone.get("c3_idx"))
+            else:
+                fvg_top_val = None
+                fvg_bot_val = None
+
+            # 4. Touching Point & Planned Entry: Only set if price actually entered FVG zone
+            if smc_diag.get("fvg_touched") and fvg_zone and any(s in smc_stage for s in ["TOUCH", "CONFIRMATION"]):
+                planned_entry = float(fvg_top_val) if direction == "LONG" else float(fvg_bot_val)
+                entry_val = planned_entry
+                sl_val = float(fvg_zone.get("sl_price") or 0.0)
+                risk_d = abs(entry_val - sl_val) if sl_val else 0.0
+                tp_val = float(entry_val + 2.0 * risk_d if direction == "LONG" else entry_val - 2.0 * risk_d) if risk_d else None
+            else:
+                planned_entry = None
+                entry_val = None
+                sl_val = None
+                tp_val = None
 
         else:
             # Scanning structure: NO breakout has occurred in the active regime
